@@ -9,6 +9,7 @@ import os
 import re
 import threading
 import time
+import xml.etree.ElementTree as ET
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from datetime import date, datetime
 from io import BytesIO
@@ -23,6 +24,8 @@ os.makedirs(DATA_DIR, exist_ok=True)
 STATE_FILE = os.path.join(DATA_DIR, "state.json")
 COMPANIES_FILE = os.path.join(DATA_DIR, "companies.json")
 ATS_CACHE_FILE = os.path.join(DATA_DIR, "ats_cache.json")
+SLUG_OVERRIDE_FILE = os.path.join(DATA_DIR, "slug_overrides.json")
+API_KEYS_FILE = os.path.join(DATA_DIR, "api_keys.json")
 
 DEFAULT_KEYWORDS = [
     "ai engineer", "machine learning", "ml engineer", "artificial intelligence",
@@ -30,6 +33,11 @@ DEFAULT_KEYWORDS = [
     "generative ai", "foundation model", "prompt engineer", "agentic",
     "ai agent", "conversational ai", "data scientist", "research engineer",
     "computer vision", "mlops", "ai scientist", "applied ai",
+    # 扩充：召回更多“标题不含 ai/ml 但其实是 AI 方向”的岗位
+    "applied scientist", "research scientist", "recommendation",
+    "recommendations", "recommender", "personalization", "search ranking",
+    "learning to rank", "information retrieval", "knowledge graph",
+    "llmops", "ai platform", "model evaluation", "reinforcement learning",
 ]
 
 # 命中即标 ⭐LLM 的关键词（用户重点关注）
@@ -146,20 +154,40 @@ state = {
              "started_ts": 0, "stop": False, "new_jobs": 0},
     "last_auto": 0,
     "resume": None,        # {"text","keywords","updated","name"}
-    "match_scores": {},    # job_url -> {"score","hit","miss","n"}
+    "match_scores": {},    # job_url -> {"score","hit","must_miss","nice_miss","flags","n"}
     "match": {"running": False, "done": 0, "total": 0},
+    "match_stats": {},     # JD 抓取覆盖率：{"jd_ok","jd_fail","updated"}
+    "exp_years": 1,        # 我的工作年限（用于年限门槛检测）
+    "agg_jobs": {},        # 聚合器(Adzuna/Reed)岗位：url -> {...}
+    "agg": {"running": False, "done": 0, "total": 0},
 }
 ats_cache = {}  # name -> {"ats","slug"} | "none"
+api_keys = {}   # {"adzuna_app_id","adzuna_app_key","reed_api_key"}
+slug_overrides = {}  # name.lower() -> {"ats","slug"}：手动修正 slug 猜错的重点公司
 
 
 def load_all():
-    global ats_cache
+    global ats_cache, slug_overrides, api_keys
+    if os.path.exists(API_KEYS_FILE):
+        try:
+            with open(API_KEYS_FILE, encoding="utf-8") as f:
+                api_keys = json.load(f)
+        except Exception:
+            api_keys = {}
     if os.path.exists(ATS_CACHE_FILE):
         try:
             with open(ATS_CACHE_FILE, encoding="utf-8") as f:
                 ats_cache = json.load(f)
         except Exception:
             ats_cache = {}
+    if os.path.exists(SLUG_OVERRIDE_FILE):
+        try:
+            with open(SLUG_OVERRIDE_FILE, encoding="utf-8") as f:
+                raw = json.load(f)
+            slug_overrides = {k.strip().lower(): v for k, v in raw.items()
+                              if isinstance(v, dict) and v.get("ats") and v.get("slug")}
+        except Exception:
+            slug_overrides = {}
     if os.path.exists(COMPANIES_FILE):
         try:
             with open(COMPANIES_FILE, encoding="utf-8") as f:
@@ -183,6 +211,9 @@ def load_all():
         state["jobs_seen"] = saved.get("jobs_seen", {})
         state["resume"] = saved.get("resume")
         state["match_scores"] = saved.get("match_scores", {})
+        state["match_stats"] = saved.get("match_stats", {})
+        state["agg_jobs"] = saved.get("agg_jobs", {})
+        state["exp_years"] = saved.get("exp_years", 1)
         for name, r in saved.get("results", {}).items():
             r.pop("links", None)  # 旧版把链接存了盘，现在改为按需生成
             state["results"][name] = r
@@ -214,6 +245,9 @@ def save_state():
             "jobs_seen": state["jobs_seen"],
             "resume": state["resume"],
             "match_scores": state["match_scores"],
+            "match_stats": state["match_stats"],
+            "agg_jobs": state["agg_jobs"],
+            "exp_years": state["exp_years"],
         }, ensure_ascii=False)
     _atomic_write(STATE_FILE, payload)
 
@@ -284,6 +318,26 @@ def probe_greenhouse(slug):
     return {"board_url": f"https://boards.greenhouse.io/{slug}", "jobs": jobs}
 
 
+def greenhouse_bodies(slug):
+    """Greenhouse 基础列表不含 JD，用 content=true 一次拿全公司所有岗位正文。
+    只在有“广撒网候选”时才调用，均摊到每家公司最多一次额外请求。"""
+    data = _get_json(
+        f"https://boards-api.greenhouse.io/v1/boards/{slug}/jobs?content=true")
+    out = {}
+    for j in (data or {}).get("jobs", []):
+        u = j.get("absolute_url", "")
+        if u:
+            out[u] = _strip_html(j.get("content", ""))
+    return out
+
+
+def _lever_desc(j):
+    parts = [j.get("descriptionPlain") or _strip_html(j.get("description", ""))]
+    for lst in j.get("lists", []):
+        parts.append(lst.get("text", "") + " " + _strip_html(lst.get("content", "")))
+    return " ".join(p for p in parts if p)
+
+
 def probe_lever(slug):
     data = _get_json(f"https://api.lever.co/v0/postings/{slug}?mode=json")
     if not isinstance(data, list):
@@ -292,6 +346,7 @@ def probe_lever(slug):
         "title": j.get("text", ""),
         "url": j.get("hostedUrl", ""),
         "location": (j.get("categories") or {}).get("location", "") or "",
+        "desc": _lever_desc(j),  # Lever 列表接口自带 JD，二次确认零成本
     } for j in data]
     return {"board_url": f"https://jobs.lever.co/{slug}", "jobs": jobs}
 
@@ -305,6 +360,7 @@ def probe_ashby(slug):
         "title": j.get("title", ""),
         "url": j.get("jobUrl", "") or j.get("applyUrl", ""),
         "location": j.get("location", "") or "",
+        "desc": j.get("descriptionPlain") or _strip_html(j.get("descriptionHtml", "")),
     } for j in data["jobs"]]
     return {"board_url": f"https://jobs.ashbyhq.com/{slug}", "jobs": jobs}
 
@@ -345,8 +401,74 @@ def probe_recruitee(slug):
         "title": j.get("title", ""),
         "url": j.get("careers_url", ""),
         "location": j.get("location", "") or "",
+        "desc": _strip_html(str(j.get("description", "")) + " "
+                            + str(j.get("requirements", ""))),
     } for j in data["offers"]]
     return {"board_url": f"https://{slug}.recruitee.com/", "jobs": jobs}
+
+
+def probe_personio(slug):
+    # Personio 每家公司自带公开 XML 岗位源，正文也在里面（二次确认零成本）
+    try:
+        r = _session().get(f"https://{slug}.jobs.personio.com/xml", timeout=TIMEOUT)
+    except Exception:
+        return None
+    if r.status_code != 200 or "<position" not in r.text:
+        return None
+    try:
+        root = ET.fromstring(r.content)
+    except Exception:
+        return None
+    jobs = []
+    for pos in root.iter("position"):
+        pid = (pos.findtext("id") or "").strip()
+        title = (pos.findtext("name") or "").strip()
+        if not pid or not title:
+            continue
+        office = (pos.findtext("office") or "").strip()
+        descs = [jd.findtext("value") or "" for jd in pos.iter("jobDescription")]
+        jobs.append({
+            "title": title,
+            "url": f"https://{slug}.jobs.personio.com/job/{pid}",
+            "location": office,
+            "desc": _strip_html(" ".join(descs)),
+        })
+    return {"board_url": f"https://{slug}.jobs.personio.com/", "jobs": jobs}
+
+
+def probe_workday_tenant(host, site):
+    """Workday 公开岗位站的匿名接口。host 如 nvidia.wd5.myworkdayjobs.com，
+    site 如 NVIDIAExternalCareerSite。只能通过手动 override 配置（无法从公司名猜）。"""
+    if not host or not site:
+        return None
+    tenant = host.split(".")[0]
+    base = f"https://{host}/wday/cxs/{tenant}/{site}"
+    jobs, offset = [], 0
+    try:
+        while offset < 200:  # 最多取 200 个，避免超大站拖慢
+            r = _session().post(f"{base}/jobs",
+                                json={"appliedFacets": {}, "limit": 20,
+                                      "offset": offset, "searchText": ""},
+                                timeout=10)
+            if r.status_code != 200:
+                break
+            d = r.json()
+            batch = d.get("jobPostings") or []
+            for j in batch:
+                jobs.append({
+                    "title": j.get("title", ""),
+                    "url": f"https://{host}/en-US/{site}{j.get('externalPath', '')}",
+                    "location": j.get("locationsText", "") or "",
+                })  # Workday 列表不含正文 → 只按标题判断
+            total = d.get("total") or 0
+            offset += 20
+            if not batch or offset >= total:
+                break
+    except Exception:
+        return None
+    if not jobs:
+        return None
+    return {"board_url": f"https://{host}/en-US/{site}", "jobs": jobs}
 
 
 PROBES = [
@@ -356,12 +478,37 @@ PROBES = [
     ("Workable", probe_workable),
     ("SmartRecruiters", probe_smartrecruiters),
     ("Recruitee", probe_recruitee),
+    ("Personio", probe_personio),
 ]
 PROBE_FN = dict(PROBES)
+# Workday 不参与按公司名猜 slug（需要 host+site），只能手动 override
+OVERRIDE_ATS = set(PROBE_FN) | {"Workday"}
+
+
+def save_slug_overrides():
+    _atomic_write(SLUG_OVERRIDE_FILE, json.dumps(slug_overrides, ensure_ascii=False))
+
+
+def _probe_override(ov):
+    ats = ov.get("ats")
+    if ats == "Workday":
+        return probe_workday_tenant(ov.get("host", ""), ov.get("site", ""))
+    fn = PROBE_FN.get(ats)
+    if fn and ov.get("slug"):
+        try:
+            return fn(ov["slug"])
+        except Exception:
+            return None
+    return None
 
 
 def find_ats(name):
     """返回 (ats_name, slug, {board_url, jobs}) 或 None。结果写入 ats_cache。"""
+    ov = slug_overrides.get((name or "").strip().lower())
+    if ov:
+        res = _probe_override(ov)
+        if res:  # 手动修正优先，抓不到再走自动探测
+            return (ov["ats"], ov.get("slug") or ov.get("site") or "", res)
     cached = ats_cache.get(name)
     if cached == "none":
         return None
@@ -399,6 +546,25 @@ def kw_match(text, kws):
     return any(re.search(r"\b" + re.escape(k) + r"\b", text) for k in kws)
 
 
+# 广撒网标题：工程/数据/研究类岗位，标题没写 AI 也值得读 JD 正文二次确认
+BROAD_TITLE_RE = re.compile(
+    r"\b(engineer|developer|scientist|programmer|architect|researcher)\b")
+
+
+def match_job(title, desc, keywords):
+    """判断一个岗位是否算 AI 岗，返回命中来源：
+      'title' —— 标题直接命中 AI 关键词；
+      'jd'    —— 标题是工程/数据/研究类且 JD 正文命中 AI 关键词（拓宽召回）；
+      None    —— 都没命中。
+    JD 正文抓不到时（desc 为空）只走标题，天然保守。"""
+    t = (title or "").lower()
+    if kw_match(t, keywords):
+        return "title"
+    if desc and BROAD_TITLE_RE.search(t) and kw_match(desc.lower(), keywords):
+        return "jd"
+    return None
+
+
 def build_links(name):
     q = quote_plus(name)
     return {
@@ -431,17 +597,28 @@ def scan_company(name, keywords, uk_only):
         result["board_url"] = res["board_url"]
         result["total_jobs"] = len(res["jobs"])
         matched = []
+        gh_bodies = None  # Greenhouse 正文按需拉取一次
         for j in res["jobs"]:
             title = (j.get("title") or "").lower()
-            if not kw_match(title, keywords):
+            body = j.get("desc") or ""
+            via = match_job(title, body, keywords)
+            if via is None and ats_name == "Greenhouse" and BROAD_TITLE_RE.search(title):
+                if gh_bodies is None:
+                    gh_bodies = greenhouse_bodies(slug)
+                body = gh_bodies.get(j.get("url", ""), "")
+                via = match_job(title, body, keywords)
+            if via is None:
                 continue
             region, rlabel = classify_region(j.get("location"))
             if uk_only and region == "other":
                 continue  # 排除美国/亚洲等；英国+欧洲+Remote 都保留
+            j.pop("desc", None)  # JD 正文不入库，简历匹配时另存 desc_cache
             j["region"] = region
             j["country"] = rlabel
             j["level"] = classify_level(title)
-            j["llm"] = kw_match(title, LLM_KEYWORDS)
+            j["llm"] = kw_match(title, LLM_KEYWORDS) or bool(
+                body and kw_match(body.lower(), LLM_KEYWORDS))
+            j["via"] = via  # title=标题命中 / jd=正文命中（标题没写 AI）
             matched.append(j)
         result["matched"] = matched[:80]
         if matched:
@@ -553,8 +730,104 @@ def auto_loop():
             pass
 
 
+# ---------------------------------------------------------------- 聚合平台搜索
+# Adzuna / Reed 是关键词聚合器：几次调用就能横扫全英国所有公司/ATS 的岗位，
+# 是“抓最全 + 求快”的最大杠杆。需要各自的免费官方 API key（放 data/api_keys.json）。
+AGG_QUERIES = ["machine learning", "artificial intelligence", "llm",
+               "ai engineer", "data scientist", "deep learning"]
+
+
+def _norm_company(n):
+    """公司名归一化，用于把聚合器岗位和官方 sponsor 名单交叉核对。"""
+    b = re.sub(r"[^a-z0-9 ]", " ", (n or "").lower())
+    words = [w for w in b.split() if w and w not in STRIP_SUFFIXES]
+    return " ".join(words)
+
+
+def search_adzuna(query, pages=2):
+    aid, key = api_keys.get("adzuna_app_id"), api_keys.get("adzuna_app_key")
+    if not aid or not key:
+        return []
+    out = []
+    for p in range(1, pages + 1):
+        url = (f"https://api.adzuna.com/v1/api/jobs/gb/search/{p}"
+               f"?app_id={aid}&app_key={key}&results_per_page=50"
+               f"&what={quote_plus(query)}&max_days_old=30&content-type=application/json")
+        data = _get_json(url)
+        res = (data or {}).get("results") or []
+        for j in res:
+            out.append({
+                "company": (j.get("company") or {}).get("display_name", ""),
+                "title": j.get("title", ""), "url": j.get("redirect_url", ""),
+                "location": (j.get("location") or {}).get("display_name", ""),
+                "desc": _strip_html(j.get("description", "")), "source": "Adzuna",
+            })
+        if len(res) < 50:
+            break
+    return out
+
+
+def search_reed(query):
+    key = api_keys.get("reed_api_key")
+    if not key:
+        return []
+    try:
+        r = _session().get("https://www.reed.co.uk/api/1.0/search",
+                           params={"keywords": query, "resultsToTake": 100},
+                           auth=(key, ""), timeout=TIMEOUT)
+        if r.status_code != 200:
+            return []
+        res = r.json().get("results") or []
+    except Exception:
+        return []
+    return [{
+        "company": j.get("employerName", ""), "title": j.get("jobTitle", ""),
+        "url": j.get("jobUrl", ""), "location": j.get("locationName", ""),
+        "desc": _strip_html(j.get("jobDescription", "")), "source": "Reed",
+    } for j in res]
+
+
+def run_aggregators():
+    """跑 Adzuna+Reed 关键词搜索，AI 过滤后并入 agg_jobs，并标注是否为工签 sponsor。"""
+    if not (api_keys.get("adzuna_app_id") or api_keys.get("reed_api_key")):
+        return
+    kws = [k.lower() for k in state["keywords"]]
+    today = date.today().isoformat()
+    with _lock:
+        sponsor_idx = {_norm_company(n) for n in state["companies"]}
+    state["agg"] = {"running": True, "done": 0, "total": len(AGG_QUERIES)}
+    try:
+        for q in AGG_QUERIES:
+            found = search_adzuna(q) + search_reed(q)
+            with _lock:
+                for j in found:
+                    u = j.get("url")
+                    title = (j.get("title") or "").lower()
+                    desc = j.get("desc") or ""
+                    if not u or not match_job(title, desc, kws):
+                        continue
+                    region, rlabel = classify_region(j.get("location"))
+                    seen = state["agg_jobs"].get(u)
+                    state["agg_jobs"][u] = {
+                        "company": j.get("company", ""), "title": j.get("title", ""),
+                        "url": u, "location": j.get("location", ""),
+                        "source": j.get("source", ""), "region": region, "country": rlabel,
+                        "level": classify_level(title),
+                        "llm": kw_match(title, LLM_KEYWORDS) or kw_match(desc.lower(), LLM_KEYWORDS),
+                        "sponsor": _norm_company(j.get("company", "")) in sponsor_idx,
+                        "first_seen": seen["first_seen"] if seen else today,
+                        "last_seen": today,
+                    }
+                state["agg"]["done"] += 1
+    finally:
+        state["agg"]["running"] = False
+        save_state()
+
+
 # ---------------------------------------------------------------- 简历匹配
 DESC_CACHE_FILE = os.path.join(DATA_DIR, "desc_cache.json")
+DESC_FAIL_FILE = os.path.join(DATA_DIR, "desc_fail.json")
+FAIL_RETRY_SEC = 24 * 3600  # JD 抓取失败 24 小时后允许重试
 
 SKILL_VOCAB = [
     # 语言
@@ -578,6 +851,12 @@ SKILL_VOCAB = [
     "whisper", "stable diffusion", "diffusion", "multimodal",
     "speech recognition", "ocr", "generative ai", "genai", "chatbot",
     "semantic search", "knowledge graph",
+    "llmops", "guardrails", "guardrail", "azure openai", "bedrock",
+    "aws bedrock", "model evaluation", "llm evaluation", "model evals",
+    "prompt optimization", "retrieval", "vector search", "rerank",
+    "reranking", "peft", "quantization", "distillation", "vllm", "triton",
+    "langgraph", "autogen", "dspy", "semantic kernel", "context window",
+    "production ml", "retrieval systems",
     # 数据
     "pandas", "numpy", "spark", "pyspark", "hadoop", "kafka", "airflow",
     "dbt", "snowflake", "databricks", "etl", "data pipeline",
@@ -588,7 +867,8 @@ SKILL_VOCAB = [
     "terraform", "ci/cd", "mlops", "mlflow", "kubeflow", "sagemaker",
     "vertex ai", "model deployment", "model serving", "inference",
     "onnx", "tensorrt", "gpu", "cuda", "distributed training", "ray",
-    "monitoring", "grafana", "linux", "git", "rest api", "api",
+    "monitoring", "observability", "grafana", "linux", "git", "rest api", "api",
+    "bentoml", "weights & biases", "wandb", "dvc", "feature store",
     "microservices", "fastapi", "flask", "django", "react", "node.js",
     "postgresql", "mysql", "mongodb", "redis", "elasticsearch",
     "system design", "scalability", "testing", "unit test",
@@ -608,7 +888,11 @@ _CANON = {"sklearn": "scikit-learn", "huggingface": "hugging face",
           "large language model": "llm", "golang": "go",
           "retrieval augmented generation": "rag",
           "generative ai": "genai", "embeddings": "embedding",
-          "transformers": "transformer", "statistical": "statistics"}
+          "transformers": "transformer", "statistical": "statistics",
+          "aws bedrock": "bedrock", "reranking": "rerank",
+          "wandb": "weights & biases", "llm evaluation": "model evaluation",
+          "model evals": "model evaluation", "guardrail": "guardrails",
+          "retrieval systems": "retrieval"}
 
 
 def extract_skills(text):
@@ -654,11 +938,33 @@ def load_desc_cache():
     return {}
 
 
-def fetch_descriptions(r, cache):
-    """尽力抓取一家公司所有匹配岗位的 JD 文本，写入 cache（url -> text）。"""
+def load_desc_fail():
+    if os.path.exists(DESC_FAIL_FILE):
+        try:
+            with open(DESC_FAIL_FILE, encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+
+def _should_retry(u, fails):
+    """抓取失败过的 URL，超过 24h 才允许再抓，避免每次匹配都重试死链。"""
+    ts = fails.get(u)
+    if not ts:
+        return True
+    try:
+        return (time.time() - float(ts)) > FAIL_RETRY_SEC
+    except (TypeError, ValueError):
+        return True
+
+
+def fetch_descriptions(r, cache, fails):
+    """尽力抓取一家公司所有匹配岗位的 JD 文本，写入 cache（url -> text）。
+    抓不到的记入 fails（url -> 失败时间戳），24h 后允许重试。"""
     ats, slug = r.get("ats"), r.get("slug")
     urls = {j["url"] for j in r.get("matched", []) if j.get("url")}
-    todo = {u for u in urls if u not in cache}
+    todo = {u for u in urls if not cache.get(u) and _should_retry(u, fails)}
     if not todo or not ats:
         return
     try:
@@ -709,7 +1015,107 @@ def fetch_descriptions(r, cache):
     except Exception:
         pass
     for u in todo:
-        cache.setdefault(u, "")  # 抓不到的记空串，避免反复重试
+        if cache.get(u):
+            fails.pop(u, None)          # 这次抓到了，清除失败记录
+        else:
+            fails[u] = time.time()      # 仍抓不到，登记失败时间，24h 后重试
+
+
+# --- 贴近真实英国招聘筛选的规则 ---
+NICE_SPLIT_RE = re.compile(
+    r"nice to have|nice-to-have|bonus point|desirable|preferred qualification|"
+    r"is a plus|would be a plus|even better if|great to have|good to have|"
+    r"it would be great|we'd love|additionally")
+YEARS_RES = [
+    re.compile(r"(\d{1,2})\s*\+\s*years?"),
+    re.compile(r"at least (\d{1,2}) years?"),
+    re.compile(r"minimum (?:of )?(\d{1,2}) years?"),
+    re.compile(r"(\d{1,2}) or more years?"),
+]
+CLEARANCE_RE = re.compile(
+    r"security clearance|sc clear|dv clear|active clearance|"
+    r"uk nationals? only|british citizen|must be a uk national|eligible for (?:sc|dv)\b")
+NO_SPONSOR_RE = re.compile(
+    r"(?:cannot|unable to|not able to|do not|don'?t|no)\s+(?:currently\s+)?"
+    r"(?:offer|provide|support)?\s*(?:visa\s+)?sponsorship"
+    r"|not (?:currently )?(?:able to )?sponsor|without (?:visa )?sponsorship")
+YES_SPONSOR_RE = re.compile(
+    r"(?:visa\s+)?sponsorship\s+(?:is\s+)?(?:available|offered|provided|supported)"
+    r"|(?:we|company)\s+(?:can|do|will)\s+sponsor|able to sponsor|sponsorship for this role")
+
+
+# 岗位级别 → 典型经验年限中点（用于职级匹配打分）
+LEVEL_YEARS = {"grad": 0.0, "junior": 1.5, "mid": 3.5,
+               "senior": 6.5, "staff": 9.0, "mgmt": 10.0}
+# 领域标记：命中即代表方向对口，单独占一档权重
+DOMAIN_SKILLS = {
+    "nlp", "computer vision", "llm", "rag", "recommendation", "recommender",
+    "fraud detection", "fintech", "healthcare", "search ranking", "ads",
+    "time series", "speech recognition", "multimodal", "reinforcement learning",
+    "anomaly detection", "knowledge graph", "personalization", "risk",
+    "genai", "retrieval",
+}
+
+# ATS 式综合评分权重（可测的分项才计权重，最后按实际权重和归一化）：
+#   必备技能 55% · 加分技能 20% · 职级 10% · 领域 10% · JD抓取置信度 5%
+W_REQUIRED, W_PREFERRED, W_LEVEL, W_DOMAIN, W_CONF = 0.55, 0.20, 0.10, 0.10, 0.05
+
+
+def analyze_job(title, desc, resume_kws, my_years, level=None):
+    """ATS 式综合评分：技能覆盖(必备/加分) + 职级 + 领域 + JD置信度，再叠加淘汰项。
+
+    每个分项都归一化到 0..1，只有"可测"的分项才计入权重，最后按参与权重之和
+    归一化——这样缺 nice-to-have 段落或抓不到 JD 时不会被凭空扣分。"""
+    dl = (desc or "").lower()
+    full = (title or "").lower() + ". " + dl
+    m = NICE_SPLIT_RE.search(dl)
+    core_txt = dl[:m.start()] if m else dl
+    nice_txt = dl[m.start():] if m else ""
+    core = extract_skills((title or "").lower()) | extract_skills(core_txt)
+    nice = extract_skills(nice_txt) - core
+    hit_c, miss_c = core & resume_kws, core - resume_kws
+    hit_n, miss_n = nice & resume_kws, nice - resume_kws
+
+    comps = []  # (weight, subscore 0..1)
+    if core:
+        comps.append((W_REQUIRED, len(hit_c) / len(core)))
+    if nice:
+        comps.append((W_PREFERRED, len(hit_n) / len(nice)))
+    if level in LEVEL_YEARS and my_years is not None:
+        gap = abs(my_years - LEVEL_YEARS[level])
+        comps.append((W_LEVEL, max(0.0, 1.0 - gap / 5.0)))
+    job_domains = (core | nice) & DOMAIN_SKILLS
+    if job_domains:
+        comps.append((W_DOMAIN, len(job_domains & resume_kws) / len(job_domains)))
+    # JD 抓取置信度：抓到完整正文 1.0，正文很短 0.6，只有标题 0.3
+    conf = 1.0 if len(dl) >= 400 else (0.6 if dl else 0.3)
+    comps.append((W_CONF, conf))
+
+    wsum = sum(w for w, _ in comps)
+    score = round(100 * sum(w * s for w, s in comps) / wsum) if wsum else 0
+
+    flags = []
+    yrs = 0
+    for rx in YEARS_RES:
+        for g in rx.findall(full):
+            try:
+                yrs = max(yrs, int(g))
+            except ValueError:
+                pass
+    if 0 < my_years < yrs <= 15:
+        flags.append({"t": f"要求 {yrs}+ 年经验", "lv": "warn"})
+    if CLEARANCE_RE.search(full):
+        flags.append({"t": "需安全许可/国籍要求", "lv": "warn"})
+    if NO_SPONSOR_RE.search(full):
+        flags.append({"t": "JD 声明不担保签证", "lv": "warn"})
+        score = max(score - 40, 0)  # 真实世界里这基本等于淘汰
+    elif YES_SPONSOR_RE.search(full):
+        flags.append({"t": "明确提供签证担保", "lv": "good"})
+    return {
+        "score": score, "hit": sorted(hit_c | hit_n),
+        "must_miss": sorted(miss_c)[:12], "nice_miss": sorted(miss_n)[:10],
+        "flags": flags, "n": len(core) + len(nice),
+    }
 
 
 def run_match():
@@ -717,33 +1123,30 @@ def run_match():
     if not resume:
         return
     resume_kws = set(resume["keywords"])
+    my_years = state.get("exp_years", 1)
     cache = load_desc_cache()
+    fails = load_desc_fail()
     with _lock:
         targets = [(n, dict(r)) for n, r in state["results"].items() if r.get("matched")]
     state["match"] = {"running": True, "done": 0, "total": len(targets)}
     try:
         for n, r in targets:
-            fetch_descriptions(r, cache)
+            fetch_descriptions(r, cache, fails)
             with _lock:
                 for j in r.get("matched", []):
                     u = j.get("url", "")
-                    text = (j.get("title", "") + " ") * 2 + cache.get(u, "")
-                    job_kws = extract_skills(text)
-                    if not job_kws:
-                        continue
-                    hit = sorted(job_kws & resume_kws)
-                    miss = sorted(job_kws - resume_kws)
-                    # 分母设下限：JD 抓不到全文、只有零星关键词时分数保守些
-                    state["match_scores"][u] = {
-                        "score": round(100 * len(hit) / max(len(job_kws), 6)),
-                        "hit": hit, "miss": miss[:15], "n": len(job_kws),
-                    }
+                    res = analyze_job(j.get("title", ""), cache.get(u, ""),
+                                      resume_kws, my_years, j.get("level"))
+                    if res["n"]:
+                        state["match_scores"][u] = res
                 state["match"]["done"] += 1
     finally:
         state["match"]["running"] = False
-        with open(DESC_CACHE_FILE + ".tmp", "w", encoding="utf-8") as f:
-            json.dump(cache, f, ensure_ascii=False)
-        os.replace(DESC_CACHE_FILE + ".tmp", DESC_CACHE_FILE)
+        jd_ok = sum(1 for v in cache.values() if v)
+        state["match_stats"] = {"jd_ok": jd_ok, "jd_fail": len(fails),
+                                "updated": date.today().isoformat()}
+        _atomic_write(DESC_CACHE_FILE, json.dumps(cache, ensure_ascii=False))
+        _atomic_write(DESC_FAIL_FILE, json.dumps(fails, ensure_ascii=False))
         save_state()
 
 
@@ -953,27 +1356,64 @@ def api_state():
                     "location": j.get("location", ""), "company": n,
                     "curated": n in curated, "llm": bool(j.get("llm")),
                     "region": j["region"], "country": j.get("country", ""),
-                    "level": j["level"],
+                    "level": j["level"], "via": j.get("via", "title"),
                     "first_seen": fs, "days": days,
                     "score": ms["score"] if ms else None,
-                    "hit": ms["hit"] if ms else [], "miss": ms["miss"] if ms else [],
+                    "hit": ms["hit"] if ms else [],
+                    "must_miss": (ms.get("must_miss") or ms.get("miss", [])) if ms else [],
+                    "nice_miss": ms.get("nice_miss", []) if ms else [],
+                    "flags": ms.get("flags", []) if ms else [],
                 })
+        # 并入聚合平台(Adzuna/Reed)岗位
+        for u, j in state["agg_jobs"].items():
+            region = j.get("region", "uk")
+            if state["uk_only"] and region == "other":
+                continue
+            fs = j.get("first_seen", "")
+            try:
+                days = (today - date.fromisoformat(fs)).days if fs else None
+            except Exception:
+                days = None
+            ms = state["match_scores"].get(u)
+            feed.append({
+                "title": j.get("title", ""), "url": u,
+                "location": j.get("location", ""), "company": j.get("company", ""),
+                "curated": False, "llm": bool(j.get("llm")),
+                "region": region, "country": j.get("country", ""),
+                "level": j.get("level", "mid"), "via": "agg",
+                "source": j.get("source", ""), "sponsor": bool(j.get("sponsor")),
+                "first_seen": fs, "days": days,
+                "score": ms["score"] if ms else None,
+                "hit": ms["hit"] if ms else [],
+                "must_miss": ms.get("must_miss", []) if ms else [],
+                "nice_miss": ms.get("nice_miss", []) if ms else [],
+                "flags": ms.get("flags", []) if ms else [],
+            })
         feed.sort(key=lambda x: (x["first_seen"] or ""), reverse=True)
 
         probed = len(ats_cache)
         n_reg = sum(1 for c in comps.values() if "register" in c["tags"])
+        mstat = state.get("match_stats") or {}
+        jd_ok, jd_fail = mstat.get("jd_ok", 0), mstat.get("jd_fail", 0)
         counts = {
             "total": len(comps), "curated": len(curated), "register": n_reg,
             "probed": probed,
             "pending": sum(1 for n in comps if n not in ats_cache),
             "with_board": len(results),
+            "slug_failed": sum(1 for v in ats_cache.values() if v == "none"),
+            "overrides": len(slug_overrides),
             "has_ai": sum(1 for r in results.values() if r["status"] == "has_ai"),
             "ai_jobs": len(feed),
             "llm_jobs": sum(1 for j in feed if j["llm"]),
+            "via_jd_jobs": sum(1 for j in feed if j.get("via") == "jd"),
+            "agg_jobs": sum(1 for j in feed if j.get("via") == "agg"),
+            "agg_sponsor": sum(1 for j in feed if j.get("via") == "agg" and j.get("sponsor")),
             "uk_jobs": sum(1 for j in feed if j["region"] in ("uk", "unknown")),
             "eu_jobs": sum(1 for j in feed if j["region"] == "europe"),
             "new_jobs": sum(1 for j in feed if j["days"] is not None and j["days"] <= NEW_DAYS),
             "long_jobs": sum(1 for j in feed if j["days"] is not None and j["days"] >= LONG_RUNNING_DAYS),
+            "jd_ok": jd_ok, "jd_fail": jd_fail,
+            "jd_rate": (round(100 * jd_ok / (jd_ok + jd_fail)) if (jd_ok + jd_fail) else None),
         }
         scan = dict(state["scan"])
         if scan["running"] and scan["done"]:
@@ -982,9 +1422,10 @@ def api_state():
         resume = state.get("resume")
         return jsonify({
             "keywords": state["keywords"], "uk_only": state["uk_only"],
-            "auto_hours": state["auto_hours"],
+            "auto_hours": state["auto_hours"], "exp_years": state["exp_years"],
             "counts": counts, "results": res_out, "feed": feed[:400],
-            "scan": scan, "match": dict(state["match"]),
+            "scan": scan, "match": dict(state["match"]), "agg": dict(state["agg"]),
+            "has_api_keys": bool(api_keys.get("adzuna_app_id") or api_keys.get("reed_api_key")),
             "resume": ({"name": resume["name"], "updated": resume["updated"],
                         "keywords": resume["keywords"], "text": resume["text"]}
                        if resume else None),
@@ -1008,6 +1449,11 @@ def api_settings():
                 state["auto_hours"] = max(0, int(data["auto_hours"]))
             except Exception:
                 pass
+        if "exp_years" in data:
+            try:
+                state["exp_years"] = max(0, int(data["exp_years"]))
+            except Exception:
+                pass
     save_state()
     return jsonify({"ok": True})
 
@@ -1028,6 +1474,51 @@ def api_scan():
 def api_scan_stop():
     state["scan"]["stop"] = True
     return jsonify({"ok": True})
+
+
+@app.route("/api/slug_override", methods=["POST"])
+def api_slug_override():
+    """手动修正某公司的 ATS 定位（slug 猜错、或 Workday 这类必须手配的）。
+    body: {name, ats, slug}  或  {name, ats:"Workday", host, site}。
+    slug/host 都传空 → 删除该 override。"""
+    data = request.get_json(force=True)
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "缺少公司名"}), 400
+    key = name.lower()
+    ats = (data.get("ats") or "").strip()
+    slug = (data.get("slug") or "").strip()
+    host = (data.get("host") or "").strip()
+    site = (data.get("site") or "").strip()
+    if not slug and not (host and site):
+        slug_overrides.pop(key, None)
+        ats_cache.pop(name, None)          # 清掉旧缓存，下次重新探测
+    else:
+        if ats not in OVERRIDE_ATS:
+            return jsonify({"error": f"ats 需为 {sorted(OVERRIDE_ATS)} 之一"}), 400
+        if ats == "Workday":
+            if not (host and site):
+                return jsonify({"error": "Workday 需要 host 和 site"}), 400
+            slug_overrides[key] = {"ats": "Workday", "host": host, "site": site}
+        else:
+            if not slug:
+                return jsonify({"error": f"{ats} 需要 slug"}), 400
+            slug_overrides[key] = {"ats": ats, "slug": slug}
+        ats_cache.pop(name, None)          # 让下次扫描按 override 走
+    save_slug_overrides()
+    save_ats_cache()
+    return jsonify({"ok": True, "overrides": len(slug_overrides)})
+
+
+@app.route("/api/aggregators", methods=["POST"])
+def api_aggregators():
+    """触发 Adzuna/Reed 聚合搜索，横扫全英国 AI 岗位。"""
+    if not (api_keys.get("adzuna_app_id") or api_keys.get("reed_api_key")):
+        return jsonify({"error": "未配置 Adzuna/Reed 的 API key（见 data/api_keys.json）"}), 400
+    if state["agg"]["running"]:
+        return jsonify({"error": "聚合搜索进行中"}), 409
+    threading.Thread(target=run_aggregators, daemon=True).start()
+    return jsonify({"started": True, "queries": len(AGG_QUERIES)})
 
 
 @app.route("/api/clear", methods=["POST"])
@@ -1099,5 +1590,6 @@ if __name__ == "__main__":
     if state["companies"] and not os.path.exists(COMPANIES_FILE):
         save_companies()  # 从旧格式迁移时立即落盘，防止丢名单
     threading.Thread(target=auto_loop, daemon=True).start()
-    print("\n  AI Job Scout 已启动:  http://127.0.0.1:5050\n")
-    app.run(host="127.0.0.1", port=5050, debug=False, threaded=True)
+    port = int(os.environ.get("PORT", "5050"))
+    print(f"\n  AI Job Scout 已启动:  http://127.0.0.1:{port}\n")
+    app.run(host="127.0.0.1", port=port, debug=False, threaded=True)

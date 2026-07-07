@@ -1,0 +1,314 @@
+# -*- coding: utf-8 -*-
+"""简历-JD 匹配逻辑的单元测试。
+
+运行:  pytest tests/          （在仓库根目录）
+覆盖:  技能同义词识别 / 职级识别 / 保守评分 / 必备-加分拆分 /
+       hit-miss 正确性 / 签证淘汰项 / JD抓取失败重试 / 简历解析。
+"""
+import io
+import os
+import sys
+import time
+import zipfile
+
+import pytest
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import app  # noqa: E402
+
+
+# ---------------------------------------------------------------- 技能识别
+def test_extract_skills_basic():
+    got = app.extract_skills("Strong Python and PyTorch, plus SQL")
+    assert {"python", "pytorch", "sql"} <= got
+
+
+def test_extract_skills_canonicalizes_synonyms():
+    # 同义词应归并到规范名，避免同一技能算两次
+    assert "scikit-learn" in app.extract_skills("experience with sklearn")
+    assert "kubernetes" in app.extract_skills("deploy on k8s")
+    assert "nlp" in app.extract_skills("natural language processing background")
+    assert "bedrock" in app.extract_skills("used aws bedrock in production")
+    assert "weights & biases" in app.extract_skills("track runs in wandb")
+
+
+def test_extract_skills_modern_llm_terms():
+    txt = "LLMOps, guardrails, Azure OpenAI, model evaluation, prompt optimization"
+    got = app.extract_skills(txt)
+    assert {"llmops", "guardrails", "azure openai", "model evaluation",
+            "prompt optimization"} <= got
+
+
+def test_extract_skills_word_boundary_no_false_hit():
+    # 'r' 是词表里的语言，但不能被 'nearer' 之类的子串误命中
+    assert "r" not in app.extract_skills("we work nearer to the customer")
+    # 'go' 来自 golang 同义词，不能被 'going' 误命中
+    assert "go" not in app.extract_skills("we are going to scale")
+
+
+# ---------------------------------------------------------------- 职级识别
+@pytest.mark.parametrize("title,expected", [
+    ("Senior Machine Learning Engineer", "senior"),
+    ("Graduate AI Engineer", "grad"),
+    ("ML Intern", "grad"),
+    ("Staff Software Engineer", "staff"),
+    ("Principal Research Scientist", "staff"),
+    ("Head of Data Science", "mgmt"),
+    ("Junior Data Analyst", "junior"),
+    ("Machine Learning Engineer", "mid"),   # 无级别词 → 默认 mid
+])
+def test_classify_level(title, expected):
+    assert app.classify_level(title) == expected
+
+
+# ---------------------------------------------------------------- 评分
+def test_title_only_is_conservative():
+    """抓不到 JD、只有标题时，评分应偏低（置信度只占 5%）。"""
+    res = app.analyze_job("Machine Learning Engineer", "",
+                          {"python", "pytorch"}, my_years=2, level="mid")
+    assert res["score"] < 30
+    assert res["n"] >= 1
+
+
+def test_required_vs_preferred_split():
+    """nice-to-have 段内的技能算加分项，不进必备缺失。"""
+    jd = ("You must have Python and SQL. "
+          "Nice to have: Kubernetes and Terraform experience.")
+    res = app.analyze_job("Data Engineer", jd,
+                          {"python"}, my_years=2, level="mid")
+    # SQL 是必备且简历缺 → 进 must_miss；kubernetes 是加分缺失 → 进 nice_miss
+    assert "sql" in res["must_miss"]
+    assert "kubernetes" in res["nice_miss"]
+    assert "kubernetes" not in res["must_miss"]
+
+
+def test_hit_and_miss_are_accurate():
+    jd = "Requires Python, PyTorch and AWS for production ML systems."
+    res = app.analyze_job("ML Engineer", jd,
+                          {"python", "pytorch"}, my_years=3, level="mid")
+    assert "python" in res["hit"] and "pytorch" in res["hit"]
+    assert "aws" in res["must_miss"]
+    assert "aws" not in res["hit"]
+
+
+def test_full_match_scores_higher_than_partial():
+    jd = "We need Python, PyTorch, LLM and RAG experience. " * 15
+    full = app.analyze_job("ML Engineer", jd,
+                           {"python", "pytorch", "llm", "rag"}, 3, "mid")
+    partial = app.analyze_job("ML Engineer", jd,
+                              {"python"}, 3, "mid")
+    assert full["score"] > partial["score"]
+    assert full["score"] >= 60
+
+
+def test_no_sponsorship_applies_penalty():
+    jd = ("Python PyTorch LLM RAG. "
+          "Unfortunately we are unable to offer visa sponsorship for this role. ") * 8
+    kws = {"python", "pytorch", "llm", "rag"}
+    penalized = app.analyze_job("ML Engineer", jd, kws, 3, "mid")
+    clean = app.analyze_job(
+        "ML Engineer", jd.replace("unable to offer visa sponsorship for this role", "offer great benefits"),
+        kws, 3, "mid")
+    assert penalized["score"] == max(clean["score"] - 40, 0)
+    assert any("签证" in f["t"] for f in penalized["flags"])
+
+
+def test_years_requirement_flagged_when_below_threshold():
+    jd = "We require at least 8 years of experience in Python and machine learning. " * 5
+    res = app.analyze_job("Senior ML Engineer", jd,
+                          {"python", "machine learning"}, my_years=2, level="senior")
+    assert any("年经验" in f["t"] for f in res["flags"])
+
+
+def test_level_match_affects_score():
+    """同样的技能覆盖，年限贴合职级的岗位应得分不低于严重错配的。"""
+    jd = "Python and machine learning required. " * 10
+    kws = {"python", "machine learning"}
+    grad_fit = app.analyze_job("Graduate ML Engineer", jd, kws, my_years=0, level="grad")
+    grad_misfit = app.analyze_job("Graduate ML Engineer", jd, kws, my_years=10, level="grad")
+    assert grad_fit["score"] >= grad_misfit["score"]
+
+
+def test_empty_jd_and_no_skills_not_stored():
+    """既无 JD 又无标题技能 → n=0，run_match 会据此跳过存储。"""
+    res = app.analyze_job("Business Development Manager", "",
+                          {"python"}, my_years=2, level="mid")
+    assert res["n"] == 0
+
+
+# ---------------------------------------------------------------- JD抓取重试
+def test_should_retry_logic():
+    now = time.time()
+    assert app._should_retry("u1", {}) is True                 # 从未失败 → 抓
+    assert app._should_retry("u1", {"u1": now}) is False        # 刚失败 → 不抓
+    assert app._should_retry("u1", {"u1": now - app.FAIL_RETRY_SEC - 10}) is True  # 超 24h → 重试
+    assert app._should_retry("u1", {"u1": "garbage"}) is True   # 脏数据 → 容错重试
+
+
+# ---------------------------------------------------------------- 岗位召回 match_job
+KWS = [k.lower() for k in app.DEFAULT_KEYWORDS]
+
+
+def test_match_job_title_direct():
+    assert app.match_job("Senior Machine Learning Engineer", "", KWS) == "title"
+    assert app.match_job("AI Engineer", "", KWS) == "title"
+
+
+def test_match_job_broad_title_confirmed_by_jd():
+    # 标题没写 AI，但属于工程类且 JD 正文是 AI → 靠 JD 召回
+    via = app.match_job("Software Engineer, Search",
+                        "You will build LLM and RAG retrieval systems.", KWS)
+    assert via == "jd"
+
+
+def test_match_job_broad_title_non_ai_jd_rejected():
+    # 工程类标题但 JD 与 AI 无关 → 不召回，保住精度
+    assert app.match_job("Backend Engineer",
+                         "We use Java, Spring and PostgreSQL.", KWS) is None
+
+
+def test_match_job_non_tech_title_not_widened():
+    # 非工程/数据/研究类标题不进 JD 确认通道，即使 JD 提到 ML
+    assert app.match_job("Marketing Manager",
+                         "We love machine learning campaigns.", KWS) is None
+
+
+def test_match_job_no_jd_is_conservative():
+    # 抓不到 JD（如 Workable/SmartRecruiters）时只走标题
+    assert app.match_job("Data Engineer", "", KWS) is None
+
+
+def test_match_job_new_keywords_catch_ml_adjacent_titles():
+    assert app.match_job("Backend Engineer, Recommendations", "", KWS) == "title"
+    assert app.match_job("Applied Scientist", "", KWS) == "title"
+
+
+# ---------------------------------------------------------------- 新平台接入
+class _FakeResp:
+    def __init__(self, status=200, text="", content=b"", payload=None):
+        self.status_code = status
+        self.text = text
+        self.content = content
+        self._payload = payload
+
+    def json(self):
+        return self._payload
+
+
+class _FakeSession:
+    def __init__(self, resp):
+        self._r = resp
+
+    def get(self, *a, **k):
+        return self._r
+
+    def post(self, *a, **k):
+        return self._r
+
+
+PERSONIO_XML = (
+    b'<?xml version="1.0"?><workzag-jobs><position>'
+    b'<id>42</id><name>ML Engineer</name><office>London</office>'
+    b'<jobDescriptions><jobDescription><value>We build LLM and RAG systems</value>'
+    b'</jobDescription></jobDescriptions></position></workzag-jobs>')
+
+
+def test_probe_personio(monkeypatch):
+    resp = _FakeResp(200, PERSONIO_XML.decode(), PERSONIO_XML)
+    monkeypatch.setattr(app, "_session", lambda: _FakeSession(resp))
+    r = app.probe_personio("acme")
+    assert r and len(r["jobs"]) == 1
+    j = r["jobs"][0]
+    assert j["title"] == "ML Engineer" and j["location"] == "London"
+    assert "llm" in j["desc"].lower()
+    assert j["url"].endswith("/job/42")
+
+
+def test_probe_workday(monkeypatch):
+    payload = {"total": 2, "jobPostings": [
+        {"title": "ML Engineer", "externalPath": "/job/London/ML_JR1", "locationsText": "London"},
+        {"title": "Data Scientist", "externalPath": "/job/Leeds/DS_JR2", "locationsText": "Leeds"}]}
+    monkeypatch.setattr(app, "_session", lambda: _FakeSession(_FakeResp(200, payload=payload)))
+    r = app.probe_workday_tenant("acme.wd1.myworkdayjobs.com", "External")
+    assert r and len(r["jobs"]) == 2
+    assert r["jobs"][0]["url"] == \
+        "https://acme.wd1.myworkdayjobs.com/en-US/External/job/London/ML_JR1"
+
+
+def test_workday_needs_host_and_site():
+    assert app.probe_workday_tenant("", "External") is None
+    assert app.probe_workday_tenant("acme.wd1.myworkdayjobs.com", "") is None
+
+
+def test_norm_company_crossref():
+    # 后缀差异不应妨碍与 sponsor 名单对齐
+    assert app._norm_company("Acme AI Ltd") == app._norm_company("Acme AI Limited")
+    assert app._norm_company("DeepMind Technologies Limited") == "deepmind"
+
+
+def test_run_aggregators_filters_and_crossrefs(monkeypatch):
+    monkeypatch.setattr(app, "api_keys", {"adzuna_app_id": "x", "adzuna_app_key": "y"})
+    monkeypatch.setattr(app, "AGG_QUERIES", ["machine learning"])
+    monkeypatch.setattr(app, "search_reed", lambda q: [])
+    monkeypatch.setattr(app, "search_adzuna", lambda q, pages=2: [
+        {"company": "Acme AI Limited", "title": "Machine Learning Engineer",
+         "url": "http://a/1", "location": "London", "desc": "We build LLM systems",
+         "source": "Adzuna"},
+        {"company": "Random Corp", "title": "Chef", "url": "http://a/2",
+         "location": "Leeds", "desc": "cooking", "source": "Adzuna"}])
+    monkeypatch.setitem(app.state, "companies", {"Acme AI Ltd": {"tags": ["register"], "town": ""}})
+    monkeypatch.setitem(app.state, "agg_jobs", {})
+    monkeypatch.setattr(app, "save_state", lambda: None)
+    app.run_aggregators()
+    aj = app.state["agg_jobs"]
+    assert len(aj) == 1                       # Chef 被 AI 过滤掉
+    j = next(iter(aj.values()))
+    assert j["sponsor"] is True               # Acme AI Limited ↔ Acme AI Ltd 对齐
+    assert j["llm"] is True and j["source"] == "Adzuna"
+
+
+def test_search_adzuna_no_key_returns_empty(monkeypatch):
+    monkeypatch.setattr(app, "api_keys", {})
+    assert app.search_adzuna("machine learning") == []
+    assert app.search_reed("machine learning") == []
+
+
+# ---------------------------------------------------------------- 简历解析
+class _FakeUpload:
+    def __init__(self, filename, data):
+        self.filename = filename
+        self._data = data
+
+    def read(self):
+        return self._data
+
+
+def test_extract_resume_text_txt():
+    txt = "Machine Learning Engineer with Python and PyTorch."
+    out = app.extract_resume_text(_FakeUpload("cv.txt", txt.encode("utf-8")))
+    assert "python" in out.lower()
+
+
+def test_extract_resume_text_txt_bom():
+    # utf-8-sig 编码会加 BOM 字节，解析时应被剥掉，不残留在文本里
+    raw = "Data Scientist, SQL and Spark".encode("utf-8-sig")
+    out = app.extract_resume_text(_FakeUpload("cv.txt", raw))
+    assert "spark" in out.lower()
+    assert not out.startswith("﻿")
+
+
+def test_extract_resume_text_docx():
+    buf = io.BytesIO()
+    xml = ('<?xml version="1.0"?><w:document xmlns:w="x"><w:body>'
+           '<w:p><w:r><w:t>Python and Kubernetes</w:t></w:r></w:p>'
+           '<w:p><w:r><w:t>experience with LLM</w:t></w:r></w:p>'
+           '</w:body></w:document>')
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("word/document.xml", xml)
+    out = app.extract_resume_text(_FakeUpload("cv.docx", buf.getvalue()))
+    low = out.lower()
+    assert "python" in low and "kubernetes" in low and "llm" in low
+
+
+if __name__ == "__main__":
+    sys.exit(pytest.main([__file__, "-v"]))

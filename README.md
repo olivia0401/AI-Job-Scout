@@ -1,51 +1,129 @@
-# AI Job Scout — 全量工签雇主 AI/LLM 岗位雷达
+# AI Job Scout — 英国工签雇主岗位雷达
 
-扫描**全部** Skilled Worker 工签雇主（官方 sponsor register，12 万+ 家）的在招 AI / ML / LLM 岗位，
-精选科技公司单独标 ⭐，岗位按首次发现时间排序，自动标记 NEW / 长期在招 / ⭐LLM。
+**一句话：** 它会自动去「持有英国 Skilled Worker 工签资质的雇主」的官方招聘系统里，
+把他们正在招的岗位一次性抓出来，按新鲜度排好，还能上传你的简历自动算匹配度、给优化建议。
 
-## 启动
+> 默认找的是 **AI / 机器学习**岗位，但**换几个关键词就能找任何行业的岗位**（护士、会计、市场、工程师……见下）。
+> 好处：这些公司都**有工签担保资质**，投递前不用再一家家查能不能 sponsor。
 
+---
+
+## 🚀 第一次使用（不需要懂编程，照做即可）
+
+### 1. 装 Python
+去 https://www.python.org/downloads/ 下载安装，**安装时勾选 “Add Python to PATH”**（很重要）。
+
+### 2. 拿到本项目
+点这个页面右上角绿色的 **Code → Download ZIP**，解压到桌面。
+（或者如果你会用 git：`git clone https://github.com/olivia0401/AI-Job-Scout.git`）
+
+### 3. 打开命令行，进入项目文件夹
+- Windows：打开解压后的文件夹，在地址栏输入 `cmd` 回车。
+- Mac：在文件夹上右键 →「服务」→「新建位于文件夹位置的终端窗口」。
+
+### 4. 装依赖 + 启动（复制粘贴这两行，一行一行运行）
 ```
-cd AI-Job-Scout
+pip install -r requirements.txt
 python app.py
 ```
 
-浏览器打开 **http://127.0.0.1:5050**。依赖：`flask`、`requests`、`openpyxl`。
+### 5. 打开浏览器
+访问 **http://127.0.0.1:5050** —— 界面就出来了。
 
-## 三种扫描模式
+> 卡住了？把报错整段复制给 Claude，问它「怎么解决」，它会一步步教你（见后面「让 Claude 帮你」）。
 
-| 按钮 | 干什么 | 耗时 |
+---
+
+## 📖 日常怎么用（4 步）
+
+1. **导入雇主名单**：去 gov.uk 下载官方 sponsor 名单 CSV（搜索 “register of licensed sponsors workers”），
+   在页面「高级」里填文件路径导入。也可以把你自己整理的公司清单（Excel/CSV）拖进来，会标 ⭐精选。
+2. **扫描岗位**：
+   - 🔄 **刷新最新岗位**：日常用这个，几分钟，抓已知公司的新岗。
+   - 🌊 **全量清查**：第一次跑一次（约十几小时，可随时停、下次续跑），把所有雇主都探一遍。
+3. **上传简历**：拖进你的 PDF / Word / txt 简历，自动给每个岗位算 **匹配度**，并列出你缺哪些技能。
+4. **看结果 / 导出**：岗位按时间排序，带 🆕新上架、⏳长期在招、⭐LLM 等标记；点 **📥 导出** 存成 Excel。
+
+---
+
+## 🔁 不是找 AI 岗？换成你的行业
+
+这个工具本质是「扫雇主招聘系统里，标题或正文包含**你指定关键词**的岗位」，**跟行业无关**。
+在页面「高级 → 岗位关键词」里改成你要的词，保存后重新扫描即可。举例：
+
+| 行业 | 关键词填这些 |
+|---|---|
+| 护理 / 医疗 | nurse, healthcare assistant, clinical, care worker |
+| 会计 / 金融 | accountant, financial analyst, audit, tax, bookkeeper |
+| 市场 / 运营 | marketing, social media, content, brand, growth |
+| 工程 | mechanical engineer, civil engineer, electrical engineer |
+| 教育 | teacher, lecturer, teaching assistant |
+| 供应链 | supply chain, logistics, procurement, warehouse |
+
+---
+
+## 🤖 不会改代码？让 Claude 帮你（零基础也能改）
+
+装一个 **Claude Code**（或用网页版 Claude），把这个项目文件夹给它，然后用**大白话**说你想要什么，例如：
+
+- 「把岗位关键词换成护士、医疗相关的」
+- 「我只想看伦敦的岗位，别的地区都不要」
+- 「匹配度更看重工作年限，帮我调一下」
+- 「加一个按薪资高低排序的功能」
+- 「启动时报错了，这是报错内容：（粘贴）——帮我解决」
+
+你只需要描述**想要的结果**，不用懂代码，Claude 会帮你改好并解释。
+小贴士：让它改完顺手跑一下 `pytest tests/`（自带的自动测试），确认没改坏。
+
+---
+
+## 🌐 这些主流平台它抓不到，需要你自己去搜 / 投
+
+本工具只抓公司**官方招聘系统**的公开接口，下面这些**盲区**要你自己去平台上搜：
+
+| 平台 | 说明 |
+|---|---|
+| **LinkedIn** | 禁止程序抓取，只能自己上去搜（工具给了每家公司的「LinkedIn 招聘官搜索」一键链接） |
+| **Indeed** | 最大的聚合站，需自己搜 |
+| **Glassdoor** | 需自己搜 |
+| **Totaljobs / CV-Library / Reed 网站** | 英国本土大站，建议自己也去逛 |
+| **大厂自建系统**（Google、Amazon、大银行等） | 工具探测不到，用公司卡片里的「Google 直达」链接手动查 |
+
+> 每个公司卡片都附了 **LinkedIn 招聘官搜索 / Hunter 查邮箱 / Google 搜岗位** 的一键链接，
+> 方便你手动补齐这些平台 + 找到 HR 联系人（工具不替你爬取联系人，只给搜索入口）。
+
+**想抓更全、更快？**（选配，需要免费注册）
+配好 **Adzuna / Reed** 的免费 API key（把 `api_keys.example.json` 复制成 `data/api_keys.json` 填进去），
+点页面上的 **🌐 搜聚合平台**，就能几秒内横扫全英国的相关岗位，并自动标出哪些公司在工签担保名单里。
+
+---
+
+## 🔒 隐私
+
+所有数据（公司名单、你的简历、抓到的岗位）**只存在你自己电脑**的 `data/` 文件夹里，
+不会上传到任何服务器。`data/` 已设为不进 Git，不会被同步到 GitHub。
+
+---
+
+## 🧠 进阶：匹配度是怎么算的？（给好奇的人）
+
+上传简历后，工具用 **Jobscan 式规则评分**给每个岗位算 0–100 的「ATS 匹配度」。
+这**不是**机器学习准确率，而是可解释的加权分：
+
+| 分项 | 权重 | 看什么 |
 |---|---|---|
-| ⚡ 快速刷新 | 只重扫已探测到招聘系统的公司，抓最新岗位 | 几分钟 |
-| 🌊 全量清查 | 探测所有还没查过的 register 雇主（可随时停止，续跑不重复） | 首次约 14 小时 |
-| ⭐ 只扫精选 | 只扫精选科技公司 | ~4 分钟 |
+| 必备技能覆盖 | 55% | JD 要求的技能你简历里有几个 |
+| 加分技能覆盖 | 20% | nice-to-have 的技能覆盖 |
+| 职级匹配 | 10% | 岗位级别对应年限 vs 你的年限 |
+| 领域匹配 | 10% | 方向对不对口（NLP/推荐/风控…） |
+| JD 抓取置信度 | 5% | 抓到完整 JD 还是只有标题 |
 
-全量清查只需要跑一次；之后日常用 ⚡ 快速刷新即可。设置里可开自动刷新（每 N 小时，需程序开着）。
+另外会对「明确不担保签证 / 要求年限过高 / 需要安全许可」的岗位打 ⚠️ 提醒。
+想验证准确性，可以准备 30–50 条「简历+JD+人工标签」放进 `eval/dataset.jsonl`，跑 `python eval/run_eval.py`。
 
-## 岗位标记
+**抓取覆盖的招聘系统**：Greenhouse、Lever、Ashby、Workable、SmartRecruiters、Recruitee、Personio（自动探测）；
+Workday（大厂/银行，需手动配 host/site，见 `data/slug_overrides.json`）；Adzuna / Reed 聚合器（需免费 key）。
 
-- **NEW**：首次发现 ≤3 天（数据从第一次扫描开始积累）
-- **长期在招**：持续在线 ≥30 天——说明岗位难招/长期开放，值得投
-- **⭐LLM**：标题命中 LLM / GenAI / foundation model / agentic / RAG / NLP 等
-- **⭐精选**：来自精选科技公司清单（与 register 其余公司可一键切换）
-
-## 视图
-
-- 🕒 **最新岗位流**：所有 AI 岗按上架时间排序，蹲新岗位用这个
-- 🏢 **按公司看**：每家公司的岗位 + LinkedIn 招聘官搜索 / Hunter 查邮箱 / Google 直达链接
-
-## 导入
-
-- 📂 官方 register CSV（gov.uk 每周更新，填路径导入，自动取 Skilled Worker 路线并去重）
-- 自己的清单（xlsx/csv/txt/粘贴）会标为 ⭐精选
-
-## 附属脚本
-
-`verify_sponsors.py`：把精选科技雇主清单与 register 交叉核验，输出 `verified_tech_sponsors.csv`。
-
-## 说明与限制
-
-- 岗位来自 Greenhouse / Lever / Ashby / Workable / SmartRecruiters / Recruitee 六大招聘系统的**公开接口**，无需 API key。
-- 自研招聘系统的大厂（Google/Amazon/大银行等）探测不到，用公司卡片里的直达链接手动查。
-- LinkedIn 禁止自动抓取，联系人部分是一键直达搜索链接，不是爬虫。
-- 数据在 `data/` 目录：`companies.json`（公司名单）、`ats_cache.json`（探测缓存，全量清查的进度就存在这）、`state.json`（岗位与首见日期）。
+**开发者相关**：依赖见 `requirements.txt`；自动测试 `pytest tests/`；评估脚本 `eval/`。
+数据文件都在 `data/`：`companies.json`（名单）、`ats_cache.json`（探测缓存 = 全量清查进度）、
+`state.json`（岗位/首见日期/匹配分）、`slug_overrides.json`（手动修正）、`api_keys.json`（聚合器 key）。

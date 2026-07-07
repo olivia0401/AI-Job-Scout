@@ -129,6 +129,10 @@
   .badge.score.hi { background: var(--green-soft); color: var(--green); }
   .badge.score.md { background: var(--amber-soft); color: var(--amber); }
   .badge.score.lo { background: var(--soft); color: var(--muted); }
+  .badge.fwarn { background: var(--red-soft); color: var(--red); }
+  .badge.fgood { background: var(--green-soft); color: var(--green); }
+  .badge.viajd { background: var(--accent-soft); color: var(--accent); cursor: help; }
+  .badge.src { background: var(--soft); color: var(--text2); cursor: help; }
 
   /* 匹配详情 */
   .matchbox { background: #fafbfd; border: 1px solid var(--soft); border-radius: 11px;
@@ -200,6 +204,7 @@
     <h1>🎯 AI Job Scout</h1>
     <div class="actions">
       <button onclick="scan('known')" id="btnRefresh">🔄 刷新最新岗位</button>
+      <button class="ghost" onclick="runAgg()" id="btnAgg" title="用 Adzuna/Reed 官方 API 横扫全英国 AI 岗位（需在 data/api_keys.json 配 key）">🌐 搜聚合平台</button>
       <a class="btn ghost" href="/api/export">📥 导出</a>
     </div>
   </div>
@@ -270,6 +275,9 @@
         <span class="note">自动刷新间隔</span>
         <input type="number" id="autoHours" min="0" max="48" style="width:64px">
         <span class="note">小时（0 = 关闭；程序开着才生效）</span>
+        <span class="note" style="margin-left:14px">我的工作年限</span>
+        <input type="number" id="expYears" min="0" max="30" style="width:56px">
+        <span class="note">年（用于检测"要求 N 年经验"门槛）</span>
         <button onclick="saveSettings()">保存设置</button>
       </div>
       <div class="row" style="margin-top:10px; align-items:flex-start">
@@ -323,15 +331,30 @@ async function refresh() {
   S = await r.json();
   document.getElementById('kw').value = (S.keywords || []).join(', ');
   document.getElementById('autoHours').value = S.auto_hours || 0;
+  document.getElementById('expYears').value = S.exp_years ?? 1;
   const c = S.counts || {};
   const stat = (label, v) => `<span>${label}<b>${(v ?? 0).toLocaleString()}</b></span>`;
   document.getElementById('stats').innerHTML =
-    stat('AI 岗位', c.ai_jobs) + stat('🇬🇧 英国', c.uk_jobs) + stat('🇪🇺 欧洲', c.eu_jobs) +
+    stat('AI 岗位', c.ai_jobs) + stat('📄 正文召回', c.via_jd_jobs) +
+    stat('🌐 聚合平台', c.agg_jobs) +
+    stat('🇬🇧 英国', c.uk_jobs) + stat('🇪🇺 欧洲', c.eu_jobs) +
     stat('⭐ LLM', c.llm_jobs) + stat('🆕 新上架', c.new_jobs) + stat('⏳ 长期在招', c.long_jobs) +
     stat('在招公司', c.has_ai) +
     `<span>雇主库<b class="num">${(c.total ?? 0).toLocaleString()}</b></span>`;
+  const jdRate = c.jd_rate == null ? '—' : c.jd_rate + '%';
   document.getElementById('pendingNote').textContent =
-    `已探测 ${(c.probed ?? 0).toLocaleString()} 家，还剩 ${(c.pending ?? 0).toLocaleString()} 家未探测`;
+    `已探测 ${(c.probed ?? 0).toLocaleString()} 家，还剩 ${(c.pending ?? 0).toLocaleString()} 家未探测`
+    + ` · 探测无 ATS ${(c.slug_failed ?? 0).toLocaleString()} 家`
+    + (c.overrides ? ` · 手动修正 ${c.overrides} 家` : '')
+    + ` · JD 抓取成功率 ${jdRate}（${(c.jd_ok ?? 0).toLocaleString()}/${((c.jd_ok ?? 0) + (c.jd_fail ?? 0)).toLocaleString()}）`
+    + (c.agg_jobs ? ` · 聚合平台 ${c.agg_jobs} 个（其中担保名单 ${c.agg_sponsor ?? 0} 个）` : '');
+  const btnAgg = document.getElementById('btnAgg');
+  if (btnAgg) {
+    const running = (S.agg || {}).running;
+    btnAgg.disabled = running;
+    btnAgg.textContent = running ? '🌐 搜索中…' : '🌐 搜聚合平台';
+    if (!S.has_api_keys) btnAgg.title = '需先在 data/api_keys.json 配置 Adzuna/Reed 的免费 API key';
+  }
   renderResume();
   render();
   renderScan();
@@ -425,7 +448,15 @@ function jobBadges(j) {
   if (d != null && d <= S.consts.new_days) h += `<span class="badge new">NEW</span>`;
   if (d != null && d >= S.consts.long_days) h += `<span class="badge long">长期在招 ${d}天</span>`;
   if (j.llm) h += `<span class="badge llm">⭐LLM</span>`;
+  if (j.via === 'jd') h += `<span class="badge viajd" title="标题没写 AI，是 JD 正文命中才召回的">📄 正文AI</span>`;
+  if (j.source) h += `<span class="badge src" title="来自聚合平台搜索">🌐 ${esc(j.source)}</span>`;
+  if (j.via === 'agg') h += j.sponsor
+    ? `<span class="badge fgood" title="公司在官方工签 sponsor 名单里">✅ 担保名单</span>`
+    : `<span class="badge fwarn" title="公司不在工签 sponsor 名单里，投前请自行确认能否担保">⚠️ 非担保名单</span>`;
   h += scoreBadge(j);
+  (j.flags || []).forEach(f => {
+    h += `<span class="badge ${f.lv === 'good' ? 'fgood' : 'fwarn'}">${f.lv === 'good' ? '✅' : '⚠️'} ${esc(f.t)}</span>`;
+  });
   return h;
 }
 function daysTxt(j) {
@@ -440,23 +471,28 @@ function toggleMatch(url) {
 function matchDetail(j) {
   if (!expanded.has(j.url) || j.score == null) return '';
   const hits = (j.hit || []).map(k => `<span class="kw hit">✓ ${esc(k)}</span>`).join('');
-  const miss = (j.miss || []).map(k => `<span class="kw miss">${esc(k)}</span>`).join('');
+  const mmiss = (j.must_miss || []).map(k => `<span class="kw miss">${esc(k)}</span>`).join('');
+  const nmiss = (j.nice_miss || []).map(k => `<span class="kw" style="background:var(--soft);color:var(--muted)">${esc(k)}</span>`).join('');
   return `
   <div class="matchbox">
     ${hits ? `<div class="mrow"><span class="mlabel">简历已覆盖：</span>${hits}</div>` : ''}
-    ${miss ? `<div class="mrow"><span class="mlabel">JD 要求但简历缺失：</span>${miss}</div>` : ''}
+    ${mmiss ? `<div class="mrow"><span class="mlabel">必需项缺失（优先补）：</span>${mmiss}</div>` : ''}
+    ${nmiss ? `<div class="mrow"><span class="mlabel">加分项缺失：</span>${nmiss}</div>` : ''}
     <button class="mini ghost" onclick="copyPrompt('${esc(j.url)}')">📋 复制简历优化 Prompt（贴给 Claude 一键改简历）</button>
   </div>`;
 }
 async function copyPrompt(url) {
   const j = (S.feed || []).find(x => x.url === url);
   if (!j) return;
+  const flagsTxt = (j.flags || []).map(f => f.t).join('；');
   const prompt = `请帮我针对下面这个岗位优化简历，让它更容易通过 ATS 筛选和打动招聘官。
 
 【目标岗位】${j.title} — ${j.company}（${j.location}）
 【岗位链接】${j.url}
 【JD 要求的技能中我简历已覆盖】${(j.hit || []).join(', ') || '（无）'}
-【JD 要求但我简历中缺失的关键词】${(j.miss || []).join(', ') || '（无）'}
+【JD 必需但我简历缺失（优先处理）】${(j.must_miss || []).join(', ') || '（无）'}
+【JD 加分项但我简历缺失】${(j.nice_miss || []).join(', ') || '（无）'}
+${flagsTxt ? `【注意事项】${flagsTxt}` : ''}
 
 要求：
 1. 如果缺失的技能我实际具备，请告诉我该把它加到哪一段、怎么写最自然；
@@ -607,9 +643,18 @@ async function scan(mode) {
 }
 async function stopScan() { await fetch('/api/scan/stop', { method: 'POST' }); }
 
+async function runAgg() {
+  const r = await fetch('/api/aggregators', { method: 'POST' });
+  const d = await r.json();
+  if (d.error) { alert(d.error); return; }
+  alert('已开始搜索 Adzuna/Reed 聚合平台，稍等片刻在岗位流里看结果（📄 来源徽章）');
+  refresh();
+}
+
 async function saveSettings(silent) {
   const kws = document.getElementById('kw').value.split(',').map(s => s.trim()).filter(Boolean);
-  const body = { auto_hours: parseInt(document.getElementById('autoHours').value || '0', 10) };
+  const body = { auto_hours: parseInt(document.getElementById('autoHours').value || '0', 10),
+                 exp_years: parseInt(document.getElementById('expYears').value || '1', 10) };
   if (kws.length) body.keywords = kws;
   await fetch('/api/settings', { method: 'POST', headers: {'Content-Type':'application/json'},
     body: JSON.stringify(body) });
