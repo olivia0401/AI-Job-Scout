@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Job Scout · 工签雇主 AI 岗位</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f7f8fa; --card: #ffffff; --soft: #f2f4f8; --border: #e8eaf0;
+    --text: #21273a; --text2: #4c5468; --muted: #8a91a5; --faint: #b4bac9;
+    --accent: #4f63f5; --accent-deep: #3d4ec2; --accent-soft: #eef0fe; --accent-line: #ccd3fb;
+    --green: #148b5c; --green-soft: #e8f6ef;
+    --amber: #a06c0c; --amber-soft: #fdf3e0;
+    --gold: #8f6c06; --gold-soft: #fdf7e2;
+    --red: #b23b4b; --red-soft: #fdecee;
+    --shadow: 0 1px 2px rgba(30,36,60,.04), 0 1px 6px rgba(30,36,60,.03);
+    --shadow-lift: 0 3px 14px rgba(30,36,60,.08);
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: "Inter", -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+    font-size: 14px; line-height: 1.6;
+    -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 44px 24px 90px; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* ---------- 头部 ---------- */
+  .top { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 10px; }
+  h1 { font-size: 26px; margin: 0; font-weight: 700; letter-spacing: -.45px; }
+  .top .actions { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+  .sub { color: var(--muted); font-size: 14px; margin-bottom: 26px; line-height: 1.7; }
+  .sub b { color: var(--green); font-weight: 600; }
+
+  button, .btn {
+    background: var(--accent); color: #fff; border: none; border-radius: 11px;
+    padding: 10px 20px; font-size: 14px; font-weight: 550; letter-spacing: .1px;
+    cursor: pointer; text-decoration: none; display: inline-block; font-family: inherit;
+    box-shadow: 0 1px 3px rgba(79,99,245,.35); transition: all .15s;
+  }
+  button:hover, .btn:hover { filter: brightness(1.05); transform: translateY(-1px); }
+  button.ghost, .btn.ghost {
+    background: var(--card); border: 1px solid var(--border); color: var(--text2);
+    box-shadow: var(--shadow);
+  }
+  button.ghost:hover, .btn.ghost:hover { border-color: #d4d9e5; color: var(--text); filter: none; }
+  button.mini { padding: 5px 14px; font-size: 12.5px; border-radius: 9px; }
+  button:disabled { opacity: .45; cursor: not-allowed; transform: none !important; }
+
+  /* ---------- 扫描/匹配进度 ---------- */
+  .scanbar { background: var(--accent-soft); border: 1px solid #e0e4fd; border-radius: 14px;
+             padding: 14px 18px; margin-bottom: 18px; display: none; }
+  .scanbar .progress { height: 6px; background: #dde2fc; border-radius: 3px; overflow: hidden; margin-top: 10px; }
+  .scanbar .progress > div { height: 100%; background: var(--accent); width: 0%; transition: width .5s; border-radius: 3px; }
+  .scanbar .line { font-size: 13px; color: var(--accent-deep); display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .scanbar .line button { padding: 4px 14px; font-size: 12.5px; background: #fff; color: var(--accent);
+                          border: 1px solid #e0e4fd; box-shadow: none; }
+
+  /* ---------- 统计 ---------- */
+  .stats { display: flex; gap: 14px 30px; flex-wrap: wrap;
+           background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+           padding: 16px 22px; margin-bottom: 14px; box-shadow: var(--shadow); }
+  .stats span { display: inline-flex; flex-direction: column; gap: 1px;
+                font-size: 12px; color: var(--muted); letter-spacing: .2px; }
+  .stats b { color: var(--text); font-size: 18px; font-weight: 700;
+             font-variant-numeric: tabular-nums; letter-spacing: -.2px; line-height: 1.3; }
+
+  /* ---------- 简历卡片 ---------- */
+  .resume { background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+            padding: 14px 20px; margin-bottom: 14px; box-shadow: var(--shadow);
+            display: flex; gap: 12px; align-items: center; flex-wrap: wrap; font-size: 13.5px; }
+  .resume .icon { font-size: 20px; }
+  .resume .info { color: var(--text2); }
+  .resume .info small { color: var(--muted); display: block; font-size: 12px; margin-top: 1px; }
+  .resume .acts { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  #resumeFile { display: none; }
+
+  /* ---------- 筛选区 ---------- */
+  .filterbox { background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+               padding: 16px 20px; margin-bottom: 20px; box-shadow: var(--shadow); }
+  .frow { display: flex; gap: 7px; flex-wrap: wrap; align-items: center; margin: 7px 0; }
+  .flabel { font-size: 12.5px; color: var(--faint); width: 46px; flex-shrink: 0;
+            font-weight: 550; letter-spacing: .5px; }
+  .chip { font-size: 13px; padding: 5px 14px; border-radius: 18px; cursor: pointer; user-select: none;
+          background: var(--soft); color: var(--text2); border: 1px solid transparent;
+          transition: all .13s; line-height: 1.5; }
+  .chip:hover { background: #e9ecf3; }
+  .chip.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-line); font-weight: 600; }
+  .chip.star.on { background: var(--gold-soft); color: var(--gold); border-color: #ead992; }
+  .frow input[type=text] {
+    background: var(--soft); border: 1px solid transparent; color: var(--text);
+    border-radius: 18px; padding: 7px 16px; font-size: 13px; margin-left: auto; width: 210px;
+    outline: none; font-family: inherit; transition: all .15s;
+  }
+  .frow input[type=text]::placeholder { color: var(--faint); }
+  .frow input[type=text]:focus { background: #fff; border-color: var(--accent-line); box-shadow: 0 0 0 3px rgba(79,99,245,.08); }
+  .vtabs { display: flex; gap: 2px; background: var(--soft); border-radius: 11px; padding: 3px; margin-left: auto; }
+  .vtabs .chip { border-radius: 9px; background: transparent; padding: 4px 16px; }
+  .vtabs .chip.on { background: #fff; color: var(--accent); border-color: transparent; box-shadow: var(--shadow); }
+
+  /* ---------- 岗位卡片 ---------- */
+  .jobrow { background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+            padding: 16px 20px; margin-bottom: 10px; box-shadow: var(--shadow);
+            transition: all .15s; }
+  .jobrow:hover { border-color: var(--accent-line); box-shadow: var(--shadow-lift); }
+  .jobrow .l1 { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .jobrow a.title { color: var(--text); font-weight: 650; font-size: 15px; line-height: 1.45;
+                    text-decoration: none; letter-spacing: -.1px; }
+  .jobrow a.title:hover { color: var(--accent); }
+  .jobrow .l2 { display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
+                font-size: 13px; color: var(--muted); margin-top: 7px; }
+  .jobrow .co { color: var(--text2); font-weight: 550; }
+  .jobrow .l2 .dot { color: var(--faint); margin: 0 2px; }
+
+  .badge { font-size: 11.5px; padding: 3px 10px; border-radius: 11px; white-space: nowrap;
+           font-weight: 600; letter-spacing: .2px; line-height: 1.5; }
+  .badge.new { background: var(--accent-soft); color: var(--accent); }
+  .badge.long { background: var(--amber-soft); color: var(--amber); }
+  .badge.llm { background: var(--gold-soft); color: var(--gold); }
+  .badge.lvl { background: var(--soft); color: var(--text2); font-weight: 550; }
+  .badge.eu { background: var(--green-soft); color: var(--green); }
+  .badge.cn { background: var(--red-soft); color: var(--red); }
+  .badge.score { cursor: pointer; }
+  .badge.score.hi { background: var(--green-soft); color: var(--green); }
+  .badge.score.md { background: var(--amber-soft); color: var(--amber); }
+  .badge.score.lo { background: var(--soft); color: var(--muted); }
+
+  /* 匹配详情 */
+  .matchbox { background: #fafbfd; border: 1px solid var(--soft); border-radius: 11px;
+              padding: 12px 14px; margin-top: 10px; font-size: 12.5px; line-height: 2; }
+  .matchbox .mlabel { color: var(--muted); margin-right: 6px; }
+  .kw { display: inline-block; font-size: 11.5px; padding: 1.5px 9px; border-radius: 9px;
+        margin: 0 4px 4px 0; line-height: 1.6; }
+  .kw.hit { background: var(--green-soft); color: var(--green); }
+  .kw.miss { background: var(--red-soft); color: var(--red); }
+  .matchbox .mrow { margin: 2px 0; }
+  .matchbox button { margin-top: 6px; }
+
+  /* ---------- 公司卡片 ---------- */
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+          padding: 18px 20px; margin-bottom: 12px; box-shadow: var(--shadow); }
+  .card.has_ai { border-left: 3px solid #35c489; }
+  .card.board_no_ai { border-left: 3px solid #eec473; }
+  .card h3 { margin: 0 6px 0 0; font-size: 16px; display: inline; font-weight: 650; letter-spacing: -.15px; }
+  .badge.st_has_ai { background: var(--green-soft); color: var(--green); }
+  .badge.st_board_no_ai { background: var(--amber-soft); color: var(--amber); }
+  .badge.cur { background: var(--gold-soft); color: var(--gold); }
+  .meta { font-size: 13px; color: var(--muted); margin-top: 7px; }
+  .meta a { color: var(--accent); text-decoration: none; }
+  .meta a:hover { text-decoration: underline; }
+  .cjobs { margin-top: 12px; }
+  .cjob { padding: 9px 14px; background: #fafbfd; border: 1px solid var(--soft); border-radius: 11px;
+          margin-bottom: 6px; display: flex; gap: 8px; align-items: center; font-size: 13.5px; flex-wrap: wrap; }
+  .cjob a { color: var(--text); text-decoration: none; font-weight: 600; }
+  .cjob a:hover { color: var(--accent); }
+  .cjob .loc { color: var(--muted); font-size: 12.5px; margin-left: auto; }
+  .quick { margin-top: 14px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .quick a { font-size: 12.5px; padding: 5px 13px; border-radius: 9px;
+             border: 1px solid var(--border); color: var(--text2); text-decoration: none;
+             background: #fff; transition: all .13s; }
+  .quick a:hover { color: var(--accent); border-color: var(--accent-line); background: var(--accent-soft); }
+
+  .hint { font-size: 13px; color: var(--muted); margin-top: 16px; line-height: 1.9; text-align: center; }
+
+  /* ---------- 中国大厂目录 ---------- */
+  .cnbox { background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+           padding: 18px 20px; margin-bottom: 12px; box-shadow: var(--shadow); }
+  .cnbox h3 { margin: 0 0 4px; font-size: 15px; font-weight: 650; }
+  .cnbox .note { font-size: 12.5px; color: var(--muted); margin-bottom: 12px; line-height: 1.7; }
+  .cngrid { display: flex; gap: 8px; flex-wrap: wrap; }
+  .cngrid a { font-size: 13px; padding: 7px 15px; border-radius: 10px; text-decoration: none;
+              border: 1px solid var(--border); color: var(--text2); background: #fff; transition: all .13s; }
+  .cngrid a:hover { color: var(--red); border-color: #f2c9cf; background: var(--red-soft); }
+
+  /* ---------- 设置抽屉 ---------- */
+  details.adv { margin-top: 28px; }
+  details.adv summary { cursor: pointer; color: var(--faint); font-size: 13px; list-style: none;
+                        text-align: center; transition: color .15s; }
+  details.adv summary:hover { color: var(--muted); }
+  details.adv summary::-webkit-details-marker { display: none; }
+  .advbody { background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+             padding: 18px 20px; margin-top: 12px; font-size: 13.5px; box-shadow: var(--shadow); }
+  .advbody .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
+  .advbody input[type=text], .advbody input[type=number], .advbody textarea {
+    background: var(--soft); border: 1px solid var(--border); color: var(--text);
+    border-radius: 9px; padding: 8px 13px; font-size: 13px; outline: none; font-family: inherit;
+  }
+  .advbody input:focus, .advbody textarea:focus { background: #fff; border-color: var(--accent-line); }
+  .advbody .note { font-size: 12.5px; color: var(--muted); line-height: 1.7; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <h1>🎯 AI Job Scout</h1>
+    <div class="actions">
+      <button onclick="scan('known')" id="btnRefresh">🔄 刷新最新岗位</button>
+      <a class="btn ghost" href="/api/export">📥 导出</a>
+    </div>
+  </div>
+  <div class="sub">以下岗位全部来自<b>持英国 Skilled Worker 工签资质</b>的雇主 · 覆盖英国、欧洲与中国</div>
+
+  <div class="scanbar" id="scanbar">
+    <div class="line">
+      <span id="scanTxt"></span>
+      <button class="ghost" onclick="stopScan()">停止</button>
+    </div>
+    <div class="progress"><div id="progBar"></div></div>
+  </div>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="resume" id="resumeCard"></div>
+  <input type="file" id="resumeFile" accept=".pdf,.docx,.txt,.md" onchange="uploadResume()">
+
+  <div class="filterbox">
+    <div class="frow">
+      <span class="flabel">地区</span>
+      <span class="chip on" data-g="region" data-v="all" onclick="setF(this)">全部</span>
+      <span class="chip" data-g="region" data-v="uk" onclick="setF(this)">🇬🇧 英国</span>
+      <span class="chip" data-g="region" data-v="europe" onclick="setF(this)">🇪🇺 欧洲</span>
+      <span class="chip" data-g="region" data-v="china" onclick="setF(this)">🇨🇳 中国</span>
+      <span class="chip" data-g="region" data-v="remote" onclick="setF(this)">🌍 Remote</span>
+      <div class="vtabs">
+        <span class="chip on" data-g="view" data-v="feed" onclick="setF(this)">岗位</span>
+        <span class="chip" data-g="view" data-v="company" onclick="setF(this)">公司</span>
+      </div>
+    </div>
+    <div class="frow">
+      <span class="flabel">级别</span>
+      <span class="chip on" data-g="level" data-v="all" onclick="setF(this)">全部</span>
+      <span class="chip" data-g="level" data-v="grad" onclick="setF(this)">实习/毕业生</span>
+      <span class="chip" data-g="level" data-v="junior" onclick="setF(this)">初级</span>
+      <span class="chip" data-g="level" data-v="mid" onclick="setF(this)">中级</span>
+      <span class="chip" data-g="level" data-v="senior" onclick="setF(this)">高级</span>
+      <span class="chip" data-g="level" data-v="staff" onclick="setF(this)">Staff/Lead</span>
+      <span class="chip" data-g="level" data-v="mgmt" onclick="setF(this)">管理层</span>
+    </div>
+    <div class="frow">
+      <span class="flabel">标签</span>
+      <span class="chip star" data-t="llm" onclick="toggleT(this)">⭐ LLM</span>
+      <span class="chip" data-t="new" onclick="toggleT(this)">🆕 新上架</span>
+      <span class="chip" data-t="long" onclick="toggleT(this)">⏳ 长期在招</span>
+      <span class="chip star" data-t="curated" onclick="toggleT(this)">精选科技公司</span>
+      <span class="chip" data-t="byscore" onclick="toggleT(this)" id="sortChip">🎯 按匹配度排序</span>
+      <input type="text" id="search" placeholder="搜索岗位 / 公司…" oninput="render()">
+    </div>
+  </div>
+
+  <div id="list"></div>
+  <div class="hint" id="emptyHint"></div>
+
+  <details class="adv">
+    <summary>⚙️ 高级：全量清查 · 关键词 · 自动刷新 · 粘贴简历</summary>
+    <div class="advbody">
+      <div class="row">
+        <button class="ghost" onclick="scan('pending')" id="btnPending">🌊 继续全量清查 register</button>
+        <span class="note" id="pendingNote"></span>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <span class="note">岗位关键词：</span>
+        <input type="text" id="kw" style="flex:1;min-width:280px">
+      </div>
+      <div class="row">
+        <span class="note">自动刷新间隔</span>
+        <input type="number" id="autoHours" min="0" max="48" style="width:64px">
+        <span class="note">小时（0 = 关闭；程序开着才生效）</span>
+        <button onclick="saveSettings()">保存设置</button>
+      </div>
+      <div class="row" style="margin-top:10px; align-items:flex-start">
+        <span class="note" style="padding-top:8px">粘贴简历：</span>
+        <textarea id="resumeText" style="flex:1;min-width:280px;min-height:80px"
+                  placeholder="也可以直接把简历全文粘贴到这里（PDF 上传识别不了时用）"></textarea>
+        <button class="mini" onclick="pasteResume()" style="margin-top:8px">保存简历文本</button>
+      </div>
+      <div class="note" style="margin-top:10px">
+        全量清查逐家探测还没查过的 register 雇主，可随时停止，进度自动缓存、续跑不重复。
+        日常只需点顶部"🔄 刷新最新岗位"。
+      </div>
+    </div>
+  </details>
+</div>
+
+<script>
+let S = { results: {}, feed: [], counts: {}, scan: {}, match: {}, resume: null,
+          consts: { new_days: 3, long_days: 30, level_labels: {} } };
+let F = { view: 'feed', region: 'all', level: 'all' };
+let T = { llm: false, new: false, long: false, curated: false, byscore: false };
+let expanded = new Set();
+let pollTimer = null;
+
+const CN_BIGTECH = [
+  ['字节跳动', 'https://jobs.bytedance.com/experienced/position?keywords=%E5%A4%A7%E6%A8%A1%E5%9E%8B'],
+  ['TikTok（海外）', 'https://careers.tiktok.com/position?keywords=machine%20learning'],
+  ['腾讯', 'https://careers.tencent.com/search.html?keyword=%E5%A4%A7%E6%A8%A1%E5%9E%8B'],
+  ['阿里巴巴', 'https://talent.alibaba.com/off-campus/position-list?search=%E5%A4%A7%E6%A8%A1%E5%9E%8B'],
+  ['蚂蚁集团', 'https://talent.antgroup.com/off-campus-position?positionKeyWord=%E5%A4%A7%E6%A8%A1%E5%9E%8B'],
+  ['百度', 'https://talent.baidu.com/jobs/list?search=%E5%A4%A7%E6%A8%A1%E5%9E%8B'],
+  ['华为', 'https://career.huawei.com/reccampportal/portal5/social-recruitment.html'],
+  ['美团', 'https://zhaopin.meituan.com/web/position?keyword=%E5%A4%A7%E6%A8%A1%E5%9E%8B'],
+  ['京东', 'https://zhaopin.jd.com/'],
+  ['拼多多', 'https://careers.pinduoduo.com/'],
+  ['小红书', 'https://job.xiaohongshu.com/social'],
+  ['快手', 'https://zhaopin.kuaishou.cn/'],
+  ['网易', 'https://hr.163.com/'],
+  ['滴滴', 'https://talent.didiglobal.com/'],
+  ['DeepSeek 深度求索', 'https://www.deepseek.com/'],
+  ['月之暗面 Moonshot', 'https://www.moonshot.cn/'],
+  ['智谱 AI', 'https://www.zhipuai.cn/'],
+  ['MiniMax', 'https://www.minimaxi.com/'],
+  ['商汤科技', 'https://www.sensetime.com/cn/join-us'],
+];
+
+function esc(s) { return (s || '').toString().replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+async function refresh() {
+  const r = await fetch('/api/state');
+  S = await r.json();
+  document.getElementById('kw').value = (S.keywords || []).join(', ');
+  document.getElementById('autoHours').value = S.auto_hours || 0;
+  const c = S.counts || {};
+  const stat = (label, v) => `<span>${label}<b>${(v ?? 0).toLocaleString()}</b></span>`;
+  document.getElementById('stats').innerHTML =
+    stat('AI 岗位', c.ai_jobs) + stat('🇬🇧 英国', c.uk_jobs) + stat('🇪🇺 欧洲', c.eu_jobs) +
+    stat('⭐ LLM', c.llm_jobs) + stat('🆕 新上架', c.new_jobs) + stat('⏳ 长期在招', c.long_jobs) +
+    stat('在招公司', c.has_ai) +
+    `<span>雇主库<b class="num">${(c.total ?? 0).toLocaleString()}</b></span>`;
+  document.getElementById('pendingNote').textContent =
+    `已探测 ${(c.probed ?? 0).toLocaleString()} 家，还剩 ${(c.pending ?? 0).toLocaleString()} 家未探测`;
+  renderResume();
+  render();
+  renderScan();
+}
+
+function renderResume() {
+  const el = document.getElementById('resumeCard');
+  const m = S.match || {};
+  if (!S.resume) {
+    el.innerHTML = `
+      <span class="icon">📄</span>
+      <span class="info">上传简历，自动计算每个岗位的 <b style="color:var(--accent)">ATS 匹配度</b>，并给出针对性优化建议
+        <small>支持 PDF / Word / TXT · 只保存在你本机</small></span>
+      <span class="acts"><button onclick="document.getElementById('resumeFile').click()">上传简历</button></span>`;
+    return;
+  }
+  const scored = (S.feed || []).filter(j => j.score != null).length;
+  let status;
+  if (m.running) status = `⏳ 正在计算匹配度… ${m.done}/${m.total} 家公司`;
+  else if (scored) status = `已为 ${scored} 个岗位算出匹配度——点岗位上的 <b>匹配 %</b> 徽章看细节和优化建议`;
+  else status = `点右侧"计算匹配度"开始`;
+  el.innerHTML = `
+    <span class="icon">📄</span>
+    <span class="info"><b>${esc(S.resume.name)}</b> · 识别到 ${S.resume.keywords.length} 个技能关键词 · ${esc(S.resume.updated)}
+      <small>${status}</small></span>
+    <span class="acts">
+      <button class="mini ghost" onclick="document.getElementById('resumeFile').click()">重新上传</button>
+      <button class="mini" onclick="runMatch()" ${m.running ? 'disabled' : ''}>🎯 计算匹配度</button>
+    </span>`;
+  if (m.running && !pollTimer) pollTimer = setInterval(refresh, 2500);
+}
+
+function renderScan() {
+  const sc = S.scan || {};
+  const bar = document.getElementById('scanbar');
+  const running = !!sc.running;
+  document.getElementById('btnRefresh').disabled = running;
+  document.getElementById('btnPending').disabled = running;
+  bar.style.display = running ? 'block' : 'none';
+  if (running) {
+    document.getElementById('progBar').style.width = (sc.total ? 100*sc.done/sc.total : 0) + '%';
+    const eta = sc.eta_min != null ? (sc.eta_min > 90 ? `剩约 ${(sc.eta_min/60).toFixed(1)} 小时` : `剩约 ${sc.eta_min} 分钟`) : '';
+    const modeTxt = { known: '刷新最新岗位', pending: '全量清查', curated: '精选扫描', all: '全部扫描' }[sc.mode] || '扫描';
+    document.getElementById('scanTxt').textContent =
+      `${modeTxt}中 ${sc.done.toLocaleString()}/${sc.total.toLocaleString()} · 新发现岗位 ${sc.new_jobs} · ${eta}（进度实时缓存，停止不丢）`;
+    if (!pollTimer) pollTimer = setInterval(refresh, 2500);
+  } else if (!(S.match || {}).running && pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+}
+
+function setF(el) {
+  F[el.dataset.g] = el.dataset.v;
+  document.querySelectorAll(`.chip[data-g="${el.dataset.g}"]`).forEach(x =>
+    x.classList.toggle('on', x === el));
+  render();
+}
+function toggleT(el) {
+  T[el.dataset.t] = !T[el.dataset.t];
+  el.classList.toggle('on', T[el.dataset.t]);
+  render();
+}
+
+function jobDays(j) {
+  if (j.days != null) return j.days;
+  if (j.first_seen) return Math.round((Date.now() - new Date(j.first_seen)) / 864e5);
+  return null;
+}
+function passJob(j, q) {
+  const d = jobDays(j);
+  if (F.region === 'uk' && !(j.region === 'uk' || j.region === 'unknown')) return false;
+  if (F.region === 'europe' && j.region !== 'europe') return false;
+  if (F.region === 'china' && j.region !== 'china') return false;
+  if (F.region === 'remote' && j.region !== 'remote') return false;
+  if (F.level !== 'all' && j.level !== F.level) return false;
+  if (T.llm && !j.llm) return false;
+  if (T.new && !(d != null && d <= S.consts.new_days)) return false;
+  if (T.long && !(d != null && d >= S.consts.long_days)) return false;
+  if (T.curated && !j.curated) return false;
+  if (q && !((j.title||'').toLowerCase().includes(q) || (j.company||'').toLowerCase().includes(q))) return false;
+  return true;
+}
+function scoreBadge(j) {
+  if (j.score == null) return '';
+  const cls = j.score >= 60 ? 'hi' : j.score >= 35 ? 'md' : 'lo';
+  return `<span class="badge score ${cls}" onclick="toggleMatch('${esc(j.url)}')">匹配 ${j.score}%</span>`;
+}
+function jobBadges(j) {
+  const d = jobDays(j);
+  let h = `<span class="badge lvl">${esc(S.consts.level_labels[j.level] || j.level || '')}</span>`;
+  if (j.region === 'europe') h += `<span class="badge eu">🇪🇺 ${esc(j.country || 'Europe')}</span>`;
+  if (j.region === 'china') h += `<span class="badge cn">🇨🇳 中国</span>`;
+  if (d != null && d <= S.consts.new_days) h += `<span class="badge new">NEW</span>`;
+  if (d != null && d >= S.consts.long_days) h += `<span class="badge long">长期在招 ${d}天</span>`;
+  if (j.llm) h += `<span class="badge llm">⭐LLM</span>`;
+  h += scoreBadge(j);
+  return h;
+}
+function daysTxt(j) {
+  const d = jobDays(j);
+  if (d == null) return '';
+  return d === 0 ? '今天发现' : `上架 ${d} 天`;
+}
+function toggleMatch(url) {
+  expanded.has(url) ? expanded.delete(url) : expanded.add(url);
+  render();
+}
+function matchDetail(j) {
+  if (!expanded.has(j.url) || j.score == null) return '';
+  const hits = (j.hit || []).map(k => `<span class="kw hit">✓ ${esc(k)}</span>`).join('');
+  const miss = (j.miss || []).map(k => `<span class="kw miss">${esc(k)}</span>`).join('');
+  return `
+  <div class="matchbox">
+    ${hits ? `<div class="mrow"><span class="mlabel">简历已覆盖：</span>${hits}</div>` : ''}
+    ${miss ? `<div class="mrow"><span class="mlabel">JD 要求但简历缺失：</span>${miss}</div>` : ''}
+    <button class="mini ghost" onclick="copyPrompt('${esc(j.url)}')">📋 复制简历优化 Prompt（贴给 Claude 一键改简历）</button>
+  </div>`;
+}
+async function copyPrompt(url) {
+  const j = (S.feed || []).find(x => x.url === url);
+  if (!j) return;
+  const prompt = `请帮我针对下面这个岗位优化简历，让它更容易通过 ATS 筛选和打动招聘官。
+
+【目标岗位】${j.title} — ${j.company}（${j.location}）
+【岗位链接】${j.url}
+【JD 要求的技能中我简历已覆盖】${(j.hit || []).join(', ') || '（无）'}
+【JD 要求但我简历中缺失的关键词】${(j.miss || []).join(', ') || '（无）'}
+
+要求：
+1. 如果缺失的技能我实际具备，请告诉我该把它加到哪一段、怎么写最自然；
+2. 重写我简历中最相关的 2-3 条工作/项目经历，向这个岗位的要求靠拢，量化成果；
+3. 用词贴合 JD 原文关键词（利于 ATS），但不要堆砌；
+4. 最后给一段 3 句话的针对这家公司的开场白（cover letter 开头）。
+
+我的简历如下：
+${(S.resume && S.resume.text) || ''}`;
+  try {
+    await navigator.clipboard.writeText(prompt);
+    alert('优化 Prompt 已复制！粘贴给 Claude / ChatGPT 即可。');
+  } catch (e) {
+    prompt_fallback(prompt);
+  }
+}
+function prompt_fallback(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text; document.body.appendChild(ta); ta.select();
+  document.execCommand('copy'); ta.remove();
+  alert('优化 Prompt 已复制！');
+}
+
+function cnDirectory() {
+  return `
+  <div class="cnbox">
+    <h3>🇨🇳 中国大厂 AI 岗位直达</h3>
+    <div class="note">国内大厂都用自研招聘系统，没有公开接口可自动抓取——以下是各家 AI/大模型岗位搜索页直达链接。
+    它们的英国实体（TikTok 伦敦、华为英研所等）已在上方自动扫描范围内。</div>
+    <div class="cngrid">
+      ${CN_BIGTECH.map(([n, u]) => `<a href="${u}" target="_blank">${n} ↗</a>`).join('')}
+    </div>
+  </div>`;
+}
+
+function render() {
+  const q = document.getElementById('search').value.toLowerCase();
+  const list = document.getElementById('list');
+  const hint = document.getElementById('emptyHint');
+  const cnBox = F.region === 'china' ? cnDirectory() : '';
+
+  if (F.view === 'feed') {
+    let items = (S.feed || []).filter(j => passJob(j, q));
+    if (T.byscore) items = [...items].sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
+    list.innerHTML = cnBox + items.slice(0, 250).map(j => `
+      <div class="jobrow">
+        <div class="l1">
+          <a class="title" href="${esc(j.url)}" target="_blank">${esc(j.title)}</a>
+          ${jobBadges(j)}
+        </div>
+        <div class="l2">
+          <span class="co">${esc(j.company)}${j.curated ? ' ⭐' : ''}</span>
+          <span class="dot">·</span>
+          <span>${esc(j.location)}</span>
+          ${daysTxt(j) ? `<span class="dot">·</span><span class="num">${daysTxt(j)}</span>` : ''}
+        </div>
+        ${matchDetail(j)}
+      </div>`).join('');
+    hint.innerHTML = items.length
+      ? (items.length > 250 ? `已显示前 250 条 / 共 ${items.length} 条，可用筛选或搜索缩小范围` : '')
+      : (F.region === 'china' ? '扫描到的中国岗位会显示在这里（TikTok、Airbnb 等公司的中国区岗位）；上方是大厂直达链接。'
+         : '没有符合当前筛选的岗位——试试放宽筛选，或点顶部 🔄 刷新最新岗位。');
+    return;
+  }
+
+  // 公司视图
+  const order = { has_ai: 0, board_no_ai: 1 };
+  const scoreMap = {};
+  (S.feed || []).forEach(j => { if (j.score != null) scoreMap[j.url] = j; });
+  const items = Object.values(S.results || {})
+    .filter(r => ['has_ai', 'board_no_ai'].includes(r.status))
+    .filter(r => !T.curated || r.curated)
+    .map(r => ({...r, fjobs: (r.matched || []).map(j => ({...j, ...(scoreMap[j.url] || {}),
+        company: r.name, curated: r.curated}))
+        .filter(j => passJob(j, q))}))
+    .filter(r => r.fjobs.length || (!q && !T.llm && !T.new && !T.long && !T.byscore
+        && F.region === 'all' && F.level === 'all' && r.status === 'board_no_ai')
+        || (q && r.name.toLowerCase().includes(q)))
+    .sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9)
+      || b.fjobs.length - a.fjobs.length || a.name.localeCompare(b.name));
+
+  list.innerHTML = cnBox + items.slice(0, 150).map(r => {
+    const st = r.status;
+    const L = r.links || {};
+    const jobsHtml = r.fjobs.map(j => `
+      <div class="cjob">
+        <a href="${esc(j.url)}" target="_blank">${esc(j.title)}</a>
+        ${jobBadges(j)}
+        <span class="loc">${esc(j.location)} ${daysTxt(j)}</span>
+      </div>${matchDetail(j)}`).join('');
+    const stTxt = st === 'has_ai' ? `✅ ${r.fjobs.length} 个 AI 岗` : '🟡 暂无 AI 岗（可蹲守）';
+    return `
+    <div class="card ${st}">
+      <h3>${esc(r.name)}</h3>
+      ${r.curated ? '<span class="badge cur">⭐精选</span>' : ''}
+      <span class="badge ${st === 'has_ai' ? 'st_has_ai' : 'st_board_no_ai'}">${stTxt}</span>
+      <div class="meta">${esc(r.ats || '')} · <a href="${esc(r.board_url)}" target="_blank">招聘页 ↗</a> · 共 ${r.total_jobs} 个在招岗位 · ${esc(r.scanned_at || '')}</div>
+      ${jobsHtml ? `<div class="cjobs">${jobsHtml}</div>` : ''}
+      <div class="quick">
+        <a href="${esc(L.li_people)}" target="_blank">👤 LinkedIn 找招聘官</a>
+        <a href="${esc(L.hunter)}" target="_blank">📧 查邮箱</a>
+        <a href="${esc(L.li_jobs_kw)}" target="_blank">💼 LinkedIn 搜岗位</a>
+        <a href="${esc(L.careers_google)}" target="_blank">🏠 官方 Careers</a>
+      </div>
+    </div>`;
+  }).join('');
+  hint.innerHTML = items.length
+    ? (items.length > 150 ? `已显示前 150 家 / 共 ${items.length} 家` : '')
+    : '没有符合筛选的公司。';
+}
+
+async function uploadResume() {
+  const f = document.getElementById('resumeFile').files[0];
+  if (!f) return;
+  const fd = new FormData();
+  fd.append('file', f);
+  const r = await fetch('/api/resume', { method: 'POST', body: fd });
+  const d = await r.json();
+  if (d.error) { alert(d.error); return; }
+  alert(`简历已解析：识别到 ${d.keywords.length} 个技能关键词，正在自动计算所有岗位的匹配度…`);
+  refresh();
+}
+async function pasteResume() {
+  const text = document.getElementById('resumeText').value.trim();
+  if (text.length < 100) { alert('内容太短'); return; }
+  const r = await fetch('/api/resume', { method: 'POST',
+    headers: {'Content-Type':'application/json'}, body: JSON.stringify({ text }) });
+  const d = await r.json();
+  if (d.error) { alert(d.error); return; }
+  document.getElementById('resumeText').value = '';
+  alert(`简历已保存：识别到 ${d.keywords.length} 个技能关键词，正在计算匹配度…`);
+  refresh();
+}
+async function runMatch() {
+  const r = await fetch('/api/match', { method: 'POST' });
+  const d = await r.json();
+  if (d.error) { alert(d.error); return; }
+  refresh();
+}
+
+async function scan(mode) {
+  await saveSettings(true);
+  const r = await fetch('/api/scan', { method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ mode }) });
+  const d = await r.json();
+  if (d.error) { alert(d.error); return; }
+  refresh();
+}
+async function stopScan() { await fetch('/api/scan/stop', { method: 'POST' }); }
+
+async function saveSettings(silent) {
+  const kws = document.getElementById('kw').value.split(',').map(s => s.trim()).filter(Boolean);
+  const body = { auto_hours: parseInt(document.getElementById('autoHours').value || '0', 10) };
+  if (kws.length) body.keywords = kws;
+  await fetch('/api/settings', { method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(body) });
+  if (!silent) refresh();
+}
+
+refresh();
+</script>
+</body>
+</html>
