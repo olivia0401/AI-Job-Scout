@@ -1186,6 +1186,146 @@ def api_match():
     return jsonify({"started": True})
 
 
+# ---------------------------------------------------------------- 简历提升建议
+# 语料挖掘：抓 JD 里“experience with X / proficiency in X”之类短语，捞出词表外的技能
+_FREEFORM_CUE_RE = re.compile(
+    r"(?:experience (?:with|in|using)|proficien(?:t|cy) (?:in|with)|knowledge of|"
+    r"familiar(?:ity)? with|expertise in|skilled? in|hands[- ]on (?:with|experience with)|"
+    r"background in|understanding of|working knowledge of|deep understanding of) "
+    r"([a-z0-9][a-z0-9 .+#/-]{2,40})")
+_FREEFORM_STOP = {
+    "the", "a", "an", "and", "or", "of", "in", "with", "using", "to", "for", "our",
+    "your", "their", "this", "that", "these", "those", "such", "related", "various",
+    "modern", "strong", "solid", "good", "excellent", "proven", "real", "world",
+    "large", "scale", "high", "quality", "best", "practices", "practice", "years",
+    "year", "team", "teams", "ability", "concepts", "principles", "at", "least",
+    "is", "are", "be", "required", "preferred", "plus", "etc", "including", "as",
+    "on", "per", "across", "into", "within", "other", "any", "all", "must",
+    "should", "would", "will", "can", "we", "you", "they", "it", "clusters",
+}
+
+
+def mine_frequent_terms(descs, known, top=10):
+    """从 JD 语料里挖出高频、但不在技能词表/简历里的候选技能短语（启发式）。"""
+    from collections import Counter
+    cnt = Counter()
+    for d in descs:
+        for m in _FREEFORM_CUE_RE.finditer((d or "").lower()):
+            words = [w for w in re.split(r"[ /]+", m.group(1).strip())
+                     if w and w not in _FREEFORM_STOP]
+            for n in (2, 1):  # 优先取二元短语，退化到一元
+                if len(words) >= n:
+                    term = " ".join(words[:n])
+                    if len(term) > 2 and term not in known:
+                        cnt[term] += 1
+                    break
+    return cnt.most_common(top)
+
+
+def resume_gap_report(top=15):
+    """把简历和全平台匹配分聚合成一份缺口报告：最该补的技能 + 影响面。"""
+    resume = state.get("resume")
+    if not resume:
+        return {"ready": False}
+    from collections import Counter
+    resume_kws = set(resume["keywords"])
+    with _lock:
+        scores = [dict(ms) for ms in state["match_scores"].values() if ms]
+    weight, jobs, near, have = Counter(), Counter(), Counter(), Counter()
+    n_scored = 0
+    for ms in scores:
+        if not ms.get("n"):
+            continue
+        n_scored += 1
+        band = 35 <= (ms.get("score") or 0) < 70   # 中等匹配：补技能最能拉动
+        for k in ms.get("must_miss", []):
+            weight[k] += 2; jobs[k] += 1
+            if band:
+                near[k] += 1
+        for k in (ms.get("nice_miss") or []):
+            weight[k] += 1; jobs[k] += 1
+            if band:
+                near[k] += 1
+        for k in ms.get("hit", []):
+            have[k] += 1
+    gaps = [{"skill": k, "jobs": jobs[k], "near": near[k]}
+            for k, _ in weight.most_common(top)]
+    known = set(SKILL_VOCAB) | set(_CANON.values()) | resume_kws
+    freeform = [{"term": t, "jobs": c}
+                for t, c in mine_frequent_terms(load_desc_cache().values(), known)]
+    return {"ready": True, "n_scored": n_scored, "gaps": gaps,
+            "have": [k for k, _ in have.most_common(15)], "freeform": freeform}
+
+
+def _anthropic_key():
+    return api_keys.get("anthropic_api_key") or os.environ.get("ANTHROPIC_API_KEY")
+
+
+RESUME_SYS = ("你是资深简历顾问兼 ATS 优化专家，服务在英国找 AI/ML 工作的求职者。"
+              "建议要具体、可执行、诚实，绝不编造求职者没有的经历。")
+
+
+def generate_resume_advice(report):
+    """用 Claude 依据缺口报告 + 简历全文生成可执行的修改建议（Markdown）。"""
+    import anthropic
+    client = anthropic.Anthropic(api_key=_anthropic_key())
+    model = api_keys.get("anthropic_model", "claude-opus-4-8")
+    resume = state.get("resume") or {}
+    gaps_txt = "\n".join(
+        f"- {g['skill']}：缺失于 {g['jobs']} 个岗位"
+        + (f"（其中 {g['near']} 个是中等匹配，最可能因此被拉低）" if g["near"] else "")
+        for g in report.get("gaps", []))
+    free_txt = "、".join(f"{f['term']}({f['jobs']})" for f in report.get("freeform", []))
+    prompt = f"""我在英国找 AI/ML 相关工作。以下是把我的简历与全平台 {report.get('n_scored', 0)} 个岗位匹配后的统计。
+
+【我简历已覆盖的高频技能】{('、'.join(report.get('have', [])) or '（无）')}
+
+【全平台最常要求、但我简历缺失的技能（按影响排序）】
+{gaps_txt or '（无）'}
+
+【JD 里高频出现、但可能既不在我简历也不在技能词表里的表达（启发式，仅供参考）】{free_txt or '（无）'}
+
+【我的简历全文】
+{(resume.get('text') or '')[:8000]}
+
+请给我一份可执行的简历修改建议（中文，Markdown）：
+1. 优先级：先补哪 3–5 个技能/关键词最能整体提升匹配度，并引用“缺失于多少个岗位”说明理由。
+2. 每个要补的技能：若我可能已具备，建议加到简历哪一段、用什么措辞最自然（给 1 条量化 bullet 示例）。
+3. 指出我简历里 2–3 条最该改写的经历，怎么改更贴近这些岗位。
+4. 诚实提醒：哪些缺失技能若我确实没有，别硬写，应通过项目/课程补齐。
+不要编造我没有的经历。"""
+    with client.messages.stream(model=model, max_tokens=8000,
+                                thinking={"type": "adaptive"},
+                                system=RESUME_SYS,
+                                messages=[{"role": "user", "content": prompt}]) as stream:
+        msg = stream.get_final_message()
+    return "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
+
+
+@app.route("/api/resume_suggestions")
+def api_resume_suggestions():
+    report = resume_gap_report()
+    report["has_anthropic"] = bool(_anthropic_key())
+    return jsonify(report)
+
+
+@app.route("/api/resume_suggestions/generate", methods=["POST"])
+def api_resume_suggestions_generate():
+    if not state.get("resume"):
+        return jsonify({"error": "请先上传简历"}), 400
+    report = resume_gap_report()
+    if not report.get("ready") or not report.get("gaps"):
+        return jsonify({"error": "还没有匹配数据——请先上传简历并等匹配计算完成"}), 400
+    if not _anthropic_key():
+        return jsonify({"error": "未配置 Anthropic API key（在 data/api_keys.json 填 "
+                                 "anthropic_api_key，或设环境变量 ANTHROPIC_API_KEY）"}), 400
+    try:
+        advice = generate_resume_advice(report)
+    except Exception as e:
+        return jsonify({"error": f"生成失败: {e}"}), 500
+    return jsonify({"advice": advice})
+
+
 # ---------------------------------------------------------------- 导入
 COMPANY_HEADER_HINTS = ["company", "organisation", "organization", "employer",
                         "sponsor", "name", "公司", "雇主", "企业"]
@@ -1426,6 +1566,7 @@ def api_state():
             "counts": counts, "results": res_out, "feed": feed[:400],
             "scan": scan, "match": dict(state["match"]), "agg": dict(state["agg"]),
             "has_api_keys": bool(api_keys.get("adzuna_app_id") or api_keys.get("reed_api_key")),
+            "has_anthropic": bool(_anthropic_key()),
             "resume": ({"name": resume["name"], "updated": resume["updated"],
                         "keywords": resume["keywords"], "text": resume["text"]}
                        if resume else None),

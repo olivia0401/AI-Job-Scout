@@ -4,5 +4,8 @@
   "adzuna_app_id": "",
   "adzuna_app_key": "",
   "_reed": "免费注册 https://www.reed.co.uk/developers 拿 API key",
-  "reed_api_key": ""
+  "reed_api_key": "",
+  "_anthropic": "填 Claude API key 后，可在工具里一键生成简历修改建议（也可改用环境变量 ANTHROPIC_API_KEY）",
+  "anthropic_api_key": "",
+  "anthropic_model": "claude-opus-4-8"
 }

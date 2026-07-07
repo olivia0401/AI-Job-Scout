@@ -273,6 +273,50 @@ def test_search_adzuna_no_key_returns_empty(monkeypatch):
     assert app.search_reed("machine learning") == []
 
 
+# ---------------------------------------------------------------- 简历提升建议
+def test_mine_frequent_terms_catches_out_of_vocab():
+    descs = [
+        "Strong experience with Kubernetes and Terraform",
+        "proficiency in Kubernetes is required",
+        "hands-on experience with Kubernetes in production",
+    ]
+    terms = dict(app.mine_frequent_terms(descs, known={"terraform"}))
+    # kubernetes 反复出现且不在 known 里 → 应被挖出，且频次最高
+    assert any("kubernetes" in t for t in terms)
+
+
+def test_mine_frequent_terms_skips_known():
+    terms = dict(app.mine_frequent_terms(
+        ["experience with python and pytorch"], known={"python", "pytorch"}))
+    assert "python" not in terms and "pytorch" not in terms
+
+
+def test_resume_gap_report_ranks_by_impact(monkeypatch):
+    monkeypatch.setitem(app.state, "resume",
+                        {"text": "ML engineer with Python", "keywords": ["python"],
+                         "name": "cv", "updated": "2026-07-07"})
+    monkeypatch.setitem(app.state, "match_scores", {
+        "u1": {"score": 45, "hit": ["python"], "must_miss": ["rag", "kubernetes"],
+               "nice_miss": ["aws"], "flags": [], "n": 4},
+        "u2": {"score": 60, "hit": ["python"], "must_miss": ["rag"],
+               "nice_miss": [], "flags": [], "n": 2},
+        "u3": {"score": 80, "hit": ["python", "rag"], "must_miss": ["mlops"],
+               "nice_miss": [], "flags": [], "n": 3},
+    })
+    monkeypatch.setattr(app, "load_desc_cache", lambda: {})
+    r = app.resume_gap_report()
+    assert r["ready"] and r["n_scored"] == 3
+    # rag 缺于 2 个岗位（都中等匹配）→ 排第一
+    assert r["gaps"][0]["skill"] == "rag" and r["gaps"][0]["jobs"] == 2
+    assert r["gaps"][0]["near"] == 2
+    assert "python" in r["have"]
+
+
+def test_resume_gap_report_no_resume(monkeypatch):
+    monkeypatch.setitem(app.state, "resume", None)
+    assert app.resume_gap_report()["ready"] is False
+
+
 # ---------------------------------------------------------------- 简历解析
 class _FakeUpload:
     def __init__(self, filename, data):

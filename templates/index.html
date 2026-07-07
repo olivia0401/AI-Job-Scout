@@ -134,6 +134,19 @@
   .badge.viajd { background: var(--accent-soft); color: var(--accent); cursor: help; }
   .badge.src { background: var(--soft); color: var(--text2); cursor: help; }
 
+  /* 简历提升建议 */
+  .suggest { background: #fafbfd; border: 1px solid var(--soft); border-radius: 12px;
+             padding: 14px 16px; margin: 10px 0 4px; font-size: 12.5px; line-height: 1.9; }
+  .suggest .stitle { font-weight: 700; font-size: 13.5px; margin-bottom: 6px; }
+  .suggest .stitle small { color: var(--muted); font-weight: 500; }
+  .advice { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--soft);
+            font-size: 13px; line-height: 1.7; }
+  .advice h4 { margin: 12px 0 4px; font-size: 13.5px; color: var(--accent); }
+  .advice ul { margin: 4px 0 8px; padding-left: 20px; }
+  .advice li { margin: 3px 0; }
+  .advice p { margin: 6px 0; }
+  .advice code { background: var(--soft); padding: 1px 5px; border-radius: 5px; font-size: 12px; }
+
   /* 匹配详情 */
   .matchbox { background: #fafbfd; border: 1px solid var(--soft); border-radius: 11px;
               padding: 12px 14px; margin-top: 10px; font-size: 12.5px; line-height: 2; }
@@ -222,6 +235,7 @@
 
   <div class="resume" id="resumeCard"></div>
   <input type="file" id="resumeFile" accept=".pdf,.docx,.txt,.md" onchange="uploadResume()">
+  <div id="suggestBox"></div>
 
   <div class="filterbox">
     <div class="frow">
@@ -382,9 +396,57 @@ function renderResume() {
       <small>${status}</small></span>
     <span class="acts">
       <button class="mini ghost" onclick="document.getElementById('resumeFile').click()">重新上传</button>
+      <button class="mini ghost" onclick="loadSuggestions()" ${scored ? '' : 'disabled'} title="${scored ? '' : '先算出匹配度再看'}">🎯 简历提升建议</button>
       <button class="mini" onclick="runMatch()" ${m.running ? 'disabled' : ''}>🎯 计算匹配度</button>
     </span>`;
   if (m.running && !pollTimer) pollTimer = setInterval(refresh, 2500);
+}
+
+async function loadSuggestions() {
+  const box = document.getElementById('suggestBox');
+  box.innerHTML = `<div class="suggest"><div class="info">正在汇总全平台缺口…</div></div>`;
+  const r = await fetch('/api/resume_suggestions');
+  const d = await r.json();
+  if (!d.ready || !(d.gaps || []).length) {
+    box.innerHTML = `<div class="suggest"><div class="info">还没有匹配数据。先点「🎯 计算匹配度」，算完再来。</div></div>`;
+    return;
+  }
+  const gaps = d.gaps.map(g =>
+    `<span class="kw miss" title="缺失于 ${g.jobs} 个岗位${g.near ? '，其中 ' + g.near + ' 个中等匹配、最能因此提分' : ''}">${esc(g.skill)} ·${g.jobs}${g.near ? '（🎯' + g.near + '）' : ''}</span>`).join('');
+  const free = (d.freeform || []).map(f => `<span class="kw">${esc(f.term)}·${f.jobs}</span>`).join('');
+  const genBtn = d.has_anthropic
+    ? `<button class="mini" onclick="genAdvice()">✍️ 用 Claude 生成修改建议</button>`
+    : `<button class="mini" disabled title="在 data/api_keys.json 填 anthropic_api_key（或设 ANTHROPIC_API_KEY）后可用">✍️ 生成修改建议（需配 Claude key）</button>`;
+  box.innerHTML = `<div class="suggest">
+    <div class="stitle">🎯 全平台简历提升建议 <small>基于已匹配的 ${d.n_scored} 个岗位</small></div>
+    <div class="mrow"><span class="mlabel">最该补的技能（按影响排序，🎯=中等匹配岗位数，补上最能提分）：</span>${gaps}</div>
+    ${free ? `<div class="mrow"><span class="mlabel">JD 高频、可能词表外（启发式，供参考）：</span>${free}</div>` : ''}
+    <div class="mrow" style="margin-top:8px">${genBtn}</div>
+    <div id="adviceOut"></div>
+  </div>`;
+}
+
+async function genAdvice() {
+  const out = document.getElementById('adviceOut');
+  out.innerHTML = `<div class="info" style="margin-top:8px">Claude 正在生成建议（约需十几秒）…</div>`;
+  const r = await fetch('/api/resume_suggestions/generate', { method: 'POST' });
+  const d = await r.json();
+  if (d.error) { out.innerHTML = `<div class="info" style="margin-top:8px;color:var(--red)">${esc(d.error)}</div>`; return; }
+  out.innerHTML = `<div class="advice">${mdToHtml(d.advice || '')}</div>`;
+}
+
+// 极简 Markdown → HTML（标题/加粗/列表/换行），够渲染建议
+function mdToHtml(md) {
+  const lines = esc(md).split('\n'); let html = '', inList = false;
+  for (let ln of lines) {
+    ln = ln.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`(.+?)`/g, '<code>$1</code>');
+    if (/^#{1,6}\s/.test(ln)) { if (inList) { html += '</ul>'; inList = false; } html += `<h4>${ln.replace(/^#{1,6}\s/, '')}</h4>`; }
+    else if (/^\s*[-*]\s/.test(ln) || /^\s*\d+\.\s/.test(ln)) { if (!inList) { html += '<ul>'; inList = true; } html += `<li>${ln.replace(/^\s*([-*]|\d+\.)\s/, '')}</li>`; }
+    else if (ln.trim() === '') { if (inList) { html += '</ul>'; inList = false; } }
+    else { if (inList) { html += '</ul>'; inList = false; } html += `<p>${ln}</p>`; }
+  }
+  if (inList) html += '</ul>';
+  return html;
 }
 
 function renderScan() {
