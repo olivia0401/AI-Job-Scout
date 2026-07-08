@@ -5,6 +5,7 @@
 """
 import csv as csvmod
 import json
+from collections import Counter
 import os
 import re
 import sys
@@ -184,6 +185,9 @@ state = {
     "agg": {"running": False, "done": 0, "total": 0},
     "tracker": {},         # 投递清单：job_url -> {"status","ts","title","company","location"}
     "size": {"running": False, "done": 0, "total": 0},  # 公司规模识别进度
+    "hidden": {},          # 用户手动隐藏的岗位：url -> {"ts","title"}
+    "advice": {},          # 岗位简历建议缓存：url -> markdown（刷新页面不丢、不重复扣 LLM 费）
+    "outreach": {},        # networking 草稿缓存：url -> markdown
 }
 ats_cache = {}  # name -> {"ats","slug"} | "none"
 company_sizes = {}  # company name -> {"band": startup|mid|large|unknown, "note": str}
@@ -256,6 +260,9 @@ def load_all():
         state["agg_jobs"] = saved.get("agg_jobs", {})
         state["exp_years"] = saved.get("exp_years", 1)
         state["tracker"] = saved.get("tracker", {})
+        state["hidden"] = saved.get("hidden", {})
+        state["advice"] = saved.get("advice", {})
+        state["outreach"] = saved.get("outreach", {})
         for name, r in saved.get("results", {}).items():
             r.pop("links", None)  # 旧版把链接存了盘，现在改为按需生成
             state["results"][name] = r
@@ -292,6 +299,9 @@ def save_state():
             "agg_jobs": state["agg_jobs"],
             "exp_years": state["exp_years"],
             "tracker": state["tracker"],
+            "hidden": state["hidden"],
+            "advice": state["advice"],
+            "outreach": state["outreach"],
         }, ensure_ascii=False)
     _atomic_write(STATE_FILE, payload)
 
@@ -1432,7 +1442,38 @@ def analyze_job(title, desc, resume_kws, my_years, level=None):
         "must_miss": sorted(miss_c)[:12], "nice_miss": sorted(miss_n)[:10],
         "flags": flags, "n": len(core) + len(nice),
         "req_years": yrs,   # JD 抽到的最低要求年限（0=未注明），供前端“经验要求”筛选
+        # 分数可信度：high=完整JD / mid=JD较短 / low=只有标题——分数一样时先信 high
+        "conf": ("high" if len(dl) >= 400 else "mid" if dl else "low"),
     }
+
+
+def visa_certainty(ms, on_register):
+    """签证确定性分层（前端一级筛选）：
+      yes       —— JD 明确写提供担保
+      no        —— JD 明确写不担保
+      register  —— 公司在官方 sponsor 名单里，但 JD 未说明（大多数岗位在这层）
+      uncertain —— 聚合平台岗位且公司名没匹配上名单，担保与否完全未知"""
+    txts = [f.get("t", "") for f in ((ms or {}).get("flags") or [])]
+    if any("不担保" in t for t in txts):
+        return "no"
+    if any("提供签证担保" in t for t in txts):
+        return "yes"
+    return "register" if on_register else "uncertain"
+
+
+def job_tier(score, ms, visa):
+    """推荐分层：strong 强推荐 / maybe 可以看看 / weak 匹配弱 /
+    lowconf 低置信（没抓到JD或没算分） / risk 签证或安全许可风险。"""
+    txts = [f.get("t", "") for f in ((ms or {}).get("flags") or [])]
+    if visa == "no" or any("安全许可" in t for t in txts):
+        return "risk"
+    if score is None or any("仅按标题估分" in t for t in txts):
+        return "lowconf"
+    if score >= 60:
+        return "strong"
+    if score >= 35:
+        return "maybe"
+    return "weak"
 
 
 def run_match():
@@ -1767,11 +1808,56 @@ def api_job_advice():
         return jsonify({"error": "缺少岗位链接"}), 400
     if url not in state["match_scores"]:
         return jsonify({"error": "这个岗位还没算过匹配度，请先点「计算匹配度」"}), 400
+    cached = state["advice"].get(url)
+    if cached and not data.get("force"):
+        return jsonify({"advice": cached, "cached": True})
     try:
         advice = generate_job_advice(url)
     except Exception as e:
         return jsonify({"error": f"生成失败: {e}"}), 500
+    with _lock:
+        state["advice"][url] = advice
+    save_state()
     return jsonify({"advice": advice})
+
+
+# ---------------------------------------------------------------- 隐藏岗位
+# 挖排除词建议时跳过的通用词：这些词出现在几乎所有标题里，排除它们没有意义
+_TITLE_STOP = {
+    "engineer", "engineering", "developer", "scientist", "researcher", "analyst",
+    "senior", "junior", "lead", "staff", "graduate", "intern", "internship",
+    "the", "and", "for", "with", "remote", "hybrid", "london", "manchester",
+    "data", "software", "machine", "learning", "artificial", "intelligence",
+}
+
+
+def exclude_suggestions():
+    """从被隐藏岗位的标题里挖高频词（出现≥3次、不在关键词/排除词里），
+    作为「一键加入排除词」候选——隐藏得越多，学得越准。"""
+    kws = set(state["keywords"]) | set(state["exclude_keywords"])
+    cnt = Counter()
+    for h in state["hidden"].values():
+        for w in set(re.findall(r"[a-z]{3,}", (h.get("title") or "").lower())):
+            if w not in _TITLE_STOP and w not in kws:
+                cnt[w] += 1
+    return [w for w, c in cnt.most_common(5) if c >= 3]
+
+
+@app.route("/api/hide", methods=["POST"])
+def api_hide():
+    data = request.get_json(silent=True) or {}
+    url = (data.get("url") or "").strip()
+    if not url:
+        return jsonify({"error": "缺少岗位链接"}), 400
+    with _lock:
+        if data.get("on", True):
+            state["hidden"][url] = {"ts": date.today().isoformat(),
+                                    "title": (data.get("title") or "")[:200]}
+        else:
+            state["hidden"].pop(url, None)
+        n = len(state["hidden"])
+    save_state()
+    return jsonify({"ok": True, "hidden": n, "excl_suggest": exclude_suggestions()})
 
 
 # ---------------------------------------------------------------- 投递清单
@@ -1838,10 +1924,16 @@ def api_outreach():
     url = (data.get("url") or "").strip()
     if not url:
         return jsonify({"error": "缺少岗位链接"}), 400
+    cached = state["outreach"].get(url)
+    if cached and not data.get("force"):
+        return jsonify({"draft": cached, "cached": True})
     try:
         draft = generate_outreach(url)
     except Exception as e:
         return jsonify({"error": f"生成失败: {e}"}), 500
+    with _lock:
+        state["outreach"][url] = draft
+    save_state()
     return jsonify({"draft": draft})
 
 
@@ -1999,10 +2091,14 @@ def api_state():
         excl = state.get("exclude_keywords") or []
         excl_re = (re.compile(r"\b(" + "|".join(re.escape(k) for k in excl) + r")\b")
                    if excl else None)
+        show_hidden = request.args.get("hidden") == "1"  # 已隐藏视图：只看被隐藏的
 
         feed = []
         for n, r in results.items():
+            on_reg = "register" in (comps.get(n) or {}).get("tags", [])
             for j in r.get("matched", []):
+                if (j.get("url", "") in state["hidden"]) != show_hidden:
+                    continue
                 if excl_re and excl_re.search((j.get("title") or "").lower()):
                     continue
                 # 旧数据可能缺 region/level，即时补算
@@ -2016,6 +2112,7 @@ def api_state():
                 except Exception:
                     days = None
                 ms = state["match_scores"].get(j.get("url", ""))
+                visa = visa_certainty(ms, on_reg)
                 feed.append({
                     "title": j.get("title", ""), "url": j.get("url", ""),
                     "location": j.get("location", ""), "company": n,
@@ -2027,6 +2124,9 @@ def api_state():
                     "csize": (company_sizes.get(n) or {}).get("band", ""),
                     "req_years": ms.get("req_years", 0) if ms else 0,
                     "score": ms["score"] if ms else None,
+                    "conf": ms.get("conf") if ms else None,
+                    "visa": visa,
+                    "tier": job_tier(ms["score"] if ms else None, ms, visa),
                     "hit": ms["hit"] if ms else [],
                     "must_miss": (ms.get("must_miss") or ms.get("miss", [])) if ms else [],
                     "nice_miss": ms.get("nice_miss", []) if ms else [],
@@ -2034,6 +2134,8 @@ def api_state():
                 })
         # 并入聚合平台(Adzuna/Reed)岗位
         for u, j in state["agg_jobs"].items():
+            if (u in state["hidden"]) != show_hidden:
+                continue
             if excl_re and excl_re.search((j.get("title") or "").lower()):
                 continue
             region = j.get("region", "uk")
@@ -2045,6 +2147,7 @@ def api_state():
             except Exception:
                 days = None
             ms = state["match_scores"].get(u)
+            visa = visa_certainty(ms, bool(j.get("sponsor")))
             feed.append({
                 "title": j.get("title", ""), "url": u,
                 "location": j.get("location", ""), "company": j.get("company", ""),
@@ -2057,6 +2160,9 @@ def api_state():
                 "csize": (company_sizes.get(j.get("company", "")) or {}).get("band", ""),
                 "req_years": ms.get("req_years", 0) if ms else 0,
                 "score": ms["score"] if ms else None,
+                "conf": ms.get("conf") if ms else None,
+                "visa": visa,
+                "tier": job_tier(ms["score"] if ms else None, ms, visa),
                 "hit": ms["hit"] if ms else [],
                 "must_miss": ms.get("must_miss", []) if ms else [],
                 "nice_miss": ms.get("nice_miss", []) if ms else [],
@@ -2092,17 +2198,23 @@ def api_state():
             "long_jobs": sum(1 for j in feed if j["days"] is not None and j["days"] >= LONG_RUNNING_DAYS),
             "jd_ok": jd_ok, "jd_fail": jd_fail,
             "jd_rate": (round(100 * jd_ok / (jd_ok + jd_fail)) if (jd_ok + jd_fail) else None),
+            "hidden_jobs": len(state["hidden"]),
         }
         scan = dict(state["scan"])
         if scan["running"] and scan["done"]:
             rate = scan["done"] / max(time.time() - scan["started_ts"], 1)
             scan["eta_min"] = round((scan["total"] - scan["done"]) / max(rate, 0.01) / 60)
+        try:
+            limit = max(50, min(int(request.args.get("limit", 400)), 5000))
+        except ValueError:
+            limit = 400
         resume = state.get("resume")
         return jsonify({
             "keywords": state["keywords"], "uk_only": state["uk_only"],
             "exclude_keywords": state["exclude_keywords"],
+            "excl_suggest": exclude_suggestions(),
             "auto_hours": state["auto_hours"], "exp_years": state["exp_years"],
-            "counts": counts, "results": res_out, "feed": feed[:400],
+            "counts": counts, "results": res_out, "feed": feed[:limit],
             "scan": scan, "match": dict(state["match"]), "agg": dict(state["agg"]),
             "size": dict(state["size"]),
             "has_api_keys": _has_agg_keys(),

@@ -285,6 +285,33 @@
   }
   .advbody input:focus, .advbody textarea:focus { background: #fff; border-color: var(--accent-line); }
   .advbody .note { font-size: 12.5px; color: var(--muted); line-height: 1.7; }
+  /* 表格视图 */
+  .tblwrap { overflow-x: auto; background: var(--card); border: 1px solid var(--border);
+             border-radius: 14px; box-shadow: var(--shadow); }
+  .jobtable { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .jobtable th { text-align: left; padding: 9px 12px; color: var(--muted); font-weight: 600;
+                 font-size: 12px; border-bottom: 1px solid var(--border); white-space: nowrap;
+                 position: sticky; top: 0; background: var(--card); }
+  .jobtable td { padding: 7px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .jobtable tr:last-child td { border-bottom: none; }
+  .jobtable tr:hover td { background: var(--soft); }
+  .jobtable td a { color: var(--text); text-decoration: none; font-weight: 600; }
+  .jobtable td a:hover { text-decoration: underline; }
+  .jobtable .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  /* 首次使用向导 */
+  .wizmask { position: fixed; inset: 0; background: rgba(15,18,28,.45); z-index: 90;
+             display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .wizard { background: var(--card); border: 1px solid var(--border); border-radius: 18px;
+            box-shadow: 0 18px 60px rgba(0,0,0,.25); max-width: 560px; width: 100%;
+            padding: 26px 30px; font-size: 14px; }
+  .wizard h2 { margin: 0 0 6px; font-size: 19px; }
+  .wizard .wnote { color: var(--muted); font-size: 12.5px; line-height: 1.7; margin-bottom: 14px; }
+  .wizard .wrow { display: flex; gap: 10px; align-items: center; margin: 10px 0; flex-wrap: wrap; }
+  .wizard .wrow label { min-width: 110px; color: var(--text2); font-size: 13px; }
+  .wizard input[type=text], .wizard input[type=number] {
+    background: var(--soft); border: 1px solid var(--border); color: var(--text);
+    border-radius: 9px; padding: 8px 13px; font-size: 13px; outline: none; flex: 1; }
+  .wizard .wbtns { display: flex; gap: 10px; margin-top: 18px; justify-content: flex-end; }
 </style>
 </head>
 <body>
@@ -333,7 +360,8 @@
         <span class="chip on" data-g="sort" data-v="date" onclick="setF(this)">最新</span>
         <span class="chip" data-g="sort" data-v="score" onclick="setF(this)">匹配度</span>
       </div>
-      <select class="fsel" onchange="F.region = this.value; render()">
+      <span class="chip" id="layoutChip" onclick="toggleLayout()" title="表格视图：一行一个岗位，方便批量比较">▦ 表格</span>
+      <select class="fsel" id="fRegion" onchange="F.region = this.value; saveF(); render()">
         <option value="all">🌍 所有地区</option>
         <option value="uk">🇬🇧 英国</option>
         <option value="europe">🇪🇺 欧洲</option>
@@ -341,7 +369,23 @@
         <option value="remote">🏠 Remote</option>
         <option value="unknown">❓ 未知地点</option>
       </select>
-      <select class="fsel" onchange="F.level = this.value; render()">
+      <select class="fsel" id="fTier" onchange="setTier(this.value)" title="综合推荐分层：匹配分 + JD 置信度 + 签证/许可风险">
+        <option value="all">📊 全部分层</option>
+        <option value="strong">🔥 强推荐（≥60 分且已验证）</option>
+        <option value="maybe">👀 可以看看（35–59 分）</option>
+        <option value="weak">匹配较弱（&lt;35 分）</option>
+        <option value="lowconf">❔ 低置信（没抓到 JD）</option>
+        <option value="risk">⚠️ 签证/许可风险</option>
+        <option value="hidden">🚫 已隐藏</option>
+      </select>
+      <select class="fsel" id="fVisa" onchange="F.visa = this.value; saveF(); render()" title="签证确定性：公司在 sponsor 名单 ≠ 这个岗位一定担保，JD 明确写了才是确定的">
+        <option value="all">🛂 签证不限</option>
+        <option value="yes">✅ JD 明确担保</option>
+        <option value="register">🟡 名单内·JD 未说明</option>
+        <option value="uncertain">❓ 担保不确定</option>
+        <option value="no">🚫 JD 明确不担保</option>
+      </select>
+      <select class="fsel" id="fLevel" onchange="F.level = this.value; saveF(); render()">
         <option value="all">所有级别</option>
         <option value="grad">实习/毕业生</option>
         <option value="junior">初级</option>
@@ -350,14 +394,14 @@
         <option value="staff">Staff/Lead</option>
         <option value="mgmt">管理层</option>
       </select>
-      <select class="fsel" onchange="F.csize = this.value; render()" title="公司员工规模（大模型估）。需先点 ⋯ 菜单「识别公司规模」；模型不认识的会标为“规模未知”">
+      <select class="fsel" id="fCsize" onchange="F.csize = this.value; saveF(); render()" title="公司员工规模（大模型估）。需先点 ⋯ 菜单「识别公司规模」；模型不认识的会标为“规模未知”">
         <option value="all">🏢 所有规模</option>
         <option value="large">大型 (500+)</option>
         <option value="mid">中型 (50–500)</option>
         <option value="startup">初创 (&lt;50)</option>
         <option value="unknown">规模未知</option>
       </select>
-      <select class="fsel" onchange="F.years = this.value; render()" title="按 JD 里的最低要求年限筛选（需已算匹配度才有数据）">
+      <select class="fsel" id="fYears" onchange="F.years = this.value; saveF(); render()" title="按 JD 里的最低要求年限筛选（需已算匹配度才有数据）">
         <option value="all">所有经验</option>
         <option value="fit">我够格（≤我的年限）</option>
         <option value="none">未注明年限</option>
@@ -365,7 +409,7 @@
         <option value="y35">3–5 年</option>
         <option value="y6">5 年以上</option>
       </select>
-      <select class="fsel" onchange="F.minscore = parseInt(this.value, 10); render()" title="按简历匹配分过滤（需先上传简历算分；没算出分的岗位会被隐藏）">
+      <select class="fsel" id="fScore" onchange="F.minscore = parseInt(this.value, 10); saveF(); render()" title="按简历匹配分过滤（需先上传简历算分；没算出分的岗位会被隐藏）">
         <option value="0">💯 所有匹配分</option>
         <option value="40">≥ 40 分</option>
         <option value="60">≥ 60 分</option>
@@ -376,6 +420,7 @@
       <span class="chip star" data-t="curated" onclick="toggleT(this)">精选公司</span>
       <span class="chip" data-t="titleonly" onclick="toggleT(this)" title="只看标题直接命中关键词的岗位，隐藏仅靠 JD 正文召回的低置信度岗位">🎯 仅标题命中</span>
       <span class="chip" data-t="derisk" onclick="toggleT(this)" title="隐藏 JD 明确声明不担保签证、或要求安全许可/英国国籍的岗位">🛂 排除签证风险</span>
+      <span class="chip" data-t="unseen" onclick="toggleT(this)" title="只看你还没展开/打开过的岗位（看过的自动记住）">👀 未看过</span>
       <input type="text" id="search" placeholder="搜索岗位 / 公司…" oninput="render()">
     </div>
   </div>
@@ -407,6 +452,7 @@
         <input type="text" id="exkw" style="flex:1;min-width:280px"
                placeholder="标题含这些词的岗位直接隐藏，逗号分隔，如 sales, consultant, intern">
       </div>
+      <div class="row" id="exSuggest" style="display:none"></div>
       <div class="row">
         <span class="note">自动刷新间隔</span>
         <input type="number" id="autoHours" min="0" max="48" style="width:64px">
@@ -430,15 +476,82 @@
   </details>
 </div>
 
+<div class="wizmask" id="wizard" style="display:none">
+  <div class="wizard">
+    <h2>👋 第一次用？三步就能开始</h2>
+    <div class="wnote">这个工具会扫描全部英国工签雇主的官方招聘系统 + 聚合平台，
+      按你的简历打匹配分。先告诉它你要找什么：</div>
+    <div class="wrow"><label>目标岗位关键词</label>
+      <input type="text" id="wizKw" placeholder="如 machine learning, llm, ai engineer"></div>
+    <div class="wrow"><label>不想看的词</label>
+      <input type="text" id="wizEx" placeholder="如 sales, consultant, support（可留空）"></div>
+    <div class="wrow"><label>我的工作年限</label>
+      <input type="number" id="wizYears" min="0" max="30" value="1" style="max-width:90px">
+      <label style="min-width:0"><input type="checkbox" id="wizVisa" checked> 我需要签证担保（自动排雷「不担保」岗位）</label></div>
+    <div class="wnote">下一步：点「开始全量清查」逐家扫描工签雇主（第一次要跑几个小时，可最小化窗口；
+      之后日常只需点顶部 🔄）。扫描时记得<b>上传简历</b>，岗位会自动算 0–100 匹配分。</div>
+    <div class="wbtns">
+      <button class="ghost" onclick="wizDone(false)">先随便看看</button>
+      <button onclick="wizDone(true)">💾 保存并开始全量清查</button>
+    </div>
+  </div>
+</div>
+
 <script>
 let S = { results: {}, feed: [], counts: {}, scan: {}, match: {}, resume: null,
           consts: { new_days: 3, long_days: 30, level_labels: {} } };
 let F = { view: 'feed', region: 'all', level: 'all', csize: 'all', years: 'all',
-          minscore: 0, sort: 'date' };
+          minscore: 0, tier: 'all', visa: 'all', layout: 'cards', sort: 'date' };
 let T = { llm: false, new: false, long: false, curated: false,
-          titleonly: false, derisk: false };
+          titleonly: false, derisk: false, unseen: false };
+let FEED_LIMIT = 400;   // 「加载更多」逐步调大
 let expanded = new Set();
 let pollTimer = null;
+// 看过的岗位（展开过/点开过链接）——存本地，供「👀 未看过」筛选
+const seenSet = new Set(JSON.parse(localStorage.getItem('seenJobs') || '[]'));
+function markSeen(u) {
+  if (!u || seenSet.has(u)) return;
+  seenSet.add(u);
+  localStorage.setItem('seenJobs', JSON.stringify([...seenSet].slice(-8000)));
+}
+// 筛选条件记忆：改一次记一次，下次打开自动恢复
+function saveF() {
+  localStorage.setItem('filters', JSON.stringify({ F: { ...F, view: 'feed' }, T }));
+}
+function restoreF() {
+  try {
+    const s = JSON.parse(localStorage.getItem('filters') || 'null');
+    if (!s) return;
+    Object.assign(F, s.F || {}, { view: 'feed' });
+    Object.assign(T, s.T || {});
+  } catch (e) {}
+  if (F.tier === 'hidden') F.tier = 'all';  // 已隐藏视图不跨会话保留
+  const ids = { fRegion: F.region, fTier: F.tier, fVisa: F.visa, fLevel: F.level,
+                fCsize: F.csize, fYears: F.years, fScore: String(F.minscore) };
+  for (const [id, v] of Object.entries(ids)) {
+    const el = document.getElementById(id);
+    if (el) el.value = v;
+  }
+  document.querySelectorAll('.chip[data-t]').forEach(el =>
+    el.classList.toggle('on', !!T[el.dataset.t]));
+  document.querySelectorAll('.chip[data-g="sort"]').forEach(el =>
+    el.classList.toggle('on', el.dataset.v === F.sort));
+  if (F.sort === 'score') window._sortInit = true;  // 用户存过偏好就不再自动改
+  const lc = document.getElementById('layoutChip');
+  if (lc) lc.classList.toggle('on', F.layout === 'table');
+}
+function setTier(v) {
+  const wasHidden = F.tier === 'hidden';
+  F.tier = v;
+  saveF();
+  if (v === 'hidden' || wasHidden) refresh();  // 已隐藏视图要向后端换一批数据
+  else render();
+}
+function toggleLayout() {
+  F.layout = F.layout === 'table' ? 'cards' : 'table';
+  document.getElementById('layoutChip').classList.toggle('on', F.layout === 'table');
+  saveF(); render();
+}
 const jobAdvice = {};        // url -> 岗位专属简历建议(Markdown)
 const jobAdviceBusy = new Set();  // 正在为哪些 url 生成建议
 const jobOutreach = {};      // url -> networking 搭话草稿(Markdown)
@@ -471,17 +584,29 @@ const CN_BIGTECH = [
 function esc(s) { return (s || '').toString().replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
 async function refresh() {
-  const r = await fetch('/api/state?sort=' + encodeURIComponent(F.sort));
+  const r = await fetch('/api/state?sort=' + encodeURIComponent(F.sort)
+    + '&limit=' + FEED_LIMIT + (F.tier === 'hidden' ? '&hidden=1' : ''));
   S = await r.json();
   document.getElementById('kw').value = (S.keywords || []).join(', ');
   const exEl = document.getElementById('exkw');
   if (exEl && document.activeElement !== exEl)
     exEl.value = (S.exclude_keywords || []).join(', ');
+  // 排除词学习建议：从你隐藏的岗位标题里挖出来的高频词
+  const sug = document.getElementById('exSuggest');
+  if (sug) {
+    const ws = S.excl_suggest || [];
+    sug.style.display = ws.length ? '' : 'none';
+    sug.innerHTML = ws.length
+      ? `<span class="note">📈 根据你隐藏的岗位，建议排除：</span>`
+        + ws.map(w => `<button class="mini ghost" onclick="addExcl('${esc(w)}')">➕ ${esc(w)}</button>`).join('')
+      : '';
+  }
   document.getElementById('autoHours').value = S.auto_hours || 0;
   document.getElementById('expYears').value = S.exp_years ?? 1;
   const c = S.counts || {};
   document.getElementById('cntFeed').textContent = c.ai_jobs ? c.ai_jobs.toLocaleString() : '';
   document.getElementById('cntCo').textContent = c.has_ai ? c.has_ai.toLocaleString() : '';
+  if (!window._wizChecked) { window._wizChecked = true; maybeWizard(); }
   // 已有匹配分时，默认按匹配度排序——只在页面刚打开时设置一次
   if (!window._sortInit) {
     window._sortInit = true;
@@ -618,8 +743,9 @@ function setF(el) {
   F[el.dataset.g] = el.dataset.v;
   document.querySelectorAll(`[data-g="${el.dataset.g}"]`).forEach(x =>
     x.classList.toggle('on', x === el));
+  saveF();
   render();
-  // 排序方式变了要向后端重取：后端按该排序截断前 400 条
+  // 排序方式变了要向后端重取：后端按该排序截断
   if (el.dataset.g === 'sort') refresh();
 }
 // ⋯ 菜单项：先收起菜单再执行
@@ -635,6 +761,7 @@ function openSettings() {
 function toggleT(el) {
   T[el.dataset.t] = !T[el.dataset.t];
   el.classList.toggle('on', T[el.dataset.t]);
+  saveF();
   render();
 }
 
@@ -662,6 +789,8 @@ function passJob(j, q) {
     if (F.years === 'y6'   && ry < 6) return false;
   }
   if (F.minscore > 0 && !((j.score ?? -1) >= F.minscore)) return false;
+  if (F.tier !== 'all' && F.tier !== 'hidden' && j.tier !== F.tier) return false;
+  if (F.visa !== 'all' && j.visa !== F.visa) return false;
   if (T.llm && !j.llm) return false;
   if (T.new && !(d != null && d <= S.consts.new_days)) return false;
   if (T.long && !(d != null && d >= S.consts.long_days)) return false;
@@ -669,7 +798,13 @@ function passJob(j, q) {
   if (T.titleonly && j.via === 'jd') return false;
   if (T.derisk && (j.flags || []).some(f =>
       (f.t || '').includes('不担保') || (f.t || '').includes('安全许可'))) return false;
-  if (q && !((j.title||'').toLowerCase().includes(q) || (j.company||'').toLowerCase().includes(q))) return false;
+  if (T.unseen && seenSet.has(j.url)) return false;
+  // 搜索：标题 / 公司 / 地点 / 国家 / 来源 / 命中技能
+  if (q) {
+    const hay = [j.title, j.company, j.location, j.country, j.source,
+                 (j.hit || []).join(' ')].join(' ').toLowerCase();
+    if (!hay.includes(q)) return false;
+  }
   return true;
 }
 // 匹配度色块：岗位行左侧，一眼可见
@@ -724,7 +859,33 @@ function daysTxt(j) {
 }
 function toggleMatch(url) {
   expanded.has(url) ? expanded.delete(url) : expanded.add(url);
+  markSeen(url);
   render();
+}
+// 匹配分置信度：分数一样时先信"高"（抓到完整 JD 算的）
+const CONF_LABELS = { high: ['高置信', '抓到完整 JD，技能/年限都解析过'],
+                      mid:  ['中置信', 'JD 较短，分数仅供参考'],
+                      low:  ['低置信', '没抓到 JD，仅按标题估分'] };
+function confBadge(j) {
+  if (!j.conf || j.score == null) return '';
+  const [l, tip] = CONF_LABELS[j.conf] || ['', ''];
+  const cls = j.conf === 'high' ? 'fgood' : (j.conf === 'low' ? 'fwarn' : 'lvl');
+  return `<span class="badge ${cls}" title="${tip}">${j.conf === 'high' ? '✔' : (j.conf === 'low' ? '❔' : '')} ${l}</span>`;
+}
+// 为什么推荐这个岗位：标题命中了哪些关键词 + 简历重合 + 风险，一眼看懂
+function whyBlock(j) {
+  const t = (j.title || '').toLowerCase();
+  const thits = (S.keywords || []).filter(k =>
+    new RegExp('\\b' + k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(t));
+  const parts = [];
+  if (thits.length) parts.push(`标题命中 <b>${esc(thits.join('、'))}</b>`);
+  else if (j.via === 'jd') parts.push('标题没写关键词，是 <b>JD 正文</b>多次提及才召回的');
+  else if (j.via === 'agg') parts.push('来自聚合平台关键词搜索');
+  if ((j.hit || []).length) parts.push(`简历重合 <b>${esc(j.hit.slice(0, 6).join('、'))}</b>${j.hit.length > 6 ? ' 等' : ''}`);
+  const risks = (j.flags || []).filter(f => f.lv === 'warn').map(f => f.t);
+  if (risks.length) parts.push(`<span style="color:var(--warn,#b98900)">风险：${esc(risks.join('；'))}</span>`);
+  if (!parts.length) return '';
+  return `<div class="mrow"><span class="mlabel">为什么推荐：</span><span>${parts.join('　·　')}</span></div>`;
 }
 function matchDetail(j) {
   if (!expanded.has(j.url)) return '';
@@ -744,9 +905,10 @@ function matchDetail(j) {
   const hits = (j.hit || []).map(k => `<span class="kw hit">✓ ${esc(k)}</span>`).join('');
   const mmiss = (j.must_miss || []).map(k => `<span class="kw miss">${esc(k)}</span>`).join('');
   const nmiss = (j.nice_miss || []).map(k => `<span class="kw" style="background:var(--soft);color:var(--muted)">${esc(k)}</span>`).join('');
-  const extras = extraBadges(j);
+  const extras = extraBadges(j) + confBadge(j);
   return `
   <div class="matchbox">
+    ${whyBlock(j)}
     ${extras ? `<div class="mrow">${extras}</div>` : ''}
     ${hits ? `<div class="mrow"><span class="mlabel">简历已覆盖：</span>${hits}</div>` : ''}
     ${mmiss ? `<div class="mrow"><span class="mlabel">必需项缺失（优先补）：</span>${mmiss}</div>` : ''}
@@ -783,6 +945,29 @@ function netLinks(j) {
 function rowClick(ev, url) {
   if (ev.target.closest('a, button, select, .matchbox')) return;
   toggleMatch(url);
+}
+
+// ---------------- 隐藏岗位 ----------------
+async function hideJob(url, on) {
+  const j = (S.feed || []).find(x => x.url === url) || {};
+  const r = await fetch('/api/hide', { method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url, on, title: j.title || '' }) });
+  const d = await r.json();
+  if (d.error) { alert(d.error); return; }
+  refresh();
+}
+function loadMore() {
+  FEED_LIMIT = Math.min(FEED_LIMIT + 600, 5000);
+  refresh();
+}
+// 一键把学到的排除词加入设置
+function addExcl(w) {
+  const el = document.getElementById('exkw');
+  const cur = el.value.split(',').map(s => s.trim()).filter(Boolean);
+  if (!cur.includes(w)) cur.push(w);
+  el.value = cur.join(', ');
+  saveSettings();
 }
 
 // ---------------- 投递清单 ----------------
@@ -959,12 +1144,35 @@ function render() {
     let items = (S.feed || []).filter(j => passJob(j, q));
     if (F.sort === 'score') items = [...items].sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
     else items = [...items].sort((a, b) => (b.first_seen || '').localeCompare(a.first_seen || ''));
-    list.innerHTML = cnBox + items.slice(0, 250).map(j => `
+    const inHidden = F.tier === 'hidden';
+
+    if (F.layout === 'table') {
+      // 表格视图：一行一个岗位，方便批量比较
+      const VISA_ICON = { yes: '✅', register: '🟡', uncertain: '❓', no: '🚫' };
+      list.innerHTML = cnBox + `<div class="tblwrap"><table class="jobtable">
+        <tr><th>匹配</th><th>岗位</th><th>公司</th><th>地点</th><th>级别</th><th>签证</th><th>年限</th><th>上架</th><th></th></tr>
+        ${items.slice(0, 500).map(j => `
+        <tr>
+          <td class="num">${j.score != null ? j.score + '%' + (j.conf === 'low' ? '<small title="仅按标题估分">❔</small>' : '') : '–'}</td>
+          <td><a href="${esc(j.url)}" target="_blank" onclick="markSeen('${esc(j.url)}')">${esc(j.title)}</a>${j.llm ? ' ⭐' : ''}</td>
+          <td>${esc(j.company)}</td>
+          <td>${esc(j.location || (j.region === 'unknown' ? '未知' : ''))}</td>
+          <td>${esc(S.consts.level_labels[j.level] || '')}</td>
+          <td title="签证确定性">${VISA_ICON[j.visa] || ''}</td>
+          <td class="num">${j.req_years ? j.req_years + '+' : ''}</td>
+          <td class="num">${jobDays(j) ?? ''}${jobDays(j) != null ? '天' : ''}</td>
+          <td>${inHidden
+            ? `<button class="mini ghost" onclick="hideJob('${esc(j.url)}', false)">恢复</button>`
+            : `${starBtn(j)}<button class="starbtn" title="隐藏这个岗位" onclick="hideJob('${esc(j.url)}', true)">🚫</button>`}</td>
+        </tr>`).join('')}
+      </table></div>`;
+    } else {
+      list.innerHTML = cnBox + items.slice(0, 250).map(j => `
       <div class="jobrow ${expanded.has(j.url) ? 'open' : ''}" onclick="rowClick(event, '${esc(j.url)}')">
         ${scoreBlock(j)}
         <div class="jr-main">
           <div class="l1">
-            <a class="title" href="${esc(j.url)}" target="_blank">${esc(j.title)}</a>
+            <a class="title" href="${esc(j.url)}" target="_blank" onclick="markSeen('${esc(j.url)}')">${esc(j.title)}</a>
             ${jobBadges(j)}
           </div>
           <div class="l2">
@@ -973,16 +1181,23 @@ function render() {
             <span>${esc(j.location)}</span>
             ${daysTxt(j) ? `<span class="dot">·</span><span class="num">${daysTxt(j)}</span>` : ''}
             <span style="margin-left:auto"></span>
-            ${starBtn(j)}
+            ${inHidden
+              ? `<button class="starbtn" title="从已隐藏中恢复" onclick="hideJob('${esc(j.url)}', false)">↩ 恢复</button>`
+              : `${starBtn(j)}<button class="starbtn" title="隐藏这个岗位（可在分层筛选「已隐藏」里找回）" onclick="hideJob('${esc(j.url)}', true)">🚫</button>`}
             <span class="expander" style="margin-left:0">${expanded.has(j.url) ? '收起 ▴' : '详情 · 改简历 ▾'}</span>
           </div>
           ${matchDetail(j)}
         </div>
       </div>`).join('');
-    hint.innerHTML = items.length
-      ? (items.length > 250 ? `已显示前 250 条 / 共 ${items.length} 条，可用筛选或搜索缩小范围` : '')
-      : (F.region === 'china' ? '扫描到的中国岗位会显示在这里（TikTok、Airbnb 等公司的中国区岗位）；上方是大厂直达链接。'
-         : '没有符合当前筛选的岗位——试试放宽筛选，或点顶部 🔄 刷新最新岗位。');
+    }
+    const total = (S.counts || {}).ai_jobs || 0;
+    const canMore = (S.feed || []).length >= FEED_LIMIT && total > (S.feed || []).length;
+    hint.innerHTML = (items.length
+      ? (items.length > 250 && F.layout !== 'table' ? `已显示前 250 条 / 筛选后共 ${items.length} 条，可用筛选或搜索缩小范围　` : '')
+      : (inHidden ? '还没有隐藏过岗位。在岗位行点 🚫 可以把不想再看到的岗位收进这里。'
+         : F.region === 'china' ? '扫描到的中国岗位会显示在这里（TikTok、Airbnb 等公司的中国区岗位）；上方是大厂直达链接。'
+         : '没有符合当前筛选的岗位——试试放宽筛选，或点顶部 🔄 刷新最新岗位。'))
+      + (canMore ? `<button class="mini ghost" onclick="loadMore()">⬇ 加载更多（已取 ${(S.feed || []).length} / 共 ${total} 条）</button>` : '');
     return;
   }
 
@@ -1100,6 +1315,34 @@ async function saveSettings(silent) {
   if (!silent) refresh();
 }
 
+// ---------------- 首次使用向导 ----------------
+function maybeWizard() {
+  if (localStorage.getItem('wizardDone')) return;
+  const c = S.counts || {};
+  if ((c.ai_jobs || 0) > 0 || S.resume) { localStorage.setItem('wizardDone', '1'); return; }
+  document.getElementById('wizKw').value = (S.keywords || []).join(', ');
+  document.getElementById('wizEx').value = (S.exclude_keywords || []).join(', ');
+  document.getElementById('wizYears').value = S.exp_years ?? 1;
+  document.getElementById('wizard').style.display = '';
+}
+async function wizDone(start) {
+  localStorage.setItem('wizardDone', '1');
+  document.getElementById('wizard').style.display = 'none';
+  const kws = document.getElementById('wizKw').value.split(',').map(s => s.trim()).filter(Boolean);
+  const body = { exp_years: parseInt(document.getElementById('wizYears').value || '1', 10),
+                 exclude_keywords: document.getElementById('wizEx').value.split(',').map(s => s.trim()).filter(Boolean) };
+  if (kws.length) body.keywords = kws;
+  await fetch('/api/settings', { method: 'POST',
+    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (document.getElementById('wizVisa').checked && !T.derisk) {
+    T.derisk = true; saveF();
+    document.querySelectorAll('.chip[data-t="derisk"]').forEach(el => el.classList.add('on'));
+  }
+  if (start) scan('pending');
+  refresh();
+}
+
+restoreF();
 refresh();
 </script>
 </body>

@@ -190,6 +190,40 @@ def test_classify_region_empty_location_is_unknown_not_uk():
     assert app.classify_region("Berlin")[0] == "europe"
 
 
+def test_visa_certainty_layers():
+    no = {"flags": [{"t": "JD 声明不担保签证", "lv": "warn"}]}
+    yes = {"flags": [{"t": "明确提供签证担保", "lv": "good"}]}
+    assert app.visa_certainty(no, True) == "no"        # JD 明说不担保 > 名单
+    assert app.visa_certainty(yes, False) == "yes"
+    assert app.visa_certainty({}, True) == "register"  # 名单内但 JD 未说明
+    assert app.visa_certainty(None, False) == "uncertain"
+
+
+def test_job_tier_layers():
+    assert app.job_tier(80, {}, "register") == "strong"
+    assert app.job_tier(45, {}, "register") == "maybe"
+    assert app.job_tier(20, {}, "register") == "weak"
+    assert app.job_tier(None, None, "register") == "lowconf"           # 没算分
+    lowconf = {"flags": [{"t": "未抓到 JD，仅按标题估分", "lv": "warn"}]}
+    assert app.job_tier(65, lowconf, "register") == "lowconf"          # 标题估分
+    assert app.job_tier(90, {}, "no") == "risk"                        # 不担保
+    clear = {"flags": [{"t": "需安全许可/国籍要求", "lv": "warn"}]}
+    assert app.job_tier(90, clear, "register") == "risk"
+
+
+def test_exclude_suggestions_learns_from_hidden(monkeypatch):
+    hidden = {f"u{i}": {"title": t} for i, t in enumerate([
+        "Salesforce Developer", "Senior Salesforce Engineer", "Salesforce Architect",
+        "Backend Engineer",  # 只出现一次的词不建议
+    ])}
+    monkeypatch.setitem(app.state, "hidden", hidden)
+    monkeypatch.setitem(app.state, "exclude_keywords", [])
+    sug = app.exclude_suggestions()
+    assert "salesforce" in sug          # 出现 3 次 → 学到
+    assert "backend" not in sug         # 出现 1 次 → 不建议
+    assert "engineer" not in sug        # 通用词永不建议
+
+
 def test_match_job_title_only_keywords_not_matched_in_body():
     # "recommendations" 这类泛词只在标题里算数，正文里是万能句式
     assert app.match_job(
