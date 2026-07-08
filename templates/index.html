@@ -315,6 +315,8 @@ let F = { view: 'feed', region: 'all', level: 'all' };
 let T = { llm: false, new: false, long: false, curated: false, byscore: false };
 let expanded = new Set();
 let pollTimer = null;
+const jobAdvice = {};        // url -> Claude 生成的岗位专属建议(Markdown)
+const jobAdviceBusy = new Set();  // 正在为哪些 url 生成建议
 
 const CN_BIGTECH = [
   ['字节跳动', 'https://jobs.bytedance.com/experienced/position?keywords=%E5%A4%A7%E6%A8%A1%E5%9E%8B'],
@@ -540,8 +542,29 @@ function matchDetail(j) {
     ${hits ? `<div class="mrow"><span class="mlabel">简历已覆盖：</span>${hits}</div>` : ''}
     ${mmiss ? `<div class="mrow"><span class="mlabel">必需项缺失（优先补）：</span>${mmiss}</div>` : ''}
     ${nmiss ? `<div class="mrow"><span class="mlabel">加分项缺失：</span>${nmiss}</div>` : ''}
-    <button class="mini ghost" onclick="copyPrompt('${esc(j.url)}')">📋 复制简历优化 Prompt（贴给 Claude 一键改简历）</button>
+    <div class="mrow" style="margin-top:8px">
+      ${S.has_anthropic
+        ? `<button class="mini" onclick="genJobAdvice('${esc(j.url)}')" ${jobAdviceBusy.has(j.url) ? 'disabled' : ''}>✍️ 用 Claude 针对此岗位改简历</button>`
+        : `<button class="mini" disabled title="在 data/api_keys.json 填 anthropic_api_key（或设 ANTHROPIC_API_KEY）后可用">✍️ 针对此岗位改简历（需配 Claude key）</button>`}
+      <button class="mini ghost" onclick="copyPrompt('${esc(j.url)}')">📋 复制 Prompt（贴给别处的 Claude/ChatGPT）</button>
+    </div>
+    ${jobAdviceBusy.has(j.url)
+      ? `<div class="info" style="margin-top:8px">Claude 正在针对这个岗位生成简历修改建议（约需十几秒）…</div>`
+      : (jobAdvice[j.url] ? `<div class="advice">${mdToHtml(jobAdvice[j.url])}</div>` : '')}
   </div>`;
+}
+async function genJobAdvice(url) {
+  jobAdviceBusy.add(url); render();
+  try {
+    const r = await fetch('/api/job_advice', { method: 'POST',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
+    const d = await r.json();
+    jobAdvice[url] = d.error ? `**出错了：** ${d.error}` : (d.advice || '（无内容）');
+  } catch (e) {
+    jobAdvice[url] = `**出错了：** ${e}`;
+  } finally {
+    jobAdviceBusy.delete(url); render();
+  }
 }
 async function copyPrompt(url) {
   const j = (S.feed || []).find(x => x.url === url);

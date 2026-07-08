@@ -166,6 +166,15 @@ api_keys = {}   # {"adzuna_app_id","adzuna_app_key","reed_api_key"}
 slug_overrides = {}  # name.lower() -> {"ats","slug"}：手动修正 slug 猜错的重点公司
 
 
+def _valid_override(v):
+    """一条手动修正是否可用。Workday 用 host+site 定位，其它 ATS 用 slug。"""
+    if not v.get("ats"):
+        return False
+    if v["ats"] == "Workday":
+        return bool(v.get("host") and v.get("site"))
+    return bool(v.get("slug"))
+
+
 def load_all():
     global ats_cache, slug_overrides, api_keys
     if os.path.exists(API_KEYS_FILE):
@@ -185,7 +194,7 @@ def load_all():
             with open(SLUG_OVERRIDE_FILE, encoding="utf-8") as f:
                 raw = json.load(f)
             slug_overrides = {k.strip().lower(): v for k, v in raw.items()
-                              if isinstance(v, dict) and v.get("ats") and v.get("slug")}
+                              if isinstance(v, dict) and _valid_override(v)}
         except Exception:
             slug_overrides = {}
     if os.path.exists(COMPANIES_FILE):
@@ -1321,6 +1330,82 @@ def api_resume_suggestions_generate():
                                  "anthropic_api_key，或设环境变量 ANTHROPIC_API_KEY）"}), 400
     try:
         advice = generate_resume_advice(report)
+    except Exception as e:
+        return jsonify({"error": f"生成失败: {e}"}), 500
+    return jsonify({"advice": advice})
+
+
+def _find_job(url):
+    """按 URL 在扫描结果 / 聚合岗位里回捞岗位元信息（标题、公司、地点）。"""
+    with _lock:
+        for n, r in state["results"].items():
+            for j in r.get("matched", []):
+                if j.get("url") == url:
+                    return {"title": j.get("title", ""), "company": n,
+                            "location": j.get("location", "")}
+        j = state["agg_jobs"].get(url)
+        if j:
+            return {"title": j.get("title", ""), "company": j.get("company", ""),
+                    "location": j.get("location", "")}
+    return None
+
+
+def generate_job_advice(url):
+    """针对单个岗位：拿 JD 正文 + 该岗位的匹配分析 + 简历全文，让 Claude 生成
+    这一份岗位专属的简历修改建议（Markdown）。"""
+    import anthropic
+    client = anthropic.Anthropic(api_key=_anthropic_key())
+    model = api_keys.get("anthropic_model", "claude-opus-4-8")
+    resume = state.get("resume") or {}
+    meta = _find_job(url) or {}
+    ms = state["match_scores"].get(url) or {}
+    jd = (load_desc_cache().get(url) or "")[:8000]
+    flags_txt = "；".join(f.get("t", "") for f in ms.get("flags", []))
+    prompt = f"""请针对下面这个具体岗位，帮我优化简历，让它更容易通过 ATS 筛选并打动招聘官。
+
+【目标岗位】{meta.get('title', '')} — {meta.get('company', '')}（{meta.get('location', '')}）
+【岗位链接】{url}
+【当前匹配度】{ms.get('score', '未知')}%
+【JD 要求、我简历已覆盖】{('、'.join(ms.get('hit', [])) or '（无）')}
+【JD 必需、我简历缺失（优先处理）】{('、'.join(ms.get('must_miss', [])) or '（无）')}
+【JD 加分、我简历缺失】{('、'.join(ms.get('nice_miss', [])) or '（无）')}
+{('【签证/门槛提醒】' + flags_txt) if flags_txt else ''}
+
+【JD 正文节选】
+{jd or '（未抓到正文，请只依据上面的技能缺口给建议）'}
+
+【我的简历全文】
+{(resume.get('text') or '')[:8000]}
+
+请给出这一份岗位专属的简历修改建议（中文，Markdown）：
+1. 若缺失技能我实际具备：该加到简历哪一段、用什么措辞最自然（给量化 bullet 示例）。
+2. 重写我简历中最相关的 2–3 条经历，向这个岗位靠拢，量化成果、贴合 JD 关键词（利于 ATS，但别堆砌）。
+3. 针对这家公司写一段 3 句话的求职信开场白。
+4. 诚实提醒：哪些缺失技能若我确实没有，别硬写，建议怎么补齐。
+不要编造我没有的经历。"""
+    with client.messages.stream(model=model, max_tokens=6000,
+                                thinking={"type": "adaptive"},
+                                system=RESUME_SYS,
+                                messages=[{"role": "user", "content": prompt}]) as stream:
+        msg = stream.get_final_message()
+    return "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
+
+
+@app.route("/api/job_advice", methods=["POST"])
+def api_job_advice():
+    if not state.get("resume"):
+        return jsonify({"error": "请先上传简历"}), 400
+    if not _anthropic_key():
+        return jsonify({"error": "未配置 Anthropic API key（在 data/api_keys.json 填 "
+                                 "anthropic_api_key，或设环境变量 ANTHROPIC_API_KEY）"}), 400
+    data = request.get_json(silent=True) or {}
+    url = (data.get("url") or "").strip()
+    if not url:
+        return jsonify({"error": "缺少岗位链接"}), 400
+    if url not in state["match_scores"]:
+        return jsonify({"error": "这个岗位还没算过匹配度，请先点「计算匹配度」"}), 400
+    try:
+        advice = generate_job_advice(url)
     except Exception as e:
         return jsonify({"error": f"生成失败: {e}"}), 500
     return jsonify({"advice": advice})
