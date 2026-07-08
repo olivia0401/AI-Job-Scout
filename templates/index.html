@@ -118,13 +118,25 @@
 
   /* ---------- 岗位卡片 ---------- */
   .jobrow { background: var(--card); border: 1px solid var(--border); border-radius: 14px;
-            padding: 16px 20px; margin-bottom: 10px; box-shadow: var(--shadow);
-            transition: all .15s; cursor: pointer; }
+            padding: 14px 18px; margin-bottom: 10px; box-shadow: var(--shadow);
+            transition: all .15s; cursor: pointer; display: flex; gap: 14px; align-items: flex-start; }
   .jobrow:hover { border-color: var(--accent-line); box-shadow: var(--shadow-lift); }
   .jobrow.open { border-color: var(--accent-line); }
+  .jobrow .jr-main { flex: 1; min-width: 0; }
   .expander { margin-left: auto; font-size: 12.5px; color: var(--accent); white-space: nowrap;
               font-weight: 550; }
   .jobrow:hover .expander { text-decoration: underline; }
+
+  /* 匹配度色块：一眼可见 */
+  .scorebox { width: 60px; flex-shrink: 0; text-align: center; border-radius: 11px;
+              padding: 9px 0 7px; font-weight: 800; font-size: 20px; line-height: 1.05;
+              letter-spacing: -.5px; font-variant-numeric: tabular-nums; align-self: center; }
+  .scorebox small { display: block; font-size: 10px; font-weight: 600; letter-spacing: .4px;
+                    margin-top: 3px; opacity: .8; }
+  .scorebox.hi { background: var(--green-soft); color: var(--green); }
+  .scorebox.md { background: var(--amber-soft); color: var(--amber); }
+  .scorebox.lo { background: var(--soft); color: var(--muted); }
+  .scorebox.none { background: var(--soft); color: var(--faint); font-size: 16px; font-weight: 600; }
   .jobrow .l1 { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .jobrow a.title { color: var(--text); font-weight: 650; font-size: 15px; line-height: 1.45;
                     text-decoration: none; letter-spacing: -.1px; }
@@ -257,11 +269,11 @@
     <div class="progress"><div id="progBar"></div></div>
   </div>
 
-  <div class="stats" id="stats"></div>
-
   <div class="resume" id="resumeCard"></div>
   <input type="file" id="resumeFile" accept=".pdf,.docx,.txt,.md" onchange="uploadResume()">
   <div id="suggestBox"></div>
+
+  <div class="stats" id="stats"></div>
 
   <div class="filterbox">
     <div class="frow">
@@ -272,6 +284,10 @@
       <span class="chip" data-g="region" data-v="china" onclick="setF(this)">🇨🇳 中国</span>
       <span class="chip" data-g="region" data-v="remote" onclick="setF(this)">🌍 Remote</span>
       <div class="vtabs">
+        <span class="chip on" data-g="sort" data-v="date" onclick="setF(this)">最新优先</span>
+        <span class="chip" data-g="sort" data-v="score" onclick="setF(this)">匹配度优先</span>
+      </div>
+      <div class="vtabs" style="margin-left:8px">
         <span class="chip on" data-g="view" data-v="feed" onclick="setF(this)">岗位</span>
         <span class="chip" data-g="view" data-v="company" onclick="setF(this)">公司</span>
       </div>
@@ -292,7 +308,6 @@
       <span class="chip" data-t="new" onclick="toggleT(this)">🆕 新上架</span>
       <span class="chip" data-t="long" onclick="toggleT(this)">⏳ 长期在招</span>
       <span class="chip star" data-t="curated" onclick="toggleT(this)">精选科技公司</span>
-      <span class="chip" data-t="byscore" onclick="toggleT(this)" id="sortChip">🎯 按匹配度排序</span>
       <input type="text" id="search" placeholder="搜索岗位 / 公司…" oninput="render()">
     </div>
   </div>
@@ -337,8 +352,8 @@
 <script>
 let S = { results: {}, feed: [], counts: {}, scan: {}, match: {}, resume: null,
           consts: { new_days: 3, long_days: 30, level_labels: {} } };
-let F = { view: 'feed', region: 'all', level: 'all' };
-let T = { llm: false, new: false, long: false, curated: false, byscore: false };
+let F = { view: 'feed', region: 'all', level: 'all', sort: 'date' };
+let T = { llm: false, new: false, long: false, curated: false };
 let expanded = new Set();
 let pollTimer = null;
 const jobAdvice = {};        // url -> Claude 生成的岗位专属建议(Markdown)
@@ -386,6 +401,12 @@ async function refresh() {
   if (!window._howtoInit) {
     window._howtoInit = true;
     document.getElementById('howto').open = !(c.ai_jobs > 0 && S.resume);
+    // 已有匹配分时，默认按匹配度排序
+    if ((S.feed || []).some(j => j.score != null)) {
+      F.sort = 'score';
+      document.querySelectorAll('.chip[data-g="sort"]').forEach(x =>
+        x.classList.toggle('on', x.dataset.v === 'score'));
+    }
   }
   const s1 = document.getElementById('step1ok'), s2 = document.getElementById('step2ok');
   if (s1) s1.innerHTML = c.ai_jobs > 0 ? '<span class="ok">✓ 已完成</span>' : '';
@@ -532,27 +553,42 @@ function passJob(j, q) {
   if (q && !((j.title||'').toLowerCase().includes(q) || (j.company||'').toLowerCase().includes(q))) return false;
   return true;
 }
-function scoreBadge(j) {
+// 匹配度色块：岗位行左侧，一眼可见
+function scoreBlock(j) {
+  if (j.score == null) return `<div class="scorebox none">–<small>待算</small></div>`;
+  const cls = j.score >= 60 ? 'hi' : j.score >= 35 ? 'md' : 'lo';
+  return `<div class="scorebox ${cls}">${j.score}<small>匹配%</small></div>`;
+}
+function scoreMini(j) {
   if (j.score == null) return '';
   const cls = j.score >= 60 ? 'hi' : j.score >= 35 ? 'md' : 'lo';
-  return `<span class="badge score ${cls}" onclick="toggleMatch('${esc(j.url)}')">匹配 ${j.score}%</span>`;
+  return `<span class="badge score ${cls}">匹配 ${j.score}%</span>`;
 }
+// 行内只放最关键的徽章（级别 / 地区 / NEW / LLM / ⚠️警告），次要信息移到展开详情里
 function jobBadges(j) {
   const d = jobDays(j);
   let h = `<span class="badge lvl">${esc(S.consts.level_labels[j.level] || j.level || '')}</span>`;
   if (j.region === 'europe') h += `<span class="badge eu">🇪🇺 ${esc(j.country || 'Europe')}</span>`;
   if (j.region === 'china') h += `<span class="badge cn">🇨🇳 中国</span>`;
   if (d != null && d <= S.consts.new_days) h += `<span class="badge new">NEW</span>`;
-  if (d != null && d >= S.consts.long_days) h += `<span class="badge long">长期在招 ${d}天</span>`;
   if (j.llm) h += `<span class="badge llm">⭐LLM</span>`;
+  if (j.via === 'agg' && !j.sponsor)
+    h += `<span class="badge fwarn" title="公司不在工签 sponsor 名单里，投前请自行确认能否担保">⚠️ 非担保名单</span>`;
+  (j.flags || []).filter(f => f.lv !== 'good').forEach(f => {
+    h += `<span class="badge fwarn">⚠️ ${esc(f.t)}</span>`;
+  });
+  return h;
+}
+// 次要徽章：展开详情时才显示
+function extraBadges(j) {
+  const d = jobDays(j);
+  let h = '';
+  if (d != null && d >= S.consts.long_days) h += `<span class="badge long">⏳ 长期在招 ${d}天</span>`;
   if (j.via === 'jd') h += `<span class="badge viajd" title="标题没写 AI，是 JD 正文命中才召回的">📄 正文AI</span>`;
   if (j.source) h += `<span class="badge src" title="来自聚合平台搜索">🌐 ${esc(j.source)}</span>`;
-  if (j.via === 'agg') h += j.sponsor
-    ? `<span class="badge fgood" title="公司在官方工签 sponsor 名单里">✅ 担保名单</span>`
-    : `<span class="badge fwarn" title="公司不在工签 sponsor 名单里，投前请自行确认能否担保">⚠️ 非担保名单</span>`;
-  h += scoreBadge(j);
-  (j.flags || []).forEach(f => {
-    h += `<span class="badge ${f.lv === 'good' ? 'fgood' : 'fwarn'}">${f.lv === 'good' ? '✅' : '⚠️'} ${esc(f.t)}</span>`;
+  if (j.via === 'agg' && j.sponsor) h += `<span class="badge fgood" title="公司在官方工签 sponsor 名单里">✅ 担保名单</span>`;
+  (j.flags || []).filter(f => f.lv === 'good').forEach(f => {
+    h += `<span class="badge fgood">✅ ${esc(f.t)}</span>`;
   });
   return h;
 }
@@ -583,8 +619,10 @@ function matchDetail(j) {
   const hits = (j.hit || []).map(k => `<span class="kw hit">✓ ${esc(k)}</span>`).join('');
   const mmiss = (j.must_miss || []).map(k => `<span class="kw miss">${esc(k)}</span>`).join('');
   const nmiss = (j.nice_miss || []).map(k => `<span class="kw" style="background:var(--soft);color:var(--muted)">${esc(k)}</span>`).join('');
+  const extras = extraBadges(j);
   return `
   <div class="matchbox">
+    ${extras ? `<div class="mrow">${extras}</div>` : ''}
     ${hits ? `<div class="mrow"><span class="mlabel">简历已覆盖：</span>${hits}</div>` : ''}
     ${mmiss ? `<div class="mrow"><span class="mlabel">必需项缺失（优先补）：</span>${mmiss}</div>` : ''}
     ${nmiss ? `<div class="mrow"><span class="mlabel">加分项缺失：</span>${nmiss}</div>` : ''}
@@ -673,21 +711,24 @@ function render() {
 
   if (F.view === 'feed') {
     let items = (S.feed || []).filter(j => passJob(j, q));
-    if (T.byscore) items = [...items].sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
+    if (F.sort === 'score') items = [...items].sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
     list.innerHTML = cnBox + items.slice(0, 250).map(j => `
       <div class="jobrow ${expanded.has(j.url) ? 'open' : ''}" onclick="rowClick(event, '${esc(j.url)}')">
-        <div class="l1">
-          <a class="title" href="${esc(j.url)}" target="_blank">${esc(j.title)}</a>
-          ${jobBadges(j)}
+        ${scoreBlock(j)}
+        <div class="jr-main">
+          <div class="l1">
+            <a class="title" href="${esc(j.url)}" target="_blank">${esc(j.title)}</a>
+            ${jobBadges(j)}
+          </div>
+          <div class="l2">
+            <span class="co">${esc(j.company)}${j.curated ? ' ⭐' : ''}</span>
+            <span class="dot">·</span>
+            <span>${esc(j.location)}</span>
+            ${daysTxt(j) ? `<span class="dot">·</span><span class="num">${daysTxt(j)}</span>` : ''}
+            <span class="expander">${expanded.has(j.url) ? '收起 ▴' : '详情 · 改简历 ▾'}</span>
+          </div>
+          ${matchDetail(j)}
         </div>
-        <div class="l2">
-          <span class="co">${esc(j.company)}${j.curated ? ' ⭐' : ''}</span>
-          <span class="dot">·</span>
-          <span>${esc(j.location)}</span>
-          ${daysTxt(j) ? `<span class="dot">·</span><span class="num">${daysTxt(j)}</span>` : ''}
-          <span class="expander">${expanded.has(j.url) ? '收起 ▴' : '匹配详情 · 改简历 ▾'}</span>
-        </div>
-        ${matchDetail(j)}
       </div>`).join('');
     hint.innerHTML = items.length
       ? (items.length > 250 ? `已显示前 250 条 / 共 ${items.length} 条，可用筛选或搜索缩小范围` : '')
@@ -706,7 +747,7 @@ function render() {
     .map(r => ({...r, fjobs: (r.matched || []).map(j => ({...j, ...(scoreMap[j.url] || {}),
         company: r.name, curated: r.curated}))
         .filter(j => passJob(j, q))}))
-    .filter(r => r.fjobs.length || (!q && !T.llm && !T.new && !T.long && !T.byscore
+    .filter(r => r.fjobs.length || (!q && !T.llm && !T.new && !T.long
         && F.region === 'all' && F.level === 'all' && r.status === 'board_no_ai')
         || (q && r.name.toLowerCase().includes(q)))
     .sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9)
@@ -718,6 +759,7 @@ function render() {
     const jobsHtml = r.fjobs.map(j => `
       <div class="cjob" style="cursor:pointer" onclick="rowClick(event, '${esc(j.url)}')">
         <a href="${esc(j.url)}" target="_blank">${esc(j.title)}</a>
+        ${scoreMini(j)}
         ${jobBadges(j)}
         <span class="loc">${esc(j.location)} ${daysTxt(j)}</span>
         <span class="expander">${expanded.has(j.url) ? '收起 ▴' : '详情 ▾'}</span>

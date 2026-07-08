@@ -758,6 +758,9 @@ def run_scan(names, mode):
         state["scan"]["running"] = False
         save_ats_cache()
         save_state()
+        # 扫描结束后自动重算匹配度（有简历时），新岗位无需手动点"计算匹配度"
+        if state.get("resume") and not state["match"]["running"]:
+            threading.Thread(target=run_match, daemon=True).start()
 
 
 def start_scan(mode):
