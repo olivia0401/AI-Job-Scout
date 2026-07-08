@@ -34,6 +34,7 @@ COMPANIES_FILE = os.path.join(DATA_DIR, "companies.json")
 ATS_CACHE_FILE = os.path.join(DATA_DIR, "ats_cache.json")
 SLUG_OVERRIDE_FILE = os.path.join(DATA_DIR, "slug_overrides.json")
 API_KEYS_FILE = os.path.join(DATA_DIR, "api_keys.json")
+COMPANY_SIZE_FILE = os.path.join(DATA_DIR, "company_sizes.json")
 
 DEFAULT_KEYWORDS = [
     "ai engineer", "machine learning", "ml engineer", "artificial intelligence",
@@ -177,8 +178,10 @@ state = {
     "agg_jobs": {},        # 聚合器(Adzuna/Reed)岗位：url -> {...}
     "agg": {"running": False, "done": 0, "total": 0},
     "tracker": {},         # 投递清单：job_url -> {"status","ts","title","company","location"}
+    "size": {"running": False, "done": 0, "total": 0},  # 公司规模识别进度
 }
 ats_cache = {}  # name -> {"ats","slug"} | "none"
+company_sizes = {}  # company name -> {"band": startup|mid|large|unknown, "note": str}
 api_keys = {}   # {"adzuna_app_id","adzuna_app_key","reed_api_key"}
 slug_overrides = {}  # name.lower() -> {"ats","slug"}：手动修正 slug 猜错的重点公司
 
@@ -193,7 +196,13 @@ def _valid_override(v):
 
 
 def load_all():
-    global ats_cache, slug_overrides, api_keys
+    global ats_cache, slug_overrides, api_keys, company_sizes
+    if os.path.exists(COMPANY_SIZE_FILE):
+        try:
+            with open(COMPANY_SIZE_FILE, encoding="utf-8") as f:
+                company_sizes = json.load(f)
+        except Exception:
+            company_sizes = {}
     if os.path.exists(API_KEYS_FILE):
         try:
             with open(API_KEYS_FILE, encoding="utf-8") as f:
@@ -1011,6 +1020,79 @@ def run_aggregators():
         save_state()
 
 
+# ---------------------------------------------------------------- 公司规模（大模型估）
+SIZE_BANDS = ("startup", "mid", "large", "unknown")
+SIZE_LABELS = {"startup": "初创 <50", "mid": "中型 50–500",
+               "large": "大型 500+", "unknown": "规模未知"}
+_SIZE_BATCH = 30   # 每次问大模型多少家公司
+
+
+def save_company_sizes():
+    _atomic_write(COMPANY_SIZE_FILE, json.dumps(company_sizes, ensure_ascii=False))
+
+
+def _parse_llm_json(text):
+    """从大模型输出里抠出 JSON 数组（容忍 ```json 围栏和前后废话）。"""
+    t = (text or "").strip()
+    if "```" in t:
+        t = re.sub(r"```(?:json)?", "", t)
+    m = re.search(r"\[.*\]", t, re.S)
+    if not m:
+        return []
+    try:
+        data = json.loads(m.group(0))
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def _size_targets():
+    """需要识别规模的公司名：有匹配岗位的 sponsor 公司 + 聚合器岗位公司，去重、跳过已缓存。"""
+    names = set()
+    with _lock:
+        for n, r in state["results"].items():
+            if r.get("matched"):
+                names.add(n)
+        for j in state["agg_jobs"].values():
+            c = (j.get("company") or "").strip()
+            if c:
+                names.add(c)
+    return [n for n in names if n and n not in company_sizes]
+
+
+def run_company_size():
+    """用大模型给"有岗位的公司"批量估员工规模档位，写入 company_sizes 并缓存。
+    只问没缓存过的公司，均摊成本；不认识的模型会返回 unknown（不瞎猜）。"""
+    if not _llm_ready():
+        return
+    todo = _size_targets()
+    state["size"] = {"running": True, "done": 0, "total": len(todo)}
+    try:
+        for i in range(0, len(todo), _SIZE_BATCH):
+            batch = todo[i:i + _SIZE_BATCH]
+            prompt = (
+                "给下面每家英国公司判断员工规模档位。只输出 JSON 数组，"
+                '每项 {"name":..., "band":..., "note":...}。\n'
+                'band 只能取："startup"(<50人), "mid"(50-500), "large"(500+), '
+                '"unknown"（你不确定/没听过的必须用这个，绝不要猜）。\n'
+                "note 用中文，最多6字，写判断依据或\"不确定\"。\n"
+                "公司：" + json.dumps(batch, ensure_ascii=False))
+            try:
+                rows = _parse_llm_json(_llm_complete(prompt, max_tokens=2000))
+            except Exception:
+                rows = []
+            by_name = {(r.get("name") or "").strip(): r for r in rows if isinstance(r, dict)}
+            for n in batch:
+                r = by_name.get(n) or {}
+                band = r.get("band") if r.get("band") in SIZE_BANDS else "unknown"
+                company_sizes[n] = {"band": band, "note": (r.get("note") or "")[:12]}
+            state["size"]["done"] = min(i + len(batch), len(todo))
+            save_company_sizes()
+    finally:
+        state["size"]["running"] = False
+        save_company_sizes()
+
+
 # ---------------------------------------------------------------- 简历匹配
 DESC_CACHE_FILE = os.path.join(DATA_DIR, "desc_cache.json")
 DESC_FAIL_FILE = os.path.join(DATA_DIR, "desc_fail.json")
@@ -1302,6 +1384,7 @@ def analyze_job(title, desc, resume_kws, my_years, level=None):
         "score": score, "hit": sorted(hit_c | hit_n),
         "must_miss": sorted(miss_c)[:12], "nice_miss": sorted(miss_n)[:10],
         "flags": flags, "n": len(core) + len(nice),
+        "req_years": yrs,   # JD 抽到的最低要求年限（0=未注明），供前端“经验要求”筛选
     }
 
 
@@ -1875,6 +1958,9 @@ def api_state():
                     "region": j["region"], "country": j.get("country", ""),
                     "level": j["level"], "via": j.get("via", "title"),
                     "first_seen": fs, "days": days,
+                    "njobs": r.get("total_jobs", 0),
+                    "csize": (company_sizes.get(n) or {}).get("band", ""),
+                    "req_years": ms.get("req_years", 0) if ms else 0,
                     "score": ms["score"] if ms else None,
                     "hit": ms["hit"] if ms else [],
                     "must_miss": (ms.get("must_miss") or ms.get("miss", [])) if ms else [],
@@ -1900,6 +1986,9 @@ def api_state():
                 "level": j.get("level", "mid"), "via": "agg",
                 "source": j.get("source", ""), "sponsor": bool(j.get("sponsor")),
                 "first_seen": fs, "days": days,
+                "njobs": None,
+                "csize": (company_sizes.get(j.get("company", "")) or {}).get("band", ""),
+                "req_years": ms.get("req_years", 0) if ms else 0,
                 "score": ms["score"] if ms else None,
                 "hit": ms["hit"] if ms else [],
                 "must_miss": ms.get("must_miss", []) if ms else [],
@@ -1942,6 +2031,7 @@ def api_state():
             "auto_hours": state["auto_hours"], "exp_years": state["exp_years"],
             "counts": counts, "results": res_out, "feed": feed[:400],
             "scan": scan, "match": dict(state["match"]), "agg": dict(state["agg"]),
+            "size": dict(state["size"]),
             "has_api_keys": _has_agg_keys(),
             "has_llm": _llm_ready(),
             "llm_label": LLM_LABELS.get(_llm_provider()),
@@ -1950,7 +2040,7 @@ def api_state():
                         "keywords": resume["keywords"], "text": resume["text"]}
                        if resume else None),
             "consts": {"new_days": NEW_DAYS, "long_days": LONG_RUNNING_DAYS,
-                       "level_labels": LEVEL_LABELS},
+                       "level_labels": LEVEL_LABELS, "size_labels": SIZE_LABELS},
         })
 
 
@@ -2039,6 +2129,20 @@ def api_aggregators():
         return jsonify({"error": "聚合搜索进行中"}), 409
     threading.Thread(target=run_aggregators, daemon=True).start()
     return jsonify({"started": True, "queries": len(AGG_QUERIES)})
+
+
+@app.route("/api/company_size", methods=["POST"])
+def api_company_size():
+    """用大模型给有岗位的公司批量估员工规模，结果缓存。"""
+    if not _llm_ready():
+        return jsonify({"error": LLM_MISSING_MSG}), 400
+    if state["size"]["running"]:
+        return jsonify({"error": "公司规模识别进行中"}), 409
+    n = len(_size_targets())
+    if not n:
+        return jsonify({"error": "没有需要识别的新公司（有岗位的都已识别过）"}), 400
+    threading.Thread(target=run_company_size, daemon=True).start()
+    return jsonify({"started": True, "total": n})
 
 
 @app.route("/api/clear", methods=["POST"])

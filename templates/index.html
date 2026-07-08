@@ -299,6 +299,7 @@
         <div class="mitems">
           <a href="/api/export">📥 导出 Excel</a>
           <button id="btnAgg" onclick="menuDo(runAgg)">🌐 搜聚合平台<small>补 LinkedIn / Indeed / Glassdoor 盲区</small></button>
+          <button id="btnSize" onclick="menuDo(runSize)">🏢 识别公司规模<small>用大模型给有岗位的公司估员工规模（缓存，只查没查过的）</small></button>
           <button id="btnPending" onclick="menuDo(() => scan('pending'))">🌊 全量清查工签雇主<small>第一次用跑一夜即可，之后日常只需扫描新岗位</small></button>
           <button id="btnDeep" onclick="menuDo(() => scan('deep'))">🔬 深度补扫<small>全量清查跑完后再点：对“无招聘页”的公司补查 Workable/Recruitee/Personio（慢，会限流，可随时停）</small></button>
           <div class="msep"></div>
@@ -347,6 +348,21 @@
         <option value="senior">高级</option>
         <option value="staff">Staff/Lead</option>
         <option value="mgmt">管理层</option>
+      </select>
+      <select class="fsel" onchange="F.csize = this.value; render()" title="公司员工规模（大模型估）。需先点 ⋯ 菜单「识别公司规模」；模型不认识的会标为“规模未知”">
+        <option value="all">🏢 所有规模</option>
+        <option value="large">大型 (500+)</option>
+        <option value="mid">中型 (50–500)</option>
+        <option value="startup">初创 (&lt;50)</option>
+        <option value="unknown">规模未知</option>
+      </select>
+      <select class="fsel" onchange="F.years = this.value; render()" title="按 JD 里的最低要求年限筛选（需已算匹配度才有数据）">
+        <option value="all">所有经验</option>
+        <option value="fit">我够格（≤我的年限）</option>
+        <option value="none">未注明年限</option>
+        <option value="y12">1–2 年</option>
+        <option value="y35">3–5 年</option>
+        <option value="y6">5 年以上</option>
       </select>
       <span class="chip star" data-t="llm" onclick="toggleT(this)">⭐ LLM</span>
       <span class="chip" data-t="new" onclick="toggleT(this)">🆕 新上架</span>
@@ -403,7 +419,7 @@
 <script>
 let S = { results: {}, feed: [], counts: {}, scan: {}, match: {}, resume: null,
           consts: { new_days: 3, long_days: 30, level_labels: {} } };
-let F = { view: 'feed', region: 'all', level: 'all', sort: 'date' };
+let F = { view: 'feed', region: 'all', level: 'all', csize: 'all', years: 'all', sort: 'date' };
 let T = { llm: false, new: false, long: false, curated: false };
 let expanded = new Set();
 let pollTimer = null;
@@ -473,6 +489,14 @@ async function refresh() {
     btnAgg.innerHTML = (running ? '🌐 搜索中…' : '🌐 搜聚合平台')
       + '<small>补 LinkedIn / Indeed / Glassdoor 盲区</small>';
     if (!S.has_api_keys) btnAgg.title = '需先在 data/api_keys.json 配置 Adzuna/Reed 的免费 API key';
+  }
+  const btnSize = document.getElementById('btnSize');
+  if (btnSize) {
+    const sz = S.size || {};
+    btnSize.disabled = !!sz.running;
+    btnSize.innerHTML = (sz.running ? `🏢 识别中… ${sz.done||0}/${sz.total||0}` : '🏢 识别公司规模')
+      + '<small>用大模型给有岗位的公司估员工规模（缓存，只查没查过的）</small>';
+    if (!S.has_llm) btnSize.title = '需先配置大模型 API key（data/api_keys.json 的 openai_api_key / anthropic_api_key）';
   }
   renderResume();
   updateTrackerTab();
@@ -605,6 +629,16 @@ function passJob(j, q) {
   if (F.region === 'china' && j.region !== 'china') return false;
   if (F.region === 'remote' && j.region !== 'remote') return false;
   if (F.level !== 'all' && j.level !== F.level) return false;
+  if (F.csize !== 'all' && j.csize !== F.csize) return false;  // 聚合器岗位 csize='' → 选规模时不显示
+  if (F.years !== 'all') {
+    const ry = j.req_years || 0;                    // 0 = JD 未注明/未算匹配
+    const mine = S.exp_years ?? 99;
+    if (F.years === 'fit'  && !(ry <= mine)) return false;      // 够格：未注明(0)也算够格
+    if (F.years === 'none' && ry !== 0) return false;
+    if (F.years === 'y12'  && !(ry >= 1 && ry <= 2)) return false;
+    if (F.years === 'y35'  && !(ry >= 3 && ry <= 5)) return false;
+    if (F.years === 'y6'   && ry < 6) return false;
+  }
   if (T.llm && !j.llm) return false;
   if (T.new && !(d != null && d <= S.consts.new_days)) return false;
   if (T.long && !(d != null && d >= S.consts.long_days)) return false;
@@ -627,6 +661,11 @@ function scoreMini(j) {
 function jobBadges(j) {
   const d = jobDays(j);
   let h = `<span class="badge lvl">${esc(S.consts.level_labels[j.level] || j.level || '')}</span>`;
+  if (j.csize && j.csize !== 'unknown')
+    h += `<span class="badge lvl" title="公司员工规模（大模型估）">🏢 ${esc((S.consts.size_labels || {})[j.csize] || j.csize)}</span>`;
+  if (j.njobs) h += `<span class="badge lvl" title="该公司招聘页在招岗位总数">📋 在招 ${j.njobs}</span>`;
+  const _mine = S.exp_years ?? 99;
+  if (j.req_years && j.req_years <= _mine) h += `<span class="badge lvl" title="JD 要求的最低年限">📅 ${j.req_years}+ 年</span>`;
   if (j.region === 'europe') h += `<span class="badge eu">🇪🇺 ${esc(j.country || 'Europe')}</span>`;
   if (j.region === 'china') h += `<span class="badge cn">🇨🇳 中国</span>`;
   if (d != null && d <= S.consts.new_days) h += `<span class="badge new">NEW</span>`;
@@ -1011,6 +1050,13 @@ async function runAgg() {
   const d = await r.json();
   if (d.error) { alert(d.error); return; }
   alert('已开始搜索 Adzuna/Reed 聚合平台，稍等片刻在岗位流里看结果（📄 来源徽章）');
+  refresh();
+}
+async function runSize() {
+  const r = await fetch('/api/company_size', { method: 'POST' });
+  const d = await r.json();
+  if (d.error) { alert(d.error); return; }
+  alert(`已开始识别 ${d.total} 家公司的规模（大模型估，结果缓存）。稍后规模徽章和筛选会自动出现。`);
   refresh();
 }
 
