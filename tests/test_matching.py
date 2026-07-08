@@ -182,6 +182,14 @@ def test_match_job_blacklisted_title_not_widened():
     assert app.match_job("Platform Engineer", jd, KWS) == "jd"
 
 
+def test_classify_region_empty_location_is_unknown_not_uk():
+    # 没写地点 ≠ 英国：必须单列，否则"英国"筛选会混入大量地点缺失的岗位
+    assert app.classify_region("") == ("unknown", "")
+    assert app.classify_region(None) == ("unknown", "")
+    assert app.classify_region("London, UK")[0] == "uk"
+    assert app.classify_region("Berlin")[0] == "europe"
+
+
 def test_match_job_title_only_keywords_not_matched_in_body():
     # "recommendations" 这类泛词只在标题里算数，正文里是万能句式
     assert app.match_job(
@@ -277,7 +285,9 @@ def test_norm_company_crossref():
 
 def test_run_aggregators_filters_and_crossrefs(monkeypatch):
     monkeypatch.setattr(app, "api_keys", {"adzuna_app_id": "x", "adzuna_app_key": "y"})
-    monkeypatch.setattr(app, "AGG_QUERIES", ["machine learning"])
+    # 聚合器搜索词跟随用户关键词，不再有硬编码的 AGG_QUERIES
+    monkeypatch.setitem(app.state, "keywords", ["machine learning"])
+    monkeypatch.setattr(app, "_atomic_write", lambda *a: None)  # 不碰真实 desc_cache
     monkeypatch.setattr(app, "search_reed", lambda q: [])
     monkeypatch.setattr(app, "search_adzuna", lambda q, pages=2: [
         {"company": "Acme AI Limited", "title": "Machine Learning Engineer",

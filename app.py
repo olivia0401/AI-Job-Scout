@@ -112,7 +112,7 @@ def classify_region(location):
     """返回 (region, label)：uk / europe / china / remote / other / unknown"""
     loc = (location or "").lower()
     if not loc:
-        return ("uk", "")  # 没写地点的默认可申请
+        return ("unknown", "")  # 没写地点 ≠ 英国：单列，前端可选择性显示
     if UK_RE.search(loc):
         return ("uk", "UK")
     for label, rx in EU_RES:
@@ -167,6 +167,7 @@ _lock = threading.Lock()
 state = {
     "companies": {},   # name -> {"tags": ["curated"|"register"], "town": str}
     "keywords": DEFAULT_KEYWORDS,
+    "exclude_keywords": [],  # 标题命中即隐藏（如 sales / frontend / qa）
     "uk_only": True,
     "auto_hours": 0,   # >0 时后台每隔 N 小时自动快速刷新
     "results": {},     # name -> result（只存探测到招聘页的公司 + 精选公司）
@@ -245,6 +246,7 @@ def load_all():
         if comps and not state["companies"]:
             state["companies"] = comps
         state["keywords"] = saved.get("keywords", DEFAULT_KEYWORDS)
+        state["exclude_keywords"] = saved.get("exclude_keywords", [])
         state["uk_only"] = saved.get("uk_only", True)
         state["auto_hours"] = saved.get("auto_hours", 0)
         state["jobs_seen"] = saved.get("jobs_seen", {})
@@ -279,6 +281,7 @@ def save_state():
     with _lock:
         payload = json.dumps({
             "keywords": state["keywords"],
+            "exclude_keywords": state["exclude_keywords"],
             "uk_only": state["uk_only"],
             "auto_hours": state["auto_hours"],
             "results": state["results"],
@@ -896,8 +899,9 @@ def auto_loop():
 # ---------------------------------------------------------------- 聚合平台搜索
 # Adzuna / Reed 是关键词聚合器：几次调用就能横扫全英国所有公司/ATS 的岗位，
 # 是“抓最全 + 求快”的最大杠杆。需要各自的免费官方 API key（放 data/api_keys.json）。
-AGG_QUERIES = ["machine learning", "artificial intelligence", "llm",
-               "ai engineer", "data scientist", "deep learning"]
+# 搜索词跟随用户设置的岗位关键词（改行找护理/会计也能用）；免费 API 有配额，
+# 每轮最多取前 N 个关键词。
+AGG_MAX_QUERIES = 6
 
 AGG_KEY_FIELDS = ("adzuna_app_id", "reed_api_key", "jooble_api_key", "rapidapi_key")
 
@@ -1012,12 +1016,14 @@ def run_aggregators():
     if not _has_agg_keys():
         return
     kws = [k.lower() for k in state["keywords"]]
+    queries = kws[:AGG_MAX_QUERIES]  # 跟随用户关键词，不再硬编码 AI 词
     today = date.today().isoformat()
     with _lock:
         sponsor_idx = {_norm_company(n) for n in state["companies"]}
-    state["agg"] = {"running": True, "done": 0, "total": len(AGG_QUERIES)}
+    state["agg"] = {"running": True, "done": 0, "total": len(queries)}
+    new_descs = {}  # url -> JD 摘要，存入 desc_cache 供简历匹配打分
     try:
-        for q in AGG_QUERIES:
+        for q in queries:
             found = (search_adzuna(q) + search_reed(q)
                      + search_jooble(q) + search_jsearch(q))
             with _lock:
@@ -1027,6 +1033,8 @@ def run_aggregators():
                     desc = j.get("desc") or ""
                     if not u or not match_job(title, desc, kws):
                         continue
+                    if desc:
+                        new_descs[u] = desc[:8000]
                     region, rlabel = classify_region(j.get("location"))
                     seen = state["agg_jobs"].get(u)
                     state["agg_jobs"][u] = {
@@ -1042,7 +1050,16 @@ def run_aggregators():
                 state["agg"]["done"] += 1
     finally:
         state["agg"]["running"] = False
+        if new_descs:
+            cache = load_desc_cache()
+            for u, d in new_descs.items():
+                if len(d) > len(cache.get(u) or ""):  # 保留更完整的版本
+                    cache[u] = d
+            _atomic_write(DESC_CACHE_FILE, json.dumps(cache, ensure_ascii=False))
         save_state()
+        # 抓完顺手把新岗位的匹配分算出来
+        if state.get("resume") and not state["match"]["running"]:
+            threading.Thread(target=run_match, daemon=True).start()
 
 
 # ---------------------------------------------------------------- 公司规模（大模型估）
@@ -1405,6 +1422,11 @@ def analyze_job(title, desc, resume_kws, my_years, level=None):
         score = max(score - 40, 0)  # 真实世界里这基本等于淘汰
     elif YES_SPONSOR_RE.search(full):
         flags.append({"t": "明确提供签证担保", "lv": "good"})
+    if not dl:
+        # 没抓到 JD 正文：只凭标题算的分虚高（"Junior ML Engineer" 光标题就能拿 90+），
+        # 封顶并明示低置信度，防止挤掉那些用完整 JD 验证过的真高分岗位
+        score = min(score, 65)
+        flags.append({"t": "未抓到 JD，仅按标题估分", "lv": "warn"})
     return {
         "score": score, "hit": sorted(hit_c | hit_n),
         "must_miss": sorted(miss_c)[:12], "nice_miss": sorted(miss_n)[:10],
@@ -1423,7 +1445,9 @@ def run_match():
     fails = load_desc_fail()
     with _lock:
         targets = [(n, dict(r)) for n, r in state["results"].items() if r.get("matched")]
-    state["match"] = {"running": True, "done": 0, "total": len(targets)}
+        agg = [(u, dict(j)) for u, j in state["agg_jobs"].items()]
+    state["match"] = {"running": True, "done": 0,
+                      "total": len(targets) + (1 if agg else 0)}
     try:
         for n, r in targets:
             fetch_descriptions(r, cache, fails)
@@ -1434,6 +1458,16 @@ def run_match():
                                       resume_kws, my_years, j.get("level"))
                     if res["n"]:
                         state["match_scores"][u] = res
+                state["match"]["done"] += 1
+        if agg:  # 聚合平台岗位也算分：JD 用抓取时存进 desc_cache 的摘要
+            agg_scores = {}
+            for u, j in agg:
+                res = analyze_job(j.get("title", ""), cache.get(u, ""),
+                                  resume_kws, my_years, j.get("level"))
+                if res["n"]:
+                    agg_scores[u] = res
+            with _lock:
+                state["match_scores"].update(agg_scores)
                 state["match"]["done"] += 1
     finally:
         state["match"]["running"] = False
@@ -1962,9 +1996,15 @@ def api_state():
                 res_out[n] = {"name": n, "status": st, "matched": [],
                               "curated": True, "links": build_links(n)}
 
+        excl = state.get("exclude_keywords") or []
+        excl_re = (re.compile(r"\b(" + "|".join(re.escape(k) for k in excl) + r")\b")
+                   if excl else None)
+
         feed = []
         for n, r in results.items():
             for j in r.get("matched", []):
+                if excl_re and excl_re.search((j.get("title") or "").lower()):
+                    continue
                 # 旧数据可能缺 region/level，即时补算
                 if "region" not in j:
                     j["region"], j["country"] = classify_region(j.get("location"))
@@ -1994,6 +2034,8 @@ def api_state():
                 })
         # 并入聚合平台(Adzuna/Reed)岗位
         for u, j in state["agg_jobs"].items():
+            if excl_re and excl_re.search((j.get("title") or "").lower()):
+                continue
             region = j.get("region", "uk")
             if state["uk_only"] and region == "other":
                 continue
@@ -2020,7 +2062,12 @@ def api_state():
                 "nice_miss": ms.get("nice_miss", []) if ms else [],
                 "flags": ms.get("flags", []) if ms else [],
             })
-        feed.sort(key=lambda x: (x["first_seen"] or ""), reverse=True)
+        # 按前端请求的排序方式排好再截断，避免"高分老岗位"被时间序截断挡在 400 名外
+        if request.args.get("sort") == "score":
+            feed.sort(key=lambda x: (x["score"] if x["score"] is not None else -1,
+                                     x["first_seen"] or ""), reverse=True)
+        else:
+            feed.sort(key=lambda x: (x["first_seen"] or ""), reverse=True)
 
         probed = len(ats_cache)
         n_reg = sum(1 for c in comps.values() if "register" in c["tags"])
@@ -2039,7 +2086,7 @@ def api_state():
             "via_jd_jobs": sum(1 for j in feed if j.get("via") == "jd"),
             "agg_jobs": sum(1 for j in feed if j.get("via") == "agg"),
             "agg_sponsor": sum(1 for j in feed if j.get("via") == "agg" and j.get("sponsor")),
-            "uk_jobs": sum(1 for j in feed if j["region"] in ("uk", "unknown")),
+            "uk_jobs": sum(1 for j in feed if j["region"] == "uk"),
             "eu_jobs": sum(1 for j in feed if j["region"] == "europe"),
             "new_jobs": sum(1 for j in feed if j["days"] is not None and j["days"] <= NEW_DAYS),
             "long_jobs": sum(1 for j in feed if j["days"] is not None and j["days"] >= LONG_RUNNING_DAYS),
@@ -2053,6 +2100,7 @@ def api_state():
         resume = state.get("resume")
         return jsonify({
             "keywords": state["keywords"], "uk_only": state["uk_only"],
+            "exclude_keywords": state["exclude_keywords"],
             "auto_hours": state["auto_hours"], "exp_years": state["exp_years"],
             "counts": counts, "results": res_out, "feed": feed[:400],
             "scan": scan, "match": dict(state["match"]), "agg": dict(state["agg"]),
@@ -2077,6 +2125,9 @@ def api_settings():
             kws = [k.strip().lower() for k in data["keywords"] if k.strip()]
             if kws:
                 state["keywords"] = kws
+        if "exclude_keywords" in data:  # 传空列表 = 清空排除词
+            state["exclude_keywords"] = [
+                k.strip().lower() for k in data["exclude_keywords"] if k.strip()]
         if "uk_only" in data:
             state["uk_only"] = bool(data["uk_only"])
         if "auto_hours" in data:
@@ -2147,13 +2198,14 @@ def api_slug_override():
 
 @app.route("/api/aggregators", methods=["POST"])
 def api_aggregators():
-    """触发 Adzuna/Reed 聚合搜索，横扫全英国 AI 岗位。"""
+    """触发 Adzuna/Reed 聚合搜索，按用户关键词横扫全英国岗位。"""
     if not _has_agg_keys():
         return jsonify({"error": "未配置 Adzuna/Reed 的 API key（见 data/api_keys.json）"}), 400
     if state["agg"]["running"]:
         return jsonify({"error": "聚合搜索进行中"}), 409
     threading.Thread(target=run_aggregators, daemon=True).start()
-    return jsonify({"started": True, "queries": len(AGG_QUERIES)})
+    return jsonify({"started": True,
+                    "queries": len(state["keywords"][:AGG_MAX_QUERIES])})
 
 
 @app.route("/api/company_size", methods=["POST"])

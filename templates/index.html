@@ -339,6 +339,7 @@
         <option value="europe">🇪🇺 欧洲</option>
         <option value="china">🇨🇳 中国</option>
         <option value="remote">🏠 Remote</option>
+        <option value="unknown">❓ 未知地点</option>
       </select>
       <select class="fsel" onchange="F.level = this.value; render()">
         <option value="all">所有级别</option>
@@ -364,9 +365,17 @@
         <option value="y35">3–5 年</option>
         <option value="y6">5 年以上</option>
       </select>
+      <select class="fsel" onchange="F.minscore = parseInt(this.value, 10); render()" title="按简历匹配分过滤（需先上传简历算分；没算出分的岗位会被隐藏）">
+        <option value="0">💯 所有匹配分</option>
+        <option value="40">≥ 40 分</option>
+        <option value="60">≥ 60 分</option>
+        <option value="80">≥ 80 分</option>
+      </select>
       <span class="chip star" data-t="llm" onclick="toggleT(this)">⭐ LLM</span>
       <span class="chip" data-t="new" onclick="toggleT(this)">🆕 新上架</span>
       <span class="chip star" data-t="curated" onclick="toggleT(this)">精选公司</span>
+      <span class="chip" data-t="titleonly" onclick="toggleT(this)" title="只看标题直接命中关键词的岗位，隐藏仅靠 JD 正文召回的低置信度岗位">🎯 仅标题命中</span>
+      <span class="chip" data-t="derisk" onclick="toggleT(this)" title="隐藏 JD 明确声明不担保签证、或要求安全许可/英国国籍的岗位">🛂 排除签证风险</span>
       <input type="text" id="search" placeholder="搜索岗位 / 公司…" oninput="render()">
     </div>
   </div>
@@ -392,6 +401,11 @@
       <div class="row" style="margin-top:10px">
         <span class="note">岗位关键词：</span>
         <input type="text" id="kw" style="flex:1;min-width:280px">
+      </div>
+      <div class="row" style="margin-top:6px">
+        <span class="note">排除词：</span>
+        <input type="text" id="exkw" style="flex:1;min-width:280px"
+               placeholder="标题含这些词的岗位直接隐藏，逗号分隔，如 sales, consultant, intern">
       </div>
       <div class="row">
         <span class="note">自动刷新间隔</span>
@@ -419,8 +433,10 @@
 <script>
 let S = { results: {}, feed: [], counts: {}, scan: {}, match: {}, resume: null,
           consts: { new_days: 3, long_days: 30, level_labels: {} } };
-let F = { view: 'feed', region: 'all', level: 'all', csize: 'all', years: 'all', sort: 'date' };
-let T = { llm: false, new: false, long: false, curated: false };
+let F = { view: 'feed', region: 'all', level: 'all', csize: 'all', years: 'all',
+          minscore: 0, sort: 'date' };
+let T = { llm: false, new: false, long: false, curated: false,
+          titleonly: false, derisk: false };
 let expanded = new Set();
 let pollTimer = null;
 const jobAdvice = {};        // url -> 岗位专属简历建议(Markdown)
@@ -455,9 +471,12 @@ const CN_BIGTECH = [
 function esc(s) { return (s || '').toString().replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
 async function refresh() {
-  const r = await fetch('/api/state');
+  const r = await fetch('/api/state?sort=' + encodeURIComponent(F.sort));
   S = await r.json();
   document.getElementById('kw').value = (S.keywords || []).join(', ');
+  const exEl = document.getElementById('exkw');
+  if (exEl && document.activeElement !== exEl)
+    exEl.value = (S.exclude_keywords || []).join(', ');
   document.getElementById('autoHours').value = S.auto_hours || 0;
   document.getElementById('expYears').value = S.exp_years ?? 1;
   const c = S.counts || {};
@@ -600,6 +619,8 @@ function setF(el) {
   document.querySelectorAll(`[data-g="${el.dataset.g}"]`).forEach(x =>
     x.classList.toggle('on', x === el));
   render();
+  // 排序方式变了要向后端重取：后端按该排序截断前 400 条
+  if (el.dataset.g === 'sort') refresh();
 }
 // ⋯ 菜单项：先收起菜单再执行
 function menuDo(fn) {
@@ -624,10 +645,11 @@ function jobDays(j) {
 }
 function passJob(j, q) {
   const d = jobDays(j);
-  if (F.region === 'uk' && !(j.region === 'uk' || j.region === 'unknown')) return false;
+  if (F.region === 'uk' && j.region !== 'uk') return false;  // 未知地点不再混进英国
   if (F.region === 'europe' && j.region !== 'europe') return false;
   if (F.region === 'china' && j.region !== 'china') return false;
   if (F.region === 'remote' && j.region !== 'remote') return false;
+  if (F.region === 'unknown' && j.region !== 'unknown') return false;
   if (F.level !== 'all' && j.level !== F.level) return false;
   if (F.csize !== 'all' && j.csize !== F.csize) return false;  // 聚合器岗位 csize='' → 选规模时不显示
   if (F.years !== 'all') {
@@ -639,10 +661,14 @@ function passJob(j, q) {
     if (F.years === 'y35'  && !(ry >= 3 && ry <= 5)) return false;
     if (F.years === 'y6'   && ry < 6) return false;
   }
+  if (F.minscore > 0 && !((j.score ?? -1) >= F.minscore)) return false;
   if (T.llm && !j.llm) return false;
   if (T.new && !(d != null && d <= S.consts.new_days)) return false;
   if (T.long && !(d != null && d >= S.consts.long_days)) return false;
   if (T.curated && !j.curated) return false;
+  if (T.titleonly && j.via === 'jd') return false;
+  if (T.derisk && (j.flags || []).some(f =>
+      (f.t || '').includes('不担保') || (f.t || '').includes('安全许可'))) return false;
   if (q && !((j.title||'').toLowerCase().includes(q) || (j.company||'').toLowerCase().includes(q))) return false;
   return true;
 }
@@ -668,6 +694,7 @@ function jobBadges(j) {
   if (j.req_years && j.req_years <= _mine) h += `<span class="badge lvl" title="JD 要求的最低年限">📅 ${j.req_years}+ 年</span>`;
   if (j.region === 'europe') h += `<span class="badge eu">🇪🇺 ${esc(j.country || 'Europe')}</span>`;
   if (j.region === 'china') h += `<span class="badge cn">🇨🇳 中国</span>`;
+  if (j.region === 'unknown') h += `<span class="badge lvl" title="招聘页没写工作地点，投递前先到 JD 里确认">❓ 未知地点</span>`;
   if (d != null && d <= S.consts.new_days) h += `<span class="badge new">NEW</span>`;
   if (j.llm) h += `<span class="badge llm">⭐LLM</span>`;
   if (j.via === 'agg' && !j.sponsor)
@@ -931,6 +958,7 @@ function render() {
     }
     let items = (S.feed || []).filter(j => passJob(j, q));
     if (F.sort === 'score') items = [...items].sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
+    else items = [...items].sort((a, b) => (b.first_seen || '').localeCompare(a.first_seen || ''));
     list.innerHTML = cnBox + items.slice(0, 250).map(j => `
       <div class="jobrow ${expanded.has(j.url) ? 'open' : ''}" onclick="rowClick(event, '${esc(j.url)}')">
         ${scoreBlock(j)}
@@ -1063,7 +1091,9 @@ async function runSize() {
 async function saveSettings(silent) {
   const kws = document.getElementById('kw').value.split(',').map(s => s.trim()).filter(Boolean);
   const body = { auto_hours: parseInt(document.getElementById('autoHours').value || '0', 10),
-                 exp_years: parseInt(document.getElementById('expYears').value || '1', 10) };
+                 exp_years: parseInt(document.getElementById('expYears').value || '1', 10),
+                 exclude_keywords: document.getElementById('exkw').value
+                   .split(',').map(s => s.trim()).filter(Boolean) };
   if (kws.length) body.keywords = kws;
   await fetch('/api/settings', { method: 'POST', headers: {'Content-Type':'application/json'},
     body: JSON.stringify(body) });
