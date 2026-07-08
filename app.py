@@ -493,6 +493,51 @@ PROBE_FN = dict(PROBES)
 # Workday 不参与按公司名猜 slug（需要 host+site），只能手动 override
 OVERRIDE_ATS = set(PROBE_FN) | {"Workday"}
 
+# 预置大厂 Workday 招聘站（host, site）。这些公司用 Workday/自建系统，按公司名猜
+# slug 猜不到，故内置 host/site 直连其公开岗位接口。属"尽力而为"：
+#   · 探测失败不会有副作用——find_ats 会自动回落到普通探测；
+#   · host/site 日后若变动，可在网页「手动修正」里改（会写入 data/slug_overrides.json，覆盖内置）。
+# 注意：Google / Amazon / Meta / Microsoft / 摩根等用**自建**招聘系统（非 Workday），
+# 无公开接口可抓，仍需用公司卡片里的「Google 直达 / LinkedIn 搜索」手动查。
+BUILTIN_WORKDAY = {
+    "NVIDIA": ("nvidia.wd5.myworkdayjobs.com", "NVIDIAExternalCareerSite"),
+    "Salesforce": ("salesforce.wd12.myworkdayjobs.com", "External_Career_Site"),
+    "Adobe": ("adobe.wd5.myworkdayjobs.com", "external_experienced"),
+    "Dell Technologies": ("dell.wd1.myworkdayjobs.com", "External"),
+    "Mastercard": ("mastercard.wd1.myworkdayjobs.com", "CorporateCareers"),
+    "Capital One": ("capitalone.wd1.myworkdayjobs.com", "Capital_One"),
+    "Autodesk": ("autodesk.wd1.myworkdayjobs.com", "Ext"),
+    "AstraZeneca": ("astrazeneca.wd3.myworkdayjobs.com", "Careers"),
+    "Sanofi": ("sanofi.wd3.myworkdayjobs.com", "SanofiCareers"),
+    "Workday": ("workday.wd5.myworkdayjobs.com", "Workday"),
+}
+BUILTIN_OVERRIDES = {name.lower(): {"ats": "Workday", "host": host, "site": site}
+                     for name, (host, site) in BUILTIN_WORKDAY.items()}
+
+# 预置一批知名 AI/ML/金融科技雇主，作为 curated 公司种子。它们多用 Greenhouse/Lever/
+# Ashby 等可自动探测的系统，加入清单后会被自动识别 slug；探测不到的会显示为"无招聘页"，
+# 提醒你手动去查。（这些都在英国招人且常担保工签。）
+CURATED_SEED = [
+    "Anthropic", "OpenAI", "Cohere", "Hugging Face", "DeepMind", "Databricks",
+    "Palantir Technologies", "Wayve", "Faculty", "Quantexa", "Synthesia",
+    "Stability AI", "ElevenLabs", "PolyAI", "Speechmatics", "Graphcore",
+    "Monzo", "Wise", "Revolut", "Improbable",
+] + list(BUILTIN_WORKDAY)
+
+
+def seed_builtin_companies():
+    """把预置大厂/AI 雇主加入公司清单（curated），使其被扫描；Workday 大厂还会命中内置 override。"""
+    changed = False
+    with _lock:
+        existing = {n.strip().lower() for n in state["companies"]}
+        for name in CURATED_SEED:
+            if name.strip().lower() not in existing:
+                state["companies"][name] = {"tags": ["curated"], "town": ""}
+                existing.add(name.strip().lower())
+                changed = True
+    if changed:
+        save_companies()
+
 
 def save_slug_overrides():
     _atomic_write(SLUG_OVERRIDE_FILE, json.dumps(slug_overrides, ensure_ascii=False))
@@ -513,7 +558,8 @@ def _probe_override(ov):
 
 def find_ats(name):
     """返回 (ats_name, slug, {board_url, jobs}) 或 None。结果写入 ats_cache。"""
-    ov = slug_overrides.get((name or "").strip().lower())
+    key = (name or "").strip().lower()
+    ov = slug_overrides.get(key) or BUILTIN_OVERRIDES.get(key)  # 用户修正优先，其次内置大厂
     if ov:
         res = _probe_override(ov)
         if res:  # 手动修正优先，抓不到再走自动探测
@@ -1915,6 +1961,7 @@ def api_export():
 
 if __name__ == "__main__":
     load_all()
+    seed_builtin_companies()  # 预置大厂/AI 雇主（curated），首次启动即可扫到
     if state["companies"] and not os.path.exists(COMPANIES_FILE):
         save_companies()  # 从旧格式迁移时立即落盘，防止丢名单
     threading.Thread(target=auto_loop, daemon=True).start()
