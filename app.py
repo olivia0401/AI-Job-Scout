@@ -745,6 +745,12 @@ def auto_loop():
 AGG_QUERIES = ["machine learning", "artificial intelligence", "llm",
                "ai engineer", "data scientist", "deep learning"]
 
+AGG_KEY_FIELDS = ("adzuna_app_id", "reed_api_key", "jooble_api_key", "rapidapi_key")
+
+
+def _has_agg_keys():
+    return any(api_keys.get(k) for k in AGG_KEY_FIELDS)
+
 
 def _norm_company(n):
     """公司名归一化，用于把聚合器岗位和官方 sponsor 名单交叉核对。"""
@@ -796,9 +802,60 @@ def search_reed(query):
     } for j in res]
 
 
+def search_jooble(query):
+    """Jooble 聚合了大量招聘站（含部分 LinkedIn/Indeed 转载）。免费 key，POST 调用。"""
+    key = api_keys.get("jooble_api_key")
+    if not key:
+        return []
+    try:
+        r = _session().post(f"https://jooble.org/api/{key}",
+                            json={"keywords": query, "location": "United Kingdom"},
+                            timeout=TIMEOUT)
+        if r.status_code != 200:
+            return []
+        res = r.json().get("jobs") or []
+    except Exception:
+        return []
+    return [{
+        "company": j.get("company", ""), "title": j.get("title", ""),
+        "url": j.get("link", ""), "location": j.get("location", ""),
+        "desc": _strip_html(j.get("snippet", "")), "source": "Jooble",
+    } for j in res]
+
+
+def search_jsearch(query):
+    """JSearch(RapidAPI) 抓 Google for Jobs——覆盖 LinkedIn/Indeed/Glassdoor/ZipRecruiter，
+    正是本工具官方 ATS 扫描的最大盲区。免费额度约每月 200 次。"""
+    key = api_keys.get("rapidapi_key")
+    if not key:
+        return []
+    try:
+        r = _session().get("https://jsearch.p.rapidapi.com/search",
+                          params={"query": f"{query} in United Kingdom",
+                                  "page": "1", "num_pages": "1", "country": "gb"},
+                          headers={"X-RapidAPI-Key": key,
+                                   "X-RapidAPI-Host": "jsearch.p.rapidapi.com"},
+                          timeout=TIMEOUT * 2)
+        if r.status_code != 200:
+            return []
+        res = r.json().get("data") or []
+    except Exception:
+        return []
+    out = []
+    for j in res:
+        loc = ", ".join(x for x in (j.get("job_city"), j.get("job_country")) if x)
+        out.append({
+            "company": j.get("employer_name", ""), "title": j.get("job_title", ""),
+            "url": j.get("job_apply_link") or j.get("job_google_link", ""),
+            "location": loc, "desc": _strip_html(j.get("job_description", "")),
+            "source": j.get("job_publisher") or "JSearch",
+        })
+    return out
+
+
 def run_aggregators():
     """跑 Adzuna+Reed 关键词搜索，AI 过滤后并入 agg_jobs，并标注是否为工签 sponsor。"""
-    if not (api_keys.get("adzuna_app_id") or api_keys.get("reed_api_key")):
+    if not _has_agg_keys():
         return
     kws = [k.lower() for k in state["keywords"]]
     today = date.today().isoformat()
@@ -807,7 +864,8 @@ def run_aggregators():
     state["agg"] = {"running": True, "done": 0, "total": len(AGG_QUERIES)}
     try:
         for q in AGG_QUERIES:
-            found = search_adzuna(q) + search_reed(q)
+            found = (search_adzuna(q) + search_reed(q)
+                     + search_jooble(q) + search_jsearch(q))
             with _lock:
                 for j in found:
                     u = j.get("url")
@@ -1270,15 +1328,71 @@ def _anthropic_key():
     return api_keys.get("anthropic_api_key") or os.environ.get("ANTHROPIC_API_KEY")
 
 
+def _openai_key():
+    return api_keys.get("openai_api_key") or os.environ.get("OPENAI_API_KEY")
+
+
+def _llm_provider():
+    """决定用哪家大模型生成建议：显式 llm_provider 优先，否则谁配了 key 用谁。"""
+    pref = (api_keys.get("llm_provider") or "").strip().lower()
+    if pref in ("openai", "chatgpt", "gpt"):
+        return "openai" if _openai_key() else ("anthropic" if _anthropic_key() else None)
+    if pref in ("anthropic", "claude"):
+        return "anthropic" if _anthropic_key() else ("openai" if _openai_key() else None)
+    if _openai_key():        # 未指定时：手头有 ChatGPT key 就用它，否则用 Claude
+        return "openai"
+    if _anthropic_key():
+        return "anthropic"
+    return None
+
+
+def _llm_ready():
+    return _llm_provider() is not None
+
+
+LLM_LABELS = {"openai": "ChatGPT", "anthropic": "Claude"}
+LLM_MISSING_MSG = ("未配置大模型 API key：在 data/api_keys.json 填 openai_api_key（ChatGPT）"
+                   "或 anthropic_api_key（Claude），也可设环境变量 "
+                   "OPENAI_API_KEY / ANTHROPIC_API_KEY")
+
 RESUME_SYS = ("你是资深简历顾问兼 ATS 优化专家，服务在英国找 AI/ML 工作的求职者。"
               "建议要具体、可执行、诚实，绝不编造求职者没有的经历。")
 
 
-def generate_resume_advice(report):
-    """用 Claude 依据缺口报告 + 简历全文生成可执行的修改建议（Markdown）。"""
+def _openai_complete(prompt, max_tokens):
+    from openai import OpenAI
+    client = OpenAI(api_key=_openai_key())
+    model = api_keys.get("openai_model", "gpt-4o")
+    kw = dict(model=model,
+              messages=[{"role": "system", "content": RESUME_SYS},
+                        {"role": "user", "content": prompt}])
+    try:
+        resp = client.chat.completions.create(max_tokens=max_tokens, **kw)
+    except Exception:  # 新一代/推理模型改用 max_completion_tokens
+        resp = client.chat.completions.create(max_completion_tokens=max_tokens, **kw)
+    return resp.choices[0].message.content or ""
+
+
+def _anthropic_complete(prompt, max_tokens):
     import anthropic
     client = anthropic.Anthropic(api_key=_anthropic_key())
     model = api_keys.get("anthropic_model", "claude-opus-4-8")
+    with client.messages.stream(model=model, max_tokens=max_tokens,
+                                thinking={"type": "adaptive"},
+                                system=RESUME_SYS,
+                                messages=[{"role": "user", "content": prompt}]) as stream:
+        msg = stream.get_final_message()
+    return "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
+
+
+def _llm_complete(prompt, max_tokens=6000):
+    """按所配 provider 调用大模型生成建议，返回纯文本。"""
+    return (_openai_complete if _llm_provider() == "openai"
+            else _anthropic_complete)(prompt, max_tokens)
+
+
+def generate_resume_advice(report):
+    """依据缺口报告 + 简历全文生成可执行的修改建议（Markdown）。"""
     resume = state.get("resume") or {}
     gaps_txt = "\n".join(
         f"- {g['skill']}：缺失于 {g['jobs']} 个岗位"
@@ -1303,18 +1417,15 @@ def generate_resume_advice(report):
 3. 指出我简历里 2–3 条最该改写的经历，怎么改更贴近这些岗位。
 4. 诚实提醒：哪些缺失技能若我确实没有，别硬写，应通过项目/课程补齐。
 不要编造我没有的经历。"""
-    with client.messages.stream(model=model, max_tokens=8000,
-                                thinking={"type": "adaptive"},
-                                system=RESUME_SYS,
-                                messages=[{"role": "user", "content": prompt}]) as stream:
-        msg = stream.get_final_message()
-    return "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
+    return _llm_complete(prompt, max_tokens=8000)
 
 
 @app.route("/api/resume_suggestions")
 def api_resume_suggestions():
     report = resume_gap_report()
-    report["has_anthropic"] = bool(_anthropic_key())
+    prov = _llm_provider()
+    report["has_llm"] = prov is not None
+    report["llm_label"] = LLM_LABELS.get(prov)
     return jsonify(report)
 
 
@@ -1325,9 +1436,8 @@ def api_resume_suggestions_generate():
     report = resume_gap_report()
     if not report.get("ready") or not report.get("gaps"):
         return jsonify({"error": "还没有匹配数据——请先上传简历并等匹配计算完成"}), 400
-    if not _anthropic_key():
-        return jsonify({"error": "未配置 Anthropic API key（在 data/api_keys.json 填 "
-                                 "anthropic_api_key，或设环境变量 ANTHROPIC_API_KEY）"}), 400
+    if not _llm_ready():
+        return jsonify({"error": LLM_MISSING_MSG}), 400
     try:
         advice = generate_resume_advice(report)
     except Exception as e:
@@ -1351,11 +1461,8 @@ def _find_job(url):
 
 
 def generate_job_advice(url):
-    """针对单个岗位：拿 JD 正文 + 该岗位的匹配分析 + 简历全文，让 Claude 生成
+    """针对单个岗位：拿 JD 正文 + 该岗位的匹配分析 + 简历全文，让大模型生成
     这一份岗位专属的简历修改建议（Markdown）。"""
-    import anthropic
-    client = anthropic.Anthropic(api_key=_anthropic_key())
-    model = api_keys.get("anthropic_model", "claude-opus-4-8")
     resume = state.get("resume") or {}
     meta = _find_job(url) or {}
     ms = state["match_scores"].get(url) or {}
@@ -1383,21 +1490,15 @@ def generate_job_advice(url):
 3. 针对这家公司写一段 3 句话的求职信开场白。
 4. 诚实提醒：哪些缺失技能若我确实没有，别硬写，建议怎么补齐。
 不要编造我没有的经历。"""
-    with client.messages.stream(model=model, max_tokens=6000,
-                                thinking={"type": "adaptive"},
-                                system=RESUME_SYS,
-                                messages=[{"role": "user", "content": prompt}]) as stream:
-        msg = stream.get_final_message()
-    return "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
+    return _llm_complete(prompt, max_tokens=6000)
 
 
 @app.route("/api/job_advice", methods=["POST"])
 def api_job_advice():
     if not state.get("resume"):
         return jsonify({"error": "请先上传简历"}), 400
-    if not _anthropic_key():
-        return jsonify({"error": "未配置 Anthropic API key（在 data/api_keys.json 填 "
-                                 "anthropic_api_key，或设环境变量 ANTHROPIC_API_KEY）"}), 400
+    if not _llm_ready():
+        return jsonify({"error": LLM_MISSING_MSG}), 400
     data = request.get_json(silent=True) or {}
     url = (data.get("url") or "").strip()
     if not url:
@@ -1650,8 +1751,9 @@ def api_state():
             "auto_hours": state["auto_hours"], "exp_years": state["exp_years"],
             "counts": counts, "results": res_out, "feed": feed[:400],
             "scan": scan, "match": dict(state["match"]), "agg": dict(state["agg"]),
-            "has_api_keys": bool(api_keys.get("adzuna_app_id") or api_keys.get("reed_api_key")),
-            "has_anthropic": bool(_anthropic_key()),
+            "has_api_keys": _has_agg_keys(),
+            "has_llm": _llm_ready(),
+            "llm_label": LLM_LABELS.get(_llm_provider()),
             "resume": ({"name": resume["name"], "updated": resume["updated"],
                         "keywords": resume["keywords"], "text": resume["text"]}
                        if resume else None),
@@ -1739,7 +1841,7 @@ def api_slug_override():
 @app.route("/api/aggregators", methods=["POST"])
 def api_aggregators():
     """触发 Adzuna/Reed 聚合搜索，横扫全英国 AI 岗位。"""
-    if not (api_keys.get("adzuna_app_id") or api_keys.get("reed_api_key")):
+    if not _has_agg_keys():
         return jsonify({"error": "未配置 Adzuna/Reed 的 API key（见 data/api_keys.json）"}), 400
     if state["agg"]["running"]:
         return jsonify({"error": "聚合搜索进行中"}), 409

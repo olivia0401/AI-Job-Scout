@@ -156,8 +156,19 @@
 > 方便你手动补齐这些平台、顺便找到 HR 联系人（工具不替你爬联系人，只给搜索入口）。
 
 **想抓更全、更快？**（选配，需免费注册）把 `api_keys.example.json` 复制成 `data/api_keys.json`，
-填上 **Adzuna / Reed** 的免费 API key，再点页面上的 **🌐 搜聚合平台**，几秒横扫全英国相关岗位，
-并自动标出哪些公司在工签担保名单里。
+填上下面**四个聚合源**的免费 key（填得越多覆盖越全），再点页面上的 **🌐 搜聚合平台**，几秒横扫全英国相关岗位，
+并自动标出哪些公司在工签担保名单里：
+
+| 聚合源 | 注册地址 | 补的是什么 |
+|---|---|---|
+| **Adzuna** | https://developer.adzuna.com/ | 全英国岗位聚合（每月约 1000 次） |
+| **Reed** | https://www.reed.co.uk/developers | 英国本土最大招聘站之一 |
+| **Jooble** | https://jooble.org/api/about | 聚合大量英国招聘站，补充面广 |
+| **JSearch（RapidAPI）** | https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch | ⭐抓 **Google for Jobs**，覆盖 **LinkedIn / Indeed / Glassdoor / ZipRecruiter**——正是上面那张「盲区」表的主要来源。填 `rapidapi_key`（免费档约每月 200 次） |
+
+> **想补齐 LinkedIn/Indeed 盲区，就配 `rapidapi_key`（JSearch）**——它是唯一能把那几家大聚合站的岗位自动拉进来的源。
+> 其余靠公司卡片里的「LinkedIn 招聘官搜索 / Google 直达」链接手动补。
+> 说到底：**没有任何免费官方 API 能直连 LinkedIn/Indeed 全量**，JSearch 借道 Google for Jobs 是最实际的近似。
 
 ---
 
@@ -167,9 +178,17 @@
 按影响排序告诉你「最该补的技能」——例如 `research·83（🎯27）` 意思是这个技能缺失于 83 个岗位、
 其中 27 个是中等匹配（补上最能提分）。还会用**语料挖掘**列出 JD 里高频、但技能词表可能漏掉的表达。
 
-想要**成段的文字建议**、直接在工具里出结果：在 `data/api_keys.json` 里填上 **Claude API key**
-（字段 `anthropic_api_key`，或设环境变量 `ANTHROPIC_API_KEY`），再点 **✍️ 用 Claude 生成修改建议**——
-它会给你一份可执行的清单：先补哪几项、每项加到简历哪段怎么写、该改写哪几条经历。**不会编造你没有的经历。**
+想要**成段的文字建议**、直接在工具里出结果：在 `data/api_keys.json` 里填一个大模型 key——
+**用 ChatGPT** 填 `openai_api_key`（默认模型 `gpt-4o`，也可设环境变量 `OPENAI_API_KEY`），
+或**用 Claude** 填 `anthropic_api_key`。两个都填时用 `llm_provider` 指定（`openai` / `anthropic`），不填默认用 ChatGPT。
+配好后按钮会变成 **✍️ 用 ChatGPT 生成修改建议**，给你一份可执行清单：先补哪几项、每项加到简历哪段怎么写、该改写哪几条经历。**不会编造你没有的经历。**
+
+## 🎯 针对单个岗位改简历
+
+除了「全平台」建议，你还能**对某一个具体岗位**出定制建议：在岗位卡片上点 **匹配 %** 徽章展开，
+里面有 **✍️ 用 ChatGPT 针对此岗位改简历**——它会拿这份 **JD 正文 + 你简历的匹配缺口 + 简历全文**，
+生成这一个岗位专属的改法（补哪些词、改写哪几条经历、给一段求职信开场白），结果直接显示在卡片里。
+没配大模型 key 时，旁边的 **📋 复制 Prompt** 仍可把整段提示词复制出去，贴到 claude.ai / chatgpt.com 手动生成。
 
 ---
 
@@ -198,7 +217,7 @@
 想验证准确性，可准备 30–50 条「简历+JD+人工标签」放进 `eval/dataset.jsonl`，跑 `python eval/run_eval.py`。
 
 **覆盖的招聘系统**：Greenhouse、Lever、Ashby、Workable、SmartRecruiters、Recruitee、Personio（自动探测）；
-Workday（大厂/银行，需手动配 host/site，见 `data/slug_overrides.json`）；Adzuna / Reed 聚合器（需免费 key）。
+Workday（大厂/银行，需手动配 host/site，见 `data/slug_overrides.json`）；Adzuna / Reed / Jooble / JSearch(RapidAPI) 聚合器（需免费 key，JSearch 借道 Google for Jobs 覆盖 LinkedIn/Indeed/Glassdoor）。
 
 **开发者相关**：依赖见 `requirements.txt`；自动测试 `pytest tests/`；评估脚本 `eval/`。
 数据文件都在 `data/`：`companies.json`（名单）、`ats_cache.json`（探测缓存 = 全量清查进度）、

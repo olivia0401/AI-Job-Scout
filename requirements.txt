@@ -4,8 +4,9 @@ requests>=2.31
 openpyxl>=3.1
 pypdf>=4.0        # 解析 PDF 简历（extract_resume_text）
 
-# 简历修改建议（可选）：在工具里用 Claude 生成，需配 anthropic_api_key
-anthropic>=0.40        # 仅“生成简历修改建议”功能用到；不用可不装
+# 简历修改建议（可选）：在工具里用 ChatGPT 或 Claude 生成，二选一装即可
+openai>=1.30           # 用 ChatGPT 生成建议时需要（配 openai_api_key）
+anthropic>=0.40        # 用 Claude 生成建议时需要（配 anthropic_api_key）
 
 # 开发/测试（可选）：pytest 跑 tests/，scipy 跑 eval/ 的排名相关性
 # pip install pytest scipy
