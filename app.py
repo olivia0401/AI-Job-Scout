@@ -308,8 +308,14 @@ def _session():
     return _tls.s
 
 
+class RateLimited(Exception):
+    """对方限流/暂时不可用；此时不能把公司记为 none，否则永久漏掉。"""
+
+
 def _get_json(url):
     r = _session().get(url, timeout=TIMEOUT)
+    if r.status_code in (429, 503):
+        raise RateLimited(url)
     if r.status_code != 200:
         return None
     return r.json()
@@ -577,10 +583,14 @@ def find_ats(name):
         # 缓存失效则重新探测
 
     fallback = None  # 0 岗位的空账号可能是重名壳账号，只作兜底
+    rate_limited = False  # 被限流的探测视为"未知"而非"没有"
     for slug in slug_candidates(name):
         for ats_name, fn in PROBES:
             try:
                 res = fn(slug)
+            except RateLimited:
+                rate_limited = True
+                res = None
             except Exception:
                 res = None
             if res:
@@ -592,7 +602,8 @@ def find_ats(name):
     if fallback:
         ats_cache[name] = {"ats": fallback[0], "slug": fallback[1]}
         return fallback
-    ats_cache[name] = "none"
+    if not rate_limited:  # 限流时不写缓存，下次续跑会重新探测这家
+        ats_cache[name] = "none"
     return None
 
 
@@ -712,12 +723,12 @@ def run_scan(names, mode):
                      "started_ts": time.time(), "stop": False, "new_jobs": 0}
     processed = 0
     try:
-        with ThreadPoolExecutor(max_workers=32) as pool:
+        with ThreadPoolExecutor(max_workers=64) as pool:
             it = iter(names)
             futures = {}
 
             def submit_more():
-                while len(futures) < 128:
+                while len(futures) < 256:
                     try:
                         n = next(it)
                     except StopIteration:
