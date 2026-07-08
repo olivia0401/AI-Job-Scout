@@ -34,8 +34,8 @@
   .top { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 10px; }
   h1 { font-size: 26px; margin: 0; font-weight: 700; letter-spacing: -.45px; }
   .top .actions { margin-left: auto; display: flex; gap: 10px; align-items: center; }
-  .sub { color: var(--muted); font-size: 14px; margin-bottom: 26px; line-height: 1.7; }
-  .sub b { color: var(--green); font-weight: 600; }
+  .top { margin-bottom: 22px; }
+  .tagline { color: var(--faint); font-size: 13px; padding-top: 6px; }
 
   button, .btn {
     background: var(--accent); color: #fff; border: none; border-radius: 11px;
@@ -61,15 +61,6 @@
   .scanbar .line button { padding: 4px 14px; font-size: 12.5px; background: #fff; color: var(--accent);
                           border: 1px solid #e0e4fd; box-shadow: none; }
 
-  /* ---------- 统计 ---------- */
-  .stats { display: flex; gap: 14px 30px; flex-wrap: wrap;
-           background: var(--card); border: 1px solid var(--border); border-radius: 14px;
-           padding: 16px 22px; margin-bottom: 14px; box-shadow: var(--shadow); }
-  .stats span { display: inline-flex; flex-direction: column; gap: 1px;
-                font-size: 12px; color: var(--muted); letter-spacing: .2px; }
-  .stats b { color: var(--text); font-size: 18px; font-weight: 700;
-             font-variant-numeric: tabular-nums; letter-spacing: -.2px; line-height: 1.3; }
-
   /* ---------- 简历卡片 ---------- */
   .resume { background: var(--card); border: 1px solid var(--border); border-radius: 14px;
             padding: 14px 20px; margin-bottom: 14px; box-shadow: var(--shadow);
@@ -78,6 +69,7 @@
   .resume .info { color: var(--text2); }
   .resume .info small { color: var(--muted); display: block; font-size: 12px; margin-top: 1px; }
   .resume .acts { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .resume.need { background: var(--accent-soft); border-color: var(--accent-line); }
   #resumeFile { display: none; }
 
   /* ---------- 筛选区 ---------- */
@@ -103,18 +95,59 @@
   .vtabs .chip { border-radius: 9px; background: transparent; padding: 4px 16px; }
   .vtabs .chip.on { background: #fff; color: var(--accent); border-color: transparent; box-shadow: var(--shadow); }
 
-  /* ---------- 使用引导 ---------- */
-  details.howto { margin-bottom: 18px; }
-  details.howto summary { cursor: pointer; list-style: none; font-size: 13.5px; font-weight: 600;
-                          color: var(--accent); background: var(--accent-soft);
-                          border: 1px solid var(--accent-line); border-radius: 12px; padding: 10px 18px; }
+  /* ---------- 使用引导（页面底部，默认收起） ---------- */
+  details.howto { margin-top: 28px; }
+  details.howto summary { cursor: pointer; list-style: none; color: var(--faint); font-size: 13px;
+                          text-align: center; transition: color .15s; }
+  details.howto summary:hover { color: var(--muted); }
   details.howto summary::-webkit-details-marker { display: none; }
-  details.howto[open] summary { border-radius: 12px 12px 0 0; }
-  .hbody { background: var(--card); border: 1px solid var(--accent-line); border-top: none;
-           border-radius: 0 0 12px 12px; padding: 14px 20px; font-size: 13.5px; line-height: 2.1; }
+  .hbody { background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+           padding: 14px 20px; margin-top: 12px; font-size: 13.5px; line-height: 2.1; box-shadow: var(--shadow); }
   .hbody b.stepn { display: inline-block; width: 20px; height: 20px; line-height: 20px; text-align: center;
                    background: var(--accent); color: #fff; border-radius: 50%; font-size: 12px; margin-right: 8px; }
   .hbody .ok { color: var(--green); font-weight: 600; margin-left: 6px; }
+
+  /* ---------- 大标签页（页面主导航） ---------- */
+  .bigtabs { display: flex; gap: 4px; background: var(--card); border: 1px solid var(--border);
+             border-radius: 14px; padding: 5px; margin-bottom: 14px; box-shadow: var(--shadow); }
+  .btab { flex: 1; text-align: center; padding: 10px 8px; border-radius: 10px; cursor: pointer;
+          font-size: 14.5px; font-weight: 600; color: var(--muted); transition: all .15s; user-select: none; }
+  .btab:hover { color: var(--text2); background: var(--soft); }
+  .btab.on { background: var(--accent-soft); color: var(--accent); }
+  .btab b { font-weight: 700; font-size: 12.5px; background: rgba(79,99,245,.12); border-radius: 9px;
+            padding: 1px 8px; margin-left: 6px; font-variant-numeric: tabular-nums; }
+  .btab:not(.on) b { background: var(--soft); }
+  .btab b:empty { display: none; }
+
+  /* ---------- ⋯ 菜单 ---------- */
+  details.menu { position: relative; }
+  details.menu summary { cursor: pointer; list-style: none; background: var(--card);
+                         border: 1px solid var(--border); border-radius: 11px; padding: 10px 16px;
+                         font-size: 15px; font-weight: 700; color: var(--text2); line-height: 1.35;
+                         box-shadow: var(--shadow); }
+  details.menu summary::-webkit-details-marker { display: none; }
+  details.menu[open] summary { border-color: var(--accent-line); color: var(--accent); }
+  .mitems { position: absolute; right: 0; top: calc(100% + 6px); z-index: 50; min-width: 260px;
+            background: var(--card); border: 1px solid var(--border); border-radius: 13px;
+            box-shadow: var(--shadow-lift); padding: 6px; display: flex; flex-direction: column; }
+  .mitems a, .mitems button { display: block; width: 100%; text-align: left; background: none;
+            border: none; box-shadow: none; color: var(--text2); font-size: 13.5px; padding: 9px 13px;
+            border-radius: 9px; cursor: pointer; text-decoration: none; font-family: inherit; }
+  .mitems a:hover, .mitems button:hover { background: var(--soft); color: var(--text); transform: none; filter: none; }
+  .mitems .msep { border-top: 1px solid var(--soft); margin: 5px 8px; }
+  .mitems small { color: var(--muted); display: block; font-size: 11.5px; margin-top: 1px; }
+
+  /* ---------- 筛选行的下拉框 ---------- */
+  .fsel { background: var(--soft); border: 1px solid transparent; color: var(--text2); cursor: pointer;
+          border-radius: 18px; padding: 6px 12px; font-size: 13px; outline: none; font-family: inherit; }
+  .fsel:hover { background: #e9ecf3; }
+  .fsel:focus { background: #fff; border-color: var(--accent-line); }
+
+  /* ---------- 空状态 ---------- */
+  .empty { background: var(--card); border: 1px dashed var(--border); border-radius: 16px;
+           padding: 48px 24px; text-align: center; }
+  .empty .big { font-size: 40px; margin-bottom: 10px; }
+  .empty p { color: var(--muted); font-size: 14px; margin: 6px 0 18px; line-height: 1.9; }
 
   /* ---------- 岗位卡片 ---------- */
   .jobrow { background: var(--card); border: 1px solid var(--border); border-radius: 14px;
@@ -258,22 +291,21 @@
 <div class="wrap">
   <div class="top">
     <h1>🎯 AI Job Scout</h1>
+    <span class="tagline">英国工签雇主 · 岗位雷达</span>
     <div class="actions">
-      <button onclick="scan('known')" id="btnRefresh">🔄 刷新最新岗位</button>
-      <button class="ghost" onclick="runAgg()" id="btnAgg" title="用 Adzuna/Reed 官方 API 横扫全英国 AI 岗位（需在 data/api_keys.json 配 key）">🌐 搜聚合平台</button>
-      <a class="btn ghost" href="/api/export">📥 导出</a>
+      <button onclick="scan('known')" id="btnRefresh">🔄 扫描新岗位</button>
+      <details class="menu" id="moreMenu">
+        <summary>⋯</summary>
+        <div class="mitems">
+          <a href="/api/export">📥 导出 Excel</a>
+          <button id="btnAgg" onclick="menuDo(runAgg)">🌐 搜聚合平台<small>补 LinkedIn / Indeed / Glassdoor 盲区</small></button>
+          <button id="btnPending" onclick="menuDo(() => scan('pending'))">🌊 全量清查工签雇主<small>第一次用跑一夜即可，之后日常只需扫描新岗位</small></button>
+          <div class="msep"></div>
+          <button onclick="menuDo(openSettings)">⚙️ 关键词与设置</button>
+        </div>
+      </details>
     </div>
   </div>
-  <div class="sub">以下岗位全部来自<b>持英国 Skilled Worker 工签资质</b>的雇主 · <b style="color:var(--accent)">点任意岗位可展开：看匹配细节 + 生成该岗位专属的简历修改建议</b></div>
-
-  <details class="howto" id="howto">
-    <summary>📖 三步上手（点开看）</summary>
-    <div class="hbody">
-      <div><b class="stepn">1</b>点右上 <b>🔄 刷新最新岗位</b> 抓取岗位<span id="step1ok"></span>　<span style="color:var(--muted)">（第一次建议先在页面底部「⚙️ 高级」里跑一遍 🌊 全量清查，一夜跑完，之后日常只用刷新）</span></div>
-      <div><b class="stepn">2</b>上传你的简历（下方 📄 卡片），自动给每个岗位算 0–100 匹配分<span id="step2ok"></span></div>
-      <div><b class="stepn">3</b><b>点任意岗位行展开</b> → 看缺哪些技能 → 生成<b>✍️ 简历修改建议</b>和<b>💬 networking 搭话草稿</b>；想投的点 <b>☆ 收藏</b>，去 <b>📌 投递清单</b> 里跟踪状态（待投→已投→面试中）</div>
-    </div>
-  </details>
 
   <div class="scanbar" id="scanbar">
     <div class="line">
@@ -287,42 +319,37 @@
   <input type="file" id="resumeFile" accept=".pdf,.docx,.txt,.md" onchange="uploadResume()">
   <div id="suggestBox"></div>
 
-  <div class="stats" id="stats"></div>
+  <div class="bigtabs">
+    <span class="btab on" data-g="view" data-v="feed" onclick="setF(this)">🔍 岗位<b id="cntFeed"></b></span>
+    <span class="btab" data-g="view" data-v="company" onclick="setF(this)">🏢 公司<b id="cntCo"></b></span>
+    <span class="btab" data-g="view" data-v="tracker" onclick="setF(this)">📌 投递清单<b id="cntTrack"></b></span>
+  </div>
 
-  <div class="filterbox">
+  <div class="filterbox" id="filterbox">
     <div class="frow">
-      <span class="flabel">地区</span>
-      <span class="chip on" data-g="region" data-v="all" onclick="setF(this)">全部</span>
-      <span class="chip" data-g="region" data-v="uk" onclick="setF(this)">🇬🇧 英国</span>
-      <span class="chip" data-g="region" data-v="europe" onclick="setF(this)">🇪🇺 欧洲</span>
-      <span class="chip" data-g="region" data-v="china" onclick="setF(this)">🇨🇳 中国</span>
-      <span class="chip" data-g="region" data-v="remote" onclick="setF(this)">🌍 Remote</span>
       <div class="vtabs">
-        <span class="chip on" data-g="sort" data-v="date" onclick="setF(this)">最新优先</span>
-        <span class="chip" data-g="sort" data-v="score" onclick="setF(this)">匹配度优先</span>
+        <span class="chip on" data-g="sort" data-v="date" onclick="setF(this)">最新</span>
+        <span class="chip" data-g="sort" data-v="score" onclick="setF(this)">匹配度</span>
       </div>
-      <div class="vtabs" style="margin-left:8px">
-        <span class="chip on" data-g="view" data-v="feed" onclick="setF(this)">岗位</span>
-        <span class="chip" data-g="view" data-v="company" onclick="setF(this)">公司</span>
-        <span class="chip" data-g="view" data-v="tracker" onclick="setF(this)" id="trackerTab">📌 投递清单</span>
-      </div>
-    </div>
-    <div class="frow">
-      <span class="flabel">级别</span>
-      <span class="chip on" data-g="level" data-v="all" onclick="setF(this)">全部</span>
-      <span class="chip" data-g="level" data-v="grad" onclick="setF(this)">实习/毕业生</span>
-      <span class="chip" data-g="level" data-v="junior" onclick="setF(this)">初级</span>
-      <span class="chip" data-g="level" data-v="mid" onclick="setF(this)">中级</span>
-      <span class="chip" data-g="level" data-v="senior" onclick="setF(this)">高级</span>
-      <span class="chip" data-g="level" data-v="staff" onclick="setF(this)">Staff/Lead</span>
-      <span class="chip" data-g="level" data-v="mgmt" onclick="setF(this)">管理层</span>
-    </div>
-    <div class="frow">
-      <span class="flabel">标签</span>
+      <select class="fsel" onchange="F.region = this.value; render()">
+        <option value="all">🌍 所有地区</option>
+        <option value="uk">🇬🇧 英国</option>
+        <option value="europe">🇪🇺 欧洲</option>
+        <option value="china">🇨🇳 中国</option>
+        <option value="remote">🏠 Remote</option>
+      </select>
+      <select class="fsel" onchange="F.level = this.value; render()">
+        <option value="all">所有级别</option>
+        <option value="grad">实习/毕业生</option>
+        <option value="junior">初级</option>
+        <option value="mid">中级</option>
+        <option value="senior">高级</option>
+        <option value="staff">Staff/Lead</option>
+        <option value="mgmt">管理层</option>
+      </select>
       <span class="chip star" data-t="llm" onclick="toggleT(this)">⭐ LLM</span>
       <span class="chip" data-t="new" onclick="toggleT(this)">🆕 新上架</span>
-      <span class="chip" data-t="long" onclick="toggleT(this)">⏳ 长期在招</span>
-      <span class="chip star" data-t="curated" onclick="toggleT(this)">精选科技公司</span>
+      <span class="chip star" data-t="curated" onclick="toggleT(this)">精选公司</span>
       <input type="text" id="search" placeholder="搜索岗位 / 公司…" oninput="render()">
     </div>
   </div>
@@ -330,11 +357,19 @@
   <div id="list"></div>
   <div class="hint" id="emptyHint"></div>
 
+  <details class="howto" id="howto">
+    <summary>📖 使用说明</summary>
+    <div class="hbody">
+      <div><b class="stepn">1</b>点右上 <b>🔄 扫描新岗位</b> 抓取岗位<span id="step1ok"></span>　<span style="color:var(--muted)">（第一次用先点 ⋯ 菜单里的 🌊 全量清查，跑一夜，之后日常只需扫描）</span></div>
+      <div><b class="stepn">2</b>上传你的简历，自动给每个岗位算 0–100 匹配分<span id="step2ok"></span></div>
+      <div><b class="stepn">3</b><b>点任意岗位行展开</b> → 生成<b>✍️ 简历修改建议</b>和<b>💬 networking 搭话草稿</b>；想投的点 <b>☆ 收藏</b>，去 <b>📌 投递清单</b> 跟踪状态</div>
+    </div>
+  </details>
+
   <details class="adv">
-    <summary>⚙️ 高级：全量清查 · 关键词 · 自动刷新 · 粘贴简历</summary>
+    <summary>⚙️ 设置：关键词 · 自动刷新 · 粘贴简历</summary>
     <div class="advbody">
       <div class="row">
-        <button class="ghost" onclick="scan('pending')" id="btnPending">🌊 继续全量清查 register</button>
         <span class="note" id="pendingNote"></span>
       </div>
       <div class="row" style="margin-top:10px">
@@ -409,18 +444,11 @@ async function refresh() {
   document.getElementById('autoHours').value = S.auto_hours || 0;
   document.getElementById('expYears').value = S.exp_years ?? 1;
   const c = S.counts || {};
-  const stat = (label, v) => `<span>${label}<b>${(v ?? 0).toLocaleString()}</b></span>`;
-  document.getElementById('stats').innerHTML =
-    stat('匹配岗位', c.ai_jobs) +
-    stat('🇬🇧 英国', c.uk_jobs) +
-    stat('⭐ LLM', c.llm_jobs) + stat('🆕 新上架', c.new_jobs) +
-    stat('在招公司', c.has_ai) +
-    `<span>工签雇主库<b class="num">${(c.total ?? 0).toLocaleString()}</b></span>`;
-  // 首次使用（没岗位或没简历）时自动展开引导——只在页面刚打开时设置一次
-  if (!window._howtoInit) {
-    window._howtoInit = true;
-    document.getElementById('howto').open = !(c.ai_jobs > 0 && S.resume);
-    // 已有匹配分时，默认按匹配度排序
+  document.getElementById('cntFeed').textContent = c.ai_jobs ? c.ai_jobs.toLocaleString() : '';
+  document.getElementById('cntCo').textContent = c.has_ai ? c.has_ai.toLocaleString() : '';
+  // 已有匹配分时，默认按匹配度排序——只在页面刚打开时设置一次
+  if (!window._sortInit) {
+    window._sortInit = true;
     if ((S.feed || []).some(j => j.score != null)) {
       F.sort = 'score';
       document.querySelectorAll('.chip[data-g="sort"]').forEach(x =>
@@ -441,7 +469,8 @@ async function refresh() {
   if (btnAgg) {
     const running = (S.agg || {}).running;
     btnAgg.disabled = running;
-    btnAgg.textContent = running ? '🌐 搜索中…' : '🌐 搜聚合平台';
+    btnAgg.innerHTML = (running ? '🌐 搜索中…' : '🌐 搜聚合平台')
+      + '<small>补 LinkedIn / Indeed / Glassdoor 盲区</small>';
     if (!S.has_api_keys) btnAgg.title = '需先在 data/api_keys.json 配置 Adzuna/Reed 的免费 API key';
   }
   renderResume();
@@ -454,26 +483,25 @@ function renderResume() {
   const el = document.getElementById('resumeCard');
   const m = S.match || {};
   if (!S.resume) {
+    el.className = 'resume need';
     el.innerHTML = `
       <span class="icon">📄</span>
-      <span class="info">上传简历，自动计算每个岗位的 <b style="color:var(--accent)">ATS 匹配度</b>，并给出针对性优化建议
-        <small>支持 PDF / Word / TXT · 只保存在你本机</small></span>
+      <span class="info"><b>第一步：上传你的简历</b>——每个岗位自动算出匹配度，并解锁定制简历建议
+        <small>支持 PDF / Word / TXT · 只保存在你自己电脑上</small></span>
       <span class="acts"><button onclick="document.getElementById('resumeFile').click()">上传简历</button></span>`;
     return;
   }
+  el.className = 'resume';
   const scored = (S.feed || []).filter(j => j.score != null).length;
-  let status;
-  if (m.running) status = `⏳ 正在计算匹配度… ${m.done}/${m.total} 家公司`;
-  else if (scored) status = `已为 ${scored} 个岗位算出匹配度——<b>点任意岗位行展开</b>，看匹配细节、生成该岗位的简历修改建议`;
-  else status = `点右侧"计算匹配度"开始`;
+  let status = '';
+  if (m.running) status = ` · ⏳ 正在计算匹配度 ${m.done}/${m.total}`;
   el.innerHTML = `
     <span class="icon">📄</span>
-    <span class="info"><b>${esc(S.resume.name)}</b> · 识别到 ${S.resume.keywords.length} 个技能关键词 · ${esc(S.resume.updated)}
-      <small>${status}</small></span>
+    <span class="info"><b>${esc(S.resume.name)}</b> ✓ ${S.resume.keywords.length} 个技能${status}</span>
     <span class="acts">
       <button class="mini ghost" onclick="document.getElementById('resumeFile').click()">重新上传</button>
-      <button class="mini ghost" onclick="loadSuggestions()" ${scored ? '' : 'disabled'} title="${scored ? '' : '先算出匹配度再看'}">🎯 简历提升建议</button>
-      <button class="mini" onclick="runMatch()" ${m.running ? 'disabled' : ''}>🎯 计算匹配度</button>
+      <button class="mini ghost" onclick="loadSuggestions()" ${scored ? '' : 'disabled'}>🎯 全平台简历建议</button>
+      ${!scored && !m.running ? `<button class="mini" onclick="runMatch()">🎯 计算匹配度</button>` : ''}
     </span>`;
   if (m.running && !pollTimer) pollTimer = setInterval(refresh, 2500);
 }
@@ -544,9 +572,19 @@ function renderScan() {
 
 function setF(el) {
   F[el.dataset.g] = el.dataset.v;
-  document.querySelectorAll(`.chip[data-g="${el.dataset.g}"]`).forEach(x =>
+  document.querySelectorAll(`[data-g="${el.dataset.g}"]`).forEach(x =>
     x.classList.toggle('on', x === el));
   render();
+}
+// ⋯ 菜单项：先收起菜单再执行
+function menuDo(fn) {
+  document.getElementById('moreMenu').open = false;
+  fn();
+}
+function openSettings() {
+  const adv = document.querySelector('details.adv');
+  adv.open = true;
+  adv.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 function toggleT(el) {
   T[el.dataset.t] = !T[el.dataset.t];
@@ -693,8 +731,8 @@ async function trackJob(url, status) {
 }
 function updateTrackerTab() {
   const n = Object.keys(S.tracker || {}).length;
-  const el = document.getElementById('trackerTab');
-  if (el) el.textContent = n ? `📌 投递清单 ${n}` : '📌 投递清单';
+  const el = document.getElementById('cntTrack');
+  if (el) el.textContent = n || '';
 }
 function starBtn(j) {
   const t = (S.tracker || {})[j.url];
@@ -796,6 +834,8 @@ function render() {
   const list = document.getElementById('list');
   const hint = document.getElementById('emptyHint');
   const cnBox = F.region === 'china' ? cnDirectory() : '';
+  // 投递清单不需要筛选行
+  document.getElementById('filterbox').style.display = F.view === 'tracker' ? 'none' : '';
 
   // 投递清单视图
   if (F.view === 'tracker') {
@@ -829,13 +869,26 @@ function render() {
           ${matchDetail(j)}
         </div>
       </div>`).join('');
-    hint.innerHTML = items.length
-      ? '投递流程：在这里改状态（待投→已投→面试中）；展开岗位可生成定制简历建议和 networking 搭话草稿。'
-      : '清单还是空的——回「岗位」列表，点岗位行右侧的「☆ 收藏」，把想投的岗位加进来。';
+    if (!items.length) {
+      list.innerHTML = `<div class="empty"><div class="big">📌</div>
+        <p>清单还是空的。在岗位列表里点 <b>☆ 收藏</b>，把想投的岗位加进来，<br>然后在这里跟踪状态：待投 → 已投 → 面试中</p>
+        <button class="ghost" onclick="document.querySelector('[data-g=view][data-v=feed]').click()">← 去挑岗位</button></div>`;
+      hint.innerHTML = '';
+      return;
+    }
+    hint.innerHTML = '在这里改状态（待投→已投→面试中）；展开岗位可生成定制简历建议和 networking 搭话草稿。';
     return;
   }
 
   if (F.view === 'feed') {
+    if (!(S.feed || []).length) {
+      list.innerHTML = cnBox + `<div class="empty"><div class="big">🛰️</div>
+        <p>还没抓到岗位。点下面的按钮开始扫描<br>
+        <span style="font-size:12.5px;color:var(--faint)">第一次使用：先点右上 ⋯ 菜单里的「🌊 全量清查」跑一夜，覆盖全部 12 万家工签雇主</span></p>
+        <button onclick="scan('known')">🔄 扫描新岗位</button></div>`;
+      hint.innerHTML = '';
+      return;
+    }
     let items = (S.feed || []).filter(j => passJob(j, q));
     if (F.sort === 'score') items = [...items].sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
     list.innerHTML = cnBox + items.slice(0, 250).map(j => `
