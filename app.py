@@ -160,6 +160,7 @@ state = {
     "exp_years": 1,        # 我的工作年限（用于年限门槛检测）
     "agg_jobs": {},        # 聚合器(Adzuna/Reed)岗位：url -> {...}
     "agg": {"running": False, "done": 0, "total": 0},
+    "tracker": {},         # 投递清单：job_url -> {"status","ts","title","company","location"}
 }
 ats_cache = {}  # name -> {"ats","slug"} | "none"
 api_keys = {}   # {"adzuna_app_id","adzuna_app_key","reed_api_key"}
@@ -223,6 +224,7 @@ def load_all():
         state["match_stats"] = saved.get("match_stats", {})
         state["agg_jobs"] = saved.get("agg_jobs", {})
         state["exp_years"] = saved.get("exp_years", 1)
+        state["tracker"] = saved.get("tracker", {})
         for name, r in saved.get("results", {}).items():
             r.pop("links", None)  # 旧版把链接存了盘，现在改为按需生成
             state["results"][name] = r
@@ -257,6 +259,7 @@ def save_state():
             "match_stats": state["match_stats"],
             "agg_jobs": state["agg_jobs"],
             "exp_years": state["exp_years"],
+            "tracker": state["tracker"],
         }, ensure_ascii=False)
     _atomic_write(STATE_FILE, payload)
 
@@ -1572,6 +1575,77 @@ def api_job_advice():
     return jsonify({"advice": advice})
 
 
+# ---------------------------------------------------------------- 投递清单
+TRACK_STATUSES = ("saved", "applied", "interview", "offer", "rejected")
+
+
+@app.route("/api/track", methods=["POST"])
+def api_track():
+    data = request.get_json(silent=True) or {}
+    url = (data.get("url") or "").strip()
+    status = (data.get("status") or "").strip()
+    if not url:
+        return jsonify({"error": "缺少岗位链接"}), 400
+    with _lock:
+        if status == "remove":
+            state["tracker"].pop(url, None)
+        elif status in TRACK_STATUSES:
+            ent = state["tracker"].get(url) or {"ts": date.today().isoformat()}
+            ent["status"] = status
+            # 存岗位快照：岗位下架后清单里仍能显示
+            for k in ("title", "company", "location"):
+                if data.get(k):
+                    ent[k] = data[k]
+            state["tracker"][url] = ent
+        else:
+            return jsonify({"error": "无效状态"}), 400
+        tracker = dict(state["tracker"])
+    save_state()
+    return jsonify({"ok": True, "tracker": tracker})
+
+
+def generate_outreach(url):
+    """针对单个岗位生成个性化 networking 搭话草稿（LinkedIn 申请附言、跟进私信、冷邮件）。"""
+    resume = state.get("resume") or {}
+    meta = _find_job(url) or {}
+    ms = state["match_scores"].get(url) or {}
+    jd = (load_desc_cache().get(url) or "")[:4000]
+    prompt = f"""我想就下面这个岗位，主动联系这家公司的招聘官或团队成员（networking）。请基于我的简历亮点，为我起草个性化的英文搭话内容——要像我本人手写的：具体、真诚、克制，绝不能有套话群发感。
+
+【目标岗位】{meta.get('title', '')} — {meta.get('company', '')}（{meta.get('location', '')}）
+【我与岗位的重合点】{('、'.join(ms.get('hit', [])[:10]) or '（还没算匹配度，请从我简历里挑最相关的亮点）')}
+【JD 正文节选】
+{jd or '（未抓到正文，依据岗位标题和公司背景来写）'}
+
+【我的简历全文】
+{(resume.get('text') or '')[:6000]}
+
+请输出三部分（英文正文，每部分前用一行中文说明用途；Markdown 格式）：
+1. **LinkedIn 好友申请附言**（≤280 字符：一句对这家公司具体产品/技术方向的真实兴趣 + 一句我是谁 + 轻量请求）
+2. **通过后的跟进私信**（100–150 词：为什么对这个岗位/团队感兴趣（具体到产品或技术栈）、我最相关的 1–2 个量化成果、一个清晰的小请求——15 分钟聊聊或帮忙内推）
+3. **冷邮件**（含 Subject 行；120–180 词，结构同上但更正式，结尾提一句简历见附件）
+
+硬性要求：不编造我没有的经历；语气自信但不自夸；每一封都必须包含至少一个只属于这家公司的具体细节（产品名/技术方向/公开的近期动态），JD 里没有就基于公司名选择其公开的主营方向。"""
+    return _llm_complete(prompt, max_tokens=4000)
+
+
+@app.route("/api/outreach", methods=["POST"])
+def api_outreach():
+    if not state.get("resume"):
+        return jsonify({"error": "请先上传简历"}), 400
+    if not _llm_ready():
+        return jsonify({"error": LLM_MISSING_MSG}), 400
+    data = request.get_json(silent=True) or {}
+    url = (data.get("url") or "").strip()
+    if not url:
+        return jsonify({"error": "缺少岗位链接"}), 400
+    try:
+        draft = generate_outreach(url)
+    except Exception as e:
+        return jsonify({"error": f"生成失败: {e}"}), 500
+    return jsonify({"draft": draft})
+
+
 # ---------------------------------------------------------------- 导入
 COMPANY_HEADER_HINTS = ["company", "organisation", "organization", "employer",
                         "sponsor", "name", "公司", "雇主", "企业"]
@@ -1814,6 +1888,7 @@ def api_state():
             "has_api_keys": _has_agg_keys(),
             "has_llm": _llm_ready(),
             "llm_label": LLM_LABELS.get(_llm_provider()),
+            "tracker": dict(state["tracker"]),
             "resume": ({"name": resume["name"], "updated": resume["updated"],
                         "keywords": resume["keywords"], "text": resume["text"]}
                        if resume else None),

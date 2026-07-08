@@ -137,6 +137,20 @@
   .scorebox.md { background: var(--amber-soft); color: var(--amber); }
   .scorebox.lo { background: var(--soft); color: var(--muted); }
   .scorebox.none { background: var(--soft); color: var(--faint); font-size: 16px; font-weight: 600; }
+
+  /* 投递清单 */
+  .starbtn { background: none; border: none; box-shadow: none; padding: 2px 6px; cursor: pointer;
+             font-size: 13px; color: var(--muted); border-radius: 8px; }
+  .starbtn:hover { background: var(--gold-soft); color: var(--gold); transform: none; filter: none; }
+  .starbtn.on { color: var(--gold); }
+  .stsel { border: 1px solid var(--border); border-radius: 9px; padding: 4px 8px; font-size: 12.5px;
+           font-family: inherit; color: var(--text2); background: var(--card); cursor: pointer; outline: none; }
+  .stsel.st_saved { background: var(--accent-soft); color: var(--accent-deep); border-color: var(--accent-line); }
+  .stsel.st_applied { background: var(--green-soft); color: var(--green); border-color: #bfe6d4; }
+  .stsel.st_interview { background: var(--gold-soft); color: var(--gold); border-color: #ead992; }
+  .stsel.st_offer { background: var(--green-soft); color: var(--green); border-color: #bfe6d4; font-weight: 700; }
+  .stsel.st_rejected { background: var(--soft); color: var(--muted); }
+  .gonewarn { font-size: 11.5px; color: var(--red); }
   .jobrow .l1 { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .jobrow a.title { color: var(--text); font-weight: 650; font-size: 15px; line-height: 1.45;
                     text-decoration: none; letter-spacing: -.1px; }
@@ -257,7 +271,7 @@
     <div class="hbody">
       <div><b class="stepn">1</b>点右上 <b>🔄 刷新最新岗位</b> 抓取岗位<span id="step1ok"></span>　<span style="color:var(--muted)">（第一次建议先在页面底部「⚙️ 高级」里跑一遍 🌊 全量清查，一夜跑完，之后日常只用刷新）</span></div>
       <div><b class="stepn">2</b>上传你的简历（下方 📄 卡片），自动给每个岗位算 0–100 匹配分<span id="step2ok"></span></div>
-      <div><b class="stepn">3</b><b>点任意岗位行展开</b> → 看你缺哪些技能 → 点 <b>✍️ 生成这个岗位的简历修改建议</b>，几十秒出定制方案</div>
+      <div><b class="stepn">3</b><b>点任意岗位行展开</b> → 看缺哪些技能 → 生成<b>✍️ 简历修改建议</b>和<b>💬 networking 搭话草稿</b>；想投的点 <b>☆ 收藏</b>，去 <b>📌 投递清单</b> 里跟踪状态（待投→已投→面试中）</div>
     </div>
   </details>
 
@@ -290,6 +304,7 @@
       <div class="vtabs" style="margin-left:8px">
         <span class="chip on" data-g="view" data-v="feed" onclick="setF(this)">岗位</span>
         <span class="chip" data-g="view" data-v="company" onclick="setF(this)">公司</span>
+        <span class="chip" data-g="view" data-v="tracker" onclick="setF(this)" id="trackerTab">📌 投递清单</span>
       </div>
     </div>
     <div class="frow">
@@ -356,8 +371,12 @@ let F = { view: 'feed', region: 'all', level: 'all', sort: 'date' };
 let T = { llm: false, new: false, long: false, curated: false };
 let expanded = new Set();
 let pollTimer = null;
-const jobAdvice = {};        // url -> Claude 生成的岗位专属建议(Markdown)
+const jobAdvice = {};        // url -> 岗位专属简历建议(Markdown)
 const jobAdviceBusy = new Set();  // 正在为哪些 url 生成建议
+const jobOutreach = {};      // url -> networking 搭话草稿(Markdown)
+const outreachBusy = new Set();
+const ST_LABELS = { saved: '📌 待投', applied: '📤 已投', interview: '🎤 面试中',
+                    offer: '🎉 Offer', rejected: '❌ 已拒' };
 
 const CN_BIGTECH = [
   ['字节跳动', 'https://jobs.bytedance.com/experienced/position?keywords=%E5%A4%A7%E6%A8%A1%E5%9E%8B'],
@@ -426,6 +445,7 @@ async function refresh() {
     if (!S.has_api_keys) btnAgg.title = '需先在 data/api_keys.json 配置 Adzuna/Reed 的免费 API key';
   }
   renderResume();
+  updateTrackerTab();
   render();
   renderScan();
 }
@@ -630,18 +650,86 @@ function matchDetail(j) {
       ${S.has_llm
         ? `<button onclick="genJobAdvice('${esc(j.url)}')" ${jobAdviceBusy.has(j.url) ? 'disabled' : ''}>✍️ 生成这个岗位的简历修改建议</button>`
         : `<button disabled title="在 data/api_keys.json 填 openai_api_key（ChatGPT）或 anthropic_api_key（Claude）后可用">✍️ 生成简历修改建议（需先配 ChatGPT/Claude key）</button>`}
+      ${S.has_llm
+        ? `<button class="ghost" onclick="genOutreach('${esc(j.url)}')" ${outreachBusy.has(j.url) ? 'disabled' : ''}>💬 生成 networking 搭话草稿</button>` : ''}
       <button class="mini ghost" onclick="copyPrompt('${esc(j.url)}')">📋 复制 Prompt（贴给别处的 Claude/ChatGPT）</button>
-      <a class="btn ghost mini" style="padding:5px 14px;font-size:12.5px;border-radius:9px" href="${esc(j.url)}" target="_blank">↗ 打开岗位原文</a>
+      <a class="btn ghost mini" style="padding:5px 14px;font-size:12.5px;border-radius:9px" href="${esc(j.url)}" target="_blank">↗ 打开岗位/申请页</a>
+      ${netLinks(j)}
     </div>
     ${jobAdviceBusy.has(j.url)
       ? `<div class="info" style="margin-top:8px">⏳ 正在针对这个岗位生成简历修改建议（约需十几秒，别关页面）…</div>`
       : (jobAdvice[j.url] ? `<div class="advice">${mdToHtml(jobAdvice[j.url])}</div>` : '')}
+    ${outreachBusy.has(j.url)
+      ? `<div class="info" style="margin-top:8px">⏳ 正在生成个性化搭话草稿（LinkedIn 附言 / 私信 / 冷邮件）…</div>`
+      : (jobOutreach[j.url] ? `<div class="advice"><b>💬 Networking 搭话草稿</b>（发送前自己读一遍、改成你的口气）
+          <button class="mini ghost" style="margin-left:8px" onclick="copyOutreach('${esc(j.url)}')">📋 复制全部</button>
+          ${mdToHtml(jobOutreach[j.url])}</div>` : '')}
   </div>`;
 }
-// 点击岗位行任意空白处展开/收起；点链接、按钮、已展开的详情区不触发
+// 找人脉的快捷链接（公司在 results 里才有）
+function netLinks(j) {
+  const r = (S.results || {})[j.company];
+  const L = r && r.links;
+  if (!L) return '';
+  return `<a class="btn ghost mini" style="padding:5px 14px;font-size:12.5px;border-radius:9px" href="${esc(L.li_people)}" target="_blank">👤 LinkedIn 找招聘官</a>
+    <a class="btn ghost mini" style="padding:5px 14px;font-size:12.5px;border-radius:9px" href="${esc(L.hunter)}" target="_blank">📧 查邮箱</a>`;
+}
+// 点击岗位行任意空白处展开/收起；点链接、按钮、下拉框、已展开的详情区不触发
 function rowClick(ev, url) {
-  if (ev.target.closest('a, button, .matchbox')) return;
+  if (ev.target.closest('a, button, select, .matchbox')) return;
   toggleMatch(url);
+}
+
+// ---------------- 投递清单 ----------------
+async function trackJob(url, status) {
+  const j = (S.feed || []).find(x => x.url === url) || {};
+  const r = await fetch('/api/track', { method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url, status, title: j.title, company: j.company, location: j.location }) });
+  const d = await r.json();
+  if (d.error) { alert(d.error); return; }
+  S.tracker = d.tracker;
+  updateTrackerTab(); render();
+}
+function updateTrackerTab() {
+  const n = Object.keys(S.tracker || {}).length;
+  const el = document.getElementById('trackerTab');
+  if (el) el.textContent = n ? `📌 投递清单 ${n}` : '📌 投递清单';
+}
+function starBtn(j) {
+  const t = (S.tracker || {})[j.url];
+  return t
+    ? `<button class="starbtn on" title="已在投递清单（${ST_LABELS[t.status] || t.status}）——点击移出" onclick="trackJob('${esc(j.url)}', 'remove')">★ 已收藏</button>`
+    : `<button class="starbtn" title="加入投递清单" onclick="trackJob('${esc(j.url)}', 'saved')">☆ 收藏</button>`;
+}
+function statusSel(j) {
+  const t = (S.tracker || {})[j.url];
+  if (!t) return '';
+  const opts = Object.entries(ST_LABELS).map(([v, l]) =>
+    `<option value="${v}" ${t.status === v ? 'selected' : ''}>${l}</option>`).join('');
+  return `<select class="stsel st_${esc(t.status)}" onchange="trackJob('${esc(j.url)}', this.value)">
+    ${opts}<option value="remove">🗑 移出清单</option></select>`;
+}
+
+// ---------------- networking 搭话草稿 ----------------
+async function genOutreach(url) {
+  outreachBusy.add(url); render();
+  try {
+    const r = await fetch('/api/outreach', { method: 'POST',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
+    const d = await r.json();
+    jobOutreach[url] = d.error ? `**出错了：** ${d.error}` : (d.draft || '（无内容）');
+  } catch (e) {
+    jobOutreach[url] = `**出错了：** ${e}`;
+  } finally {
+    outreachBusy.delete(url); render();
+  }
+}
+async function copyOutreach(url) {
+  const md = jobOutreach[url];
+  if (!md) return;
+  try { await navigator.clipboard.writeText(md); alert('草稿已复制！挑对应段落粘贴即可。'); }
+  catch (e) { prompt_fallback(md); }
 }
 async function genJobAdvice(url) {
   jobAdviceBusy.add(url); render();
@@ -709,6 +797,44 @@ function render() {
   const hint = document.getElementById('emptyHint');
   const cnBox = F.region === 'china' ? cnDirectory() : '';
 
+  // 投递清单视图
+  if (F.view === 'tracker') {
+    const feedMap = {};
+    (S.feed || []).forEach(j => { feedMap[j.url] = j; });
+    const stOrder = { saved: 0, applied: 1, interview: 2, offer: 3, rejected: 4 };
+    const items = Object.entries(S.tracker || {}).map(([url, t]) => {
+      const j = feedMap[url];
+      return { ...(j || { url, title: t.title || url, company: t.company || '', location: t.location || '' }),
+               t, gone: !j };
+    }).sort((a, b) => (stOrder[a.t.status] ?? 9) - (stOrder[b.t.status] ?? 9)
+                   || (b.score ?? -1) - (a.score ?? -1));
+    list.innerHTML = items.map(j => `
+      <div class="jobrow ${expanded.has(j.url) ? 'open' : ''}" onclick="rowClick(event, '${esc(j.url)}')">
+        ${scoreBlock(j)}
+        <div class="jr-main">
+          <div class="l1">
+            <a class="title" href="${esc(j.url)}" target="_blank">${esc(j.title)}</a>
+            ${j.gone ? '<span class="gonewarn">⚠️ 岗位可能已下架</span>' : jobBadges(j)}
+          </div>
+          <div class="l2">
+            <span class="co">${esc(j.company)}</span>
+            <span class="dot">·</span>
+            <span>${esc(j.location)}</span>
+            <span class="dot">·</span>
+            <span class="num">收藏于 ${esc(j.t.ts || '')}</span>
+            <span style="margin-left:auto"></span>
+            ${statusSel(j)}
+            <span class="expander" style="margin-left:8px">${expanded.has(j.url) ? '收起 ▴' : '详情 · 改简历 · 搭话 ▾'}</span>
+          </div>
+          ${matchDetail(j)}
+        </div>
+      </div>`).join('');
+    hint.innerHTML = items.length
+      ? '投递流程：在这里改状态（待投→已投→面试中）；展开岗位可生成定制简历建议和 networking 搭话草稿。'
+      : '清单还是空的——回「岗位」列表，点岗位行右侧的「☆ 收藏」，把想投的岗位加进来。';
+    return;
+  }
+
   if (F.view === 'feed') {
     let items = (S.feed || []).filter(j => passJob(j, q));
     if (F.sort === 'score') items = [...items].sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
@@ -725,7 +851,9 @@ function render() {
             <span class="dot">·</span>
             <span>${esc(j.location)}</span>
             ${daysTxt(j) ? `<span class="dot">·</span><span class="num">${daysTxt(j)}</span>` : ''}
-            <span class="expander">${expanded.has(j.url) ? '收起 ▴' : '详情 · 改简历 ▾'}</span>
+            <span style="margin-left:auto"></span>
+            ${starBtn(j)}
+            <span class="expander" style="margin-left:0">${expanded.has(j.url) ? '收起 ▴' : '详情 · 改简历 ▾'}</span>
           </div>
           ${matchDetail(j)}
         </div>
