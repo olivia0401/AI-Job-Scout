@@ -103,11 +103,28 @@
   .vtabs .chip { border-radius: 9px; background: transparent; padding: 4px 16px; }
   .vtabs .chip.on { background: #fff; color: var(--accent); border-color: transparent; box-shadow: var(--shadow); }
 
+  /* ---------- 使用引导 ---------- */
+  details.howto { margin-bottom: 18px; }
+  details.howto summary { cursor: pointer; list-style: none; font-size: 13.5px; font-weight: 600;
+                          color: var(--accent); background: var(--accent-soft);
+                          border: 1px solid var(--accent-line); border-radius: 12px; padding: 10px 18px; }
+  details.howto summary::-webkit-details-marker { display: none; }
+  details.howto[open] summary { border-radius: 12px 12px 0 0; }
+  .hbody { background: var(--card); border: 1px solid var(--accent-line); border-top: none;
+           border-radius: 0 0 12px 12px; padding: 14px 20px; font-size: 13.5px; line-height: 2.1; }
+  .hbody b.stepn { display: inline-block; width: 20px; height: 20px; line-height: 20px; text-align: center;
+                   background: var(--accent); color: #fff; border-radius: 50%; font-size: 12px; margin-right: 8px; }
+  .hbody .ok { color: var(--green); font-weight: 600; margin-left: 6px; }
+
   /* ---------- 岗位卡片 ---------- */
   .jobrow { background: var(--card); border: 1px solid var(--border); border-radius: 14px;
             padding: 16px 20px; margin-bottom: 10px; box-shadow: var(--shadow);
-            transition: all .15s; }
+            transition: all .15s; cursor: pointer; }
   .jobrow:hover { border-color: var(--accent-line); box-shadow: var(--shadow-lift); }
+  .jobrow.open { border-color: var(--accent-line); }
+  .expander { margin-left: auto; font-size: 12.5px; color: var(--accent); white-space: nowrap;
+              font-weight: 550; }
+  .jobrow:hover .expander { text-decoration: underline; }
   .jobrow .l1 { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .jobrow a.title { color: var(--text); font-weight: 650; font-size: 15px; line-height: 1.45;
                     text-decoration: none; letter-spacing: -.1px; }
@@ -221,7 +238,16 @@
       <a class="btn ghost" href="/api/export">📥 导出</a>
     </div>
   </div>
-  <div class="sub">以下岗位全部来自<b>持英国 Skilled Worker 工签资质</b>的雇主 · 覆盖英国、欧洲与中国</div>
+  <div class="sub">以下岗位全部来自<b>持英国 Skilled Worker 工签资质</b>的雇主 · <b style="color:var(--accent)">点任意岗位可展开：看匹配细节 + 生成该岗位专属的简历修改建议</b></div>
+
+  <details class="howto" id="howto">
+    <summary>📖 三步上手（点开看）</summary>
+    <div class="hbody">
+      <div><b class="stepn">1</b>点右上 <b>🔄 刷新最新岗位</b> 抓取岗位<span id="step1ok"></span>　<span style="color:var(--muted)">（第一次建议先在页面底部「⚙️ 高级」里跑一遍 🌊 全量清查，一夜跑完，之后日常只用刷新）</span></div>
+      <div><b class="stepn">2</b>上传你的简历（下方 📄 卡片），自动给每个岗位算 0–100 匹配分<span id="step2ok"></span></div>
+      <div><b class="stepn">3</b><b>点任意岗位行展开</b> → 看你缺哪些技能 → 点 <b>✍️ 生成这个岗位的简历修改建议</b>，几十秒出定制方案</div>
+    </div>
+  </details>
 
   <div class="scanbar" id="scanbar">
     <div class="line">
@@ -351,12 +377,19 @@ async function refresh() {
   const c = S.counts || {};
   const stat = (label, v) => `<span>${label}<b>${(v ?? 0).toLocaleString()}</b></span>`;
   document.getElementById('stats').innerHTML =
-    stat('AI 岗位', c.ai_jobs) + stat('📄 正文召回', c.via_jd_jobs) +
-    stat('🌐 聚合平台', c.agg_jobs) +
-    stat('🇬🇧 英国', c.uk_jobs) + stat('🇪🇺 欧洲', c.eu_jobs) +
-    stat('⭐ LLM', c.llm_jobs) + stat('🆕 新上架', c.new_jobs) + stat('⏳ 长期在招', c.long_jobs) +
+    stat('匹配岗位', c.ai_jobs) +
+    stat('🇬🇧 英国', c.uk_jobs) +
+    stat('⭐ LLM', c.llm_jobs) + stat('🆕 新上架', c.new_jobs) +
     stat('在招公司', c.has_ai) +
-    `<span>雇主库<b class="num">${(c.total ?? 0).toLocaleString()}</b></span>`;
+    `<span>工签雇主库<b class="num">${(c.total ?? 0).toLocaleString()}</b></span>`;
+  // 首次使用（没岗位或没简历）时自动展开引导——只在页面刚打开时设置一次
+  if (!window._howtoInit) {
+    window._howtoInit = true;
+    document.getElementById('howto').open = !(c.ai_jobs > 0 && S.resume);
+  }
+  const s1 = document.getElementById('step1ok'), s2 = document.getElementById('step2ok');
+  if (s1) s1.innerHTML = c.ai_jobs > 0 ? '<span class="ok">✓ 已完成</span>' : '';
+  if (s2) s2.innerHTML = S.resume ? '<span class="ok">✓ 已完成</span>' : '';
   const jdRate = c.jd_rate == null ? '—' : c.jd_rate + '%';
   document.getElementById('pendingNote').textContent =
     `已探测 ${(c.probed ?? 0).toLocaleString()} 家，还剩 ${(c.pending ?? 0).toLocaleString()} 家未探测`
@@ -390,7 +423,7 @@ function renderResume() {
   const scored = (S.feed || []).filter(j => j.score != null).length;
   let status;
   if (m.running) status = `⏳ 正在计算匹配度… ${m.done}/${m.total} 家公司`;
-  else if (scored) status = `已为 ${scored} 个岗位算出匹配度——点岗位上的 <b>匹配 %</b> 徽章看细节和优化建议`;
+  else if (scored) status = `已为 ${scored} 个岗位算出匹配度——<b>点任意岗位行展开</b>，看匹配细节、生成该岗位的简历修改建议`;
   else status = `点右侧"计算匹配度"开始`;
   el.innerHTML = `
     <span class="icon">📄</span>
@@ -533,7 +566,20 @@ function toggleMatch(url) {
   render();
 }
 function matchDetail(j) {
-  if (!expanded.has(j.url) || j.score == null) return '';
+  if (!expanded.has(j.url)) return '';
+  if (!S.resume) {
+    return `<div class="matchbox">
+      <div class="mrow">还没上传简历。上传后展开岗位就能看到：你和这个岗位的<b>匹配细节</b>、缺哪些技能，
+      并能一键生成<b>专属这个岗位</b>的简历修改建议。</div>
+      <button class="mini" onclick="document.getElementById('resumeFile').click()">📄 上传简历</button>
+    </div>`;
+  }
+  if (j.score == null) {
+    return `<div class="matchbox">
+      <div class="mrow">这个岗位还没算匹配度（新抓到的岗位需要重算一次）。</div>
+      <button class="mini" onclick="runMatch()">🎯 现在计算匹配度</button>
+    </div>`;
+  }
   const hits = (j.hit || []).map(k => `<span class="kw hit">✓ ${esc(k)}</span>`).join('');
   const mmiss = (j.must_miss || []).map(k => `<span class="kw miss">${esc(k)}</span>`).join('');
   const nmiss = (j.nice_miss || []).map(k => `<span class="kw" style="background:var(--soft);color:var(--muted)">${esc(k)}</span>`).join('');
@@ -544,14 +590,20 @@ function matchDetail(j) {
     ${nmiss ? `<div class="mrow"><span class="mlabel">加分项缺失：</span>${nmiss}</div>` : ''}
     <div class="mrow" style="margin-top:8px">
       ${S.has_llm
-        ? `<button class="mini" onclick="genJobAdvice('${esc(j.url)}')" ${jobAdviceBusy.has(j.url) ? 'disabled' : ''}>✍️ 用 ${esc(S.llm_label || 'AI')} 针对此岗位改简历</button>`
-        : `<button class="mini" disabled title="在 data/api_keys.json 填 openai_api_key（ChatGPT）或 anthropic_api_key（Claude）后可用">✍️ 针对此岗位改简历（需配 ChatGPT/Claude key）</button>`}
+        ? `<button onclick="genJobAdvice('${esc(j.url)}')" ${jobAdviceBusy.has(j.url) ? 'disabled' : ''}>✍️ 生成这个岗位的简历修改建议</button>`
+        : `<button disabled title="在 data/api_keys.json 填 openai_api_key（ChatGPT）或 anthropic_api_key（Claude）后可用">✍️ 生成简历修改建议（需先配 ChatGPT/Claude key）</button>`}
       <button class="mini ghost" onclick="copyPrompt('${esc(j.url)}')">📋 复制 Prompt（贴给别处的 Claude/ChatGPT）</button>
+      <a class="btn ghost mini" style="padding:5px 14px;font-size:12.5px;border-radius:9px" href="${esc(j.url)}" target="_blank">↗ 打开岗位原文</a>
     </div>
     ${jobAdviceBusy.has(j.url)
-      ? `<div class="info" style="margin-top:8px">Claude 正在针对这个岗位生成简历修改建议（约需十几秒）…</div>`
+      ? `<div class="info" style="margin-top:8px">⏳ 正在针对这个岗位生成简历修改建议（约需十几秒，别关页面）…</div>`
       : (jobAdvice[j.url] ? `<div class="advice">${mdToHtml(jobAdvice[j.url])}</div>` : '')}
   </div>`;
+}
+// 点击岗位行任意空白处展开/收起；点链接、按钮、已展开的详情区不触发
+function rowClick(ev, url) {
+  if (ev.target.closest('a, button, .matchbox')) return;
+  toggleMatch(url);
 }
 async function genJobAdvice(url) {
   jobAdviceBusy.add(url); render();
@@ -623,7 +675,7 @@ function render() {
     let items = (S.feed || []).filter(j => passJob(j, q));
     if (T.byscore) items = [...items].sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
     list.innerHTML = cnBox + items.slice(0, 250).map(j => `
-      <div class="jobrow">
+      <div class="jobrow ${expanded.has(j.url) ? 'open' : ''}" onclick="rowClick(event, '${esc(j.url)}')">
         <div class="l1">
           <a class="title" href="${esc(j.url)}" target="_blank">${esc(j.title)}</a>
           ${jobBadges(j)}
@@ -633,6 +685,7 @@ function render() {
           <span class="dot">·</span>
           <span>${esc(j.location)}</span>
           ${daysTxt(j) ? `<span class="dot">·</span><span class="num">${daysTxt(j)}</span>` : ''}
+          <span class="expander">${expanded.has(j.url) ? '收起 ▴' : '匹配详情 · 改简历 ▾'}</span>
         </div>
         ${matchDetail(j)}
       </div>`).join('');
@@ -663,10 +716,11 @@ function render() {
     const st = r.status;
     const L = r.links || {};
     const jobsHtml = r.fjobs.map(j => `
-      <div class="cjob">
+      <div class="cjob" style="cursor:pointer" onclick="rowClick(event, '${esc(j.url)}')">
         <a href="${esc(j.url)}" target="_blank">${esc(j.title)}</a>
         ${jobBadges(j)}
         <span class="loc">${esc(j.location)} ${daysTxt(j)}</span>
+        <span class="expander">${expanded.has(j.url) ? '收起 ▴' : '详情 ▾'}</span>
       </div>${matchDetail(j)}`).join('');
     const stTxt = st === 'has_ai' ? `✅ ${r.fjobs.length} 个 AI 岗` : '🟡 暂无 AI 岗（可蹲守）';
     return `
