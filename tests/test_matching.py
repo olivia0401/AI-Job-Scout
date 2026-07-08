@@ -155,10 +155,39 @@ def test_match_job_title_direct():
 
 
 def test_match_job_broad_title_confirmed_by_jd():
-    # 标题没写 AI，但属于工程类且 JD 正文是 AI → 靠 JD 召回
-    via = app.match_job("Software Engineer, Search",
-                        "You will build LLM and RAG retrieval systems.", KWS)
+    # 标题没写 AI，但属于工程类且 JD 正文实打实在讲 AI（≥2 次命中）→ 靠 JD 召回
+    via = app.match_job(
+        "Software Engineer, Search",
+        "You will build LLM retrieval systems and fine-tune large language models "
+        "for production nlp workloads.", KWS)
     assert via == "jd"
+
+
+def test_match_job_boilerplate_mention_rejected():
+    # 公司简介一嘴带过 AI（只命中 1 次）→ 不召回；这是误命中的最大来源
+    assert app.match_job(
+        "Senior Software Engineer",
+        "We are an artificial intelligence powered fintech. You will build "
+        "microservices in Go and own our Kubernetes platform.", KWS) is None
+
+
+def test_match_job_blacklisted_title_not_widened():
+    # 售前/支持/QA 等黑名单标题不走 JD 宽通道，哪怕 JD 全是 AI
+    jd = ("Our machine learning platform serves LLM workloads. You will demo "
+          "our generative ai products to customers.")
+    assert app.match_job("Solutions Architect", jd, KWS) is None
+    assert app.match_job("QA Automation Engineer", jd, KWS) is None
+    assert app.match_job("Support Engineer", jd, KWS) is None
+    # 但同样的 JD 配研发类标题依然召回
+    assert app.match_job("Platform Engineer", jd, KWS) == "jd"
+
+
+def test_match_job_title_only_keywords_not_matched_in_body():
+    # "recommendations" 这类泛词只在标题里算数，正文里是万能句式
+    assert app.match_job(
+        "Backend Engineer",
+        "You will make recommendations to stakeholders and present "
+        "recommendations to the board.", KWS) is None
 
 
 def test_match_job_broad_title_non_ai_jd_rejected():

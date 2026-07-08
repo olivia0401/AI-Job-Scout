@@ -49,6 +49,10 @@ DEFAULT_KEYWORDS = [
     "llmops", "ai platform", "model evaluation", "reinforcement learning",
 ]
 
+# 这些词在标题里是强信号，但在 JD 正文里到处都是（"make recommendations to
+# stakeholders"、营销文案里的 personalization），只允许参与标题匹配
+TITLE_ONLY_KEYWORDS = {"recommendation", "recommendations", "personalization"}
+
 # 命中即标 ⭐LLM 的关键词（用户重点关注）
 LLM_KEYWORDS = [
     "llm", "large language model", "genai", "gen ai", "generative ai",
@@ -670,22 +674,43 @@ def kw_match(text, kws):
     return any(re.search(r"\b" + re.escape(k) + r"\b", text) for k in kws)
 
 
+def kw_hit_count(text, kws):
+    """关键词命中总次数（同一个词出现多次都计入）。"""
+    return sum(len(re.findall(r"\b" + re.escape(k) + r"\b", text)) for k in kws)
+
+
 # 广撒网标题：工程/数据/研究类岗位，标题没写 AI 也值得读 JD 正文二次确认
 BROAD_TITLE_RE = re.compile(
     r"\b(engineer|developer|scientist|programmer|architect|researcher)\b")
+
+# 标题黑名单：明显不是 AI 研发方向的角色，不给走 JD 正文宽通道——
+# 这些岗位挂在"AI 公司"名下时，JD 里的公司简介总会提到 AI，全是误命中
+EXCLUDE_TITLE_RE = re.compile(
+    r"\b(sales|pre-?sales|account (?:manager|executive)|business development|"
+    r"marketing|recruit(?:er|ing|ment)|talent acquisition|customer success|"
+    r"support|solutions? (?:architect|engineer|consultant)|"
+    r"qa|sdet|quality assurance|test(?:er|ing)?|"
+    r"android|ios|mobile|front[- ]?end|"
+    r"network|electrical|mechanical|civil|hardware|firmware|embedded|bmc|"
+    r"devops|site reliability|sre|security|help ?desk|"
+    r"field operations?|control engineer|validation engineer)\b")
 
 
 def match_job(title, desc, keywords):
     """判断一个岗位是否算 AI 岗，返回命中来源：
       'title' —— 标题直接命中 AI 关键词；
-      'jd'    —— 标题是工程/数据/研究类且 JD 正文命中 AI 关键词（拓宽召回）；
+      'jd'    —— 标题是工程/数据/研究类（且不在黑名单里）、JD 正文命中
+                 AI 关键词 ≥2 次（拓宽召回；要求 ≥2 次是为了滤掉
+                 公司简介里"we are an AI-powered..."这种一嘴带过的套话）；
       None    —— 都没命中。
     JD 正文抓不到时（desc 为空）只走标题，天然保守。"""
     t = (title or "").lower()
     if kw_match(t, keywords):
         return "title"
-    if desc and BROAD_TITLE_RE.search(t) and kw_match(desc.lower(), keywords):
-        return "jd"
+    if desc and BROAD_TITLE_RE.search(t) and not EXCLUDE_TITLE_RE.search(t):
+        body_kws = [k for k in keywords if k not in TITLE_ONLY_KEYWORDS]
+        if kw_hit_count(desc.lower(), body_kws) >= 2:
+            return "jd"
     return None
 
 
