@@ -300,6 +300,7 @@
           <a href="/api/export">📥 导出 Excel</a>
           <button id="btnAgg" onclick="menuDo(runAgg)">🌐 搜聚合平台<small>补 LinkedIn / Indeed / Glassdoor 盲区</small></button>
           <button id="btnPending" onclick="menuDo(() => scan('pending'))">🌊 全量清查工签雇主<small>第一次用跑一夜即可，之后日常只需扫描新岗位</small></button>
+          <button id="btnDeep" onclick="menuDo(() => scan('deep'))">🔬 深度补扫<small>全量清查跑完后再点：对“无招聘页”的公司补查 Workable/Recruitee/Personio（慢，会限流，可随时停）</small></button>
           <div class="msep"></div>
           <button onclick="menuDo(openSettings)">⚙️ 关键词与设置</button>
         </div>
@@ -563,7 +564,7 @@ function renderScan() {
   if (running) {
     document.getElementById('progBar').style.width = (sc.total ? 100*sc.done/sc.total : 0) + '%';
     const eta = sc.eta_min != null ? (sc.eta_min > 90 ? `剩约 ${(sc.eta_min/60).toFixed(1)} 小时` : `剩约 ${sc.eta_min} 分钟`) : '';
-    const modeTxt = { known: '刷新最新岗位', pending: '全量清查', curated: '精选扫描', all: '全部扫描' }[sc.mode] || '扫描';
+    const modeTxt = { known: '刷新最新岗位', pending: '全量清查', curated: '精选扫描', all: '全部扫描', deep: '深度补扫' }[sc.mode] || '扫描';
     document.getElementById('scanTxt').textContent =
       `${modeTxt}中 ${sc.done.toLocaleString()}/${sc.total.toLocaleString()} · 新发现岗位 ${sc.new_jobs} · ${eta}（进度实时缓存，停止不丢）`;
     if (!pollTimer) pollTimer = setInterval(refresh, 2500);

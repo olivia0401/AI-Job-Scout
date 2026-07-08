@@ -7,8 +7,10 @@ import csv as csvmod
 import json
 import os
 import re
+import sys
 import threading
 import time
+import webbrowser
 import xml.etree.ElementTree as ET
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from datetime import date, datetime
@@ -18,7 +20,13 @@ from urllib.parse import quote_plus
 import requests
 from flask import Flask, jsonify, render_template, request, send_file
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+FROZEN = getattr(sys, "frozen", False)  # PyInstaller 打包后的 exe 模式
+if FROZEN:
+    BASE_DIR = os.path.dirname(os.path.abspath(sys.executable))  # data/ 放在 exe 旁边
+    RES_DIR = sys._MEIPASS  # 模板等资源被打进包里
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    RES_DIR = BASE_DIR
 DATA_DIR = os.path.join(BASE_DIR, "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 STATE_FILE = os.path.join(DATA_DIR, "state.json")
@@ -135,11 +143,19 @@ def classify_level(title):
     return "mid"
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (personal job-search tool)"}
-TIMEOUT = 5
+# (连接, 读取) 分离：死掉的每公司子域名 2 秒就放弃连接（原来连接也要磨满 5 秒）；
+# 读取仍给 5 秒，保证 Workable 这类偶尔较慢但有效的招聘页不会被误判为“无岗位”。
+TIMEOUT = (2, 5)
+# 外层并发。全量热路径只跑 4 家健康 ATS(GH/Lever/Ashby/SR)——它们不限流、且探测在工作
+# 线程内顺序跑以复用 keep-alive 连接，所以可以放到 32。限流最狠的 Workable 已移出热路径
+# （见 WORKABLE_PROBES），不会再被高并发打成 429。
+SCAN_WORKERS = 32
+WORKABLE_CONC = 4        # Workable 全局并发上限：命中最多但限流最狠，单独节流以免自招 429
+SWEEP_SLUGS = 2          # 全量 sweep 每家公司试几个 slug 候选（命中基本落在前 2 个）
 LONG_RUNNING_DAYS = 30   # 岗位在线 ≥30 天算“长期在招”
 NEW_DAYS = 3             # 首次发现 ≤3 天算“新岗位”
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder=os.path.join(RES_DIR, "templates"))
 
 # ---------------------------------------------------------------- state
 _lock = threading.Lock()
@@ -383,8 +399,24 @@ def probe_ashby(slug):
     return {"board_url": f"https://jobs.ashbyhq.com/{slug}", "jobs": jobs}
 
 
+_WORKABLE_SEM = threading.BoundedSemaphore(WORKABLE_CONC)
+
+
 def probe_workable(slug):
-    data = _get_json(f"https://apply.workable.com/api/v1/widget/accounts/{slug}")
+    # Workable 限流最狠：① 全局并发闸限死同时探测数；② 被 429 退避重试而非直接放弃，
+    # 让深度补扫最终能查完（退避期间占着并发槽 → 等于自动降速自愈）。只影响 deep 补扫，
+    # 不进全量热路径，所以第一次全量不受它拖累。
+    url = f"https://apply.workable.com/api/v1/widget/accounts/{slug}"
+    with _WORKABLE_SEM:
+        data = None
+        for attempt in range(4):
+            try:
+                data = _get_json(url)
+                break
+            except RateLimited:
+                if attempt == 3:
+                    raise                       # 连试 4 次仍限流 → 本轮不落 none，下轮再补
+                time.sleep(1.5 * (2 ** attempt))  # 退避：1.5s, 3s, 6s
     if not data or "jobs" not in data:
         return None
     jobs = [{
@@ -489,16 +521,27 @@ def probe_workday_tenant(host, site):
     return {"board_url": f"https://{host}/en-US/{site}", "jobs": jobs}
 
 
-PROBES = [
+# 健康快探测：走各家共享域名，快且不限流——全量 sweep 默认只跑这几个，能真正跑完
+FAST_PROBES = [
     ("Greenhouse", probe_greenhouse),
     ("Lever", probe_lever),
     ("Ashby", probe_ashby),
-    ("Workable", probe_workable),
     ("SmartRecruiters", probe_smartrecruiters),
+]
+# Workable：命中最多(273家)但限流最狠，放进全量热路径会整片 429 把 sweep 拖到跑不完。
+# 移到「深度补扫」(mode=deep) 里，用 _WORKABLE_SEM 节流慢速跑，不拖垮主扫描。
+WORKABLE_PROBES = [("Workable", probe_workable)]
+# 慢探测：Recruitee/Personio 用「每公司独立子域名」，对不存在的公司要付一次注定
+# 失败的 DNS+握手（实测各 ~3.7s），而命中极少（Recruitee 8、Personio 0）。同样放深度补扫。
+EXTRA_PROBES = [
     ("Recruitee", probe_recruitee),
     ("Personio", probe_personio),
 ]
-PROBE_FN = dict(PROBES)
+PROBES = FAST_PROBES                             # 默认 hot path（pending/all/known）
+CORE_PROBES = FAST_PROBES + WORKABLE_PROBES      # 精选小清单：连 Workable 一起扫（量小不怕限流）
+DEEP_PROBES = WORKABLE_PROBES + EXTRA_PROBES     # 深度补扫：Workable + Recruitee + Personio
+ALL_PROBES = CORE_PROBES + EXTRA_PROBES
+PROBE_FN = dict(ALL_PROBES)       # 缓存命中/手动 override 反查仍需认得全部 ATS
 # Workday 不参与按公司名猜 slug（需要 host+site），只能手动 override
 OVERRIDE_ATS = set(PROBE_FN) | {"Workday"}
 
@@ -565,8 +608,11 @@ def _probe_override(ov):
     return None
 
 
-def find_ats(name):
-    """返回 (ats_name, slug, {board_url, jobs}) 或 None。结果写入 ats_cache。"""
+def find_ats(name, probes=PROBES, max_slugs=SWEEP_SLUGS, force=False):
+    """返回 (ats_name, slug, {board_url, jobs}) 或 None。结果写入 ats_cache。
+    probes/max_slugs 由扫描模式决定；force=True 时忽略 'none' 缓存（深度补扫用）。
+    探测在调用线程内顺序跑——复用该线程的 keep-alive 连接（比每家公司新建线程池、
+    每个请求都重握手 TLS 快数倍）。"""
     key = (name or "").strip().lower()
     ov = slug_overrides.get(key) or BUILTIN_OVERRIDES.get(key)  # 用户修正优先，其次内置大厂
     if ov:
@@ -574,7 +620,7 @@ def find_ats(name):
         if res:  # 手动修正优先，抓不到再走自动探测
             return (ov["ats"], ov.get("slug") or ov.get("site") or "", res)
     cached = ats_cache.get(name)
-    if cached == "none":
+    if cached == "none" and not force:
         return None
     if isinstance(cached, dict):
         try:
@@ -587,8 +633,8 @@ def find_ats(name):
 
     fallback = None  # 0 岗位的空账号可能是重名壳账号，只作兜底
     rate_limited = False  # 被限流的探测视为"未知"而非"没有"
-    for slug in slug_candidates(name):
-        for ats_name, fn in PROBES:
+    for slug in slug_candidates(name)[:max_slugs]:
+        for ats_name, fn in probes:
             try:
                 res = fn(slug)
             except RateLimited:
@@ -650,7 +696,8 @@ def build_links(name):
 
 
 # ---------------------------------------------------------------- 扫描
-def scan_company(name, keywords, uk_only):
+def scan_company(name, keywords, uk_only, probes=PROBES, max_slugs=SWEEP_SLUGS,
+                 force=False):
     result = {
         "name": name,
         "scanned_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
@@ -658,7 +705,7 @@ def scan_company(name, keywords, uk_only):
         "total_jobs": 0, "matched": [],
         "status": "no_board",
     }
-    hit = find_ats(name)
+    hit = find_ats(name, probes, max_slugs, force)
     if hit:
         ats_name, slug, res = hit
         result["ats"] = ats_name
@@ -722,11 +769,18 @@ def run_scan(names, mode):
     uk_only = state["uk_only"]
     curated = _curated_names()
     today = date.today().isoformat()
+    # 深度补扫：对已判 none 的公司再跑限流/慢探测(Workable+Recruitee+Personio)，须绕过 none 缓存
+    if mode == "deep":
+        probes, force = DEEP_PROBES, True
+    elif mode == "curated":       # 精选清单小，连 Workable 一起扫
+        probes, force = CORE_PROBES, False
+    else:                         # pending / all / known：只跑健康快探测
+        probes, force = PROBES, False
     state["scan"] = {"running": True, "done": 0, "total": len(names), "mode": mode,
                      "started_ts": time.time(), "stop": False, "new_jobs": 0}
     processed = 0
     try:
-        with ThreadPoolExecutor(max_workers=64) as pool:
+        with ThreadPoolExecutor(max_workers=SCAN_WORKERS) as pool:
             it = iter(names)
             futures = {}
 
@@ -736,7 +790,8 @@ def run_scan(names, mode):
                         n = next(it)
                     except StopIteration:
                         return
-                    futures[pool.submit(scan_company, n, keywords, uk_only)] = n
+                    futures[pool.submit(scan_company, n, keywords, uk_only,
+                                        probes, SWEEP_SLUGS, force)] = n
 
             submit_more()
             while futures:
@@ -767,7 +822,7 @@ def run_scan(names, mode):
 
 
 def start_scan(mode):
-    """mode: curated / known / pending / all"""
+    """mode: curated / known / pending / deep / all"""
     if state["scan"]["running"]:
         return None
     comps = state["companies"]
@@ -778,6 +833,8 @@ def start_scan(mode):
         names = [n for n in comps if isinstance(ats_cache.get(n), dict)]
     elif mode == "pending":  # 还没探测过的公司：全量清查（可中断续跑）
         names = [n for n in comps if n not in ats_cache]
+    elif mode == "deep":    # 深度补扫：对已判 none 的公司再试慢探测(Recruitee/Personio)
+        names = [n for n in comps if ats_cache.get(n) == "none"]
     else:  # all
         known = [n for n in comps if isinstance(ats_cache.get(n), dict)]
         pending = [n for n in comps if n not in ats_cache]
@@ -898,7 +955,7 @@ def search_jsearch(query):
                                   "page": "1", "num_pages": "1", "country": "gb"},
                           headers={"X-RapidAPI-Key": key,
                                    "X-RapidAPI-Host": "jsearch.p.rapidapi.com"},
-                          timeout=TIMEOUT * 2)
+                          timeout=(4, 20))
         if r.status_code != 200:
             return []
         res = r.json().get("data") or []
@@ -2055,5 +2112,14 @@ if __name__ == "__main__":
         save_companies()  # 从旧格式迁移时立即落盘，防止丢名单
     threading.Thread(target=auto_loop, daemon=True).start()
     port = int(os.environ.get("PORT", "5050"))
-    print(f"\n  AI Job Scout 已启动:  http://127.0.0.1:{port}\n")
-    app.run(host="127.0.0.1", port=port, debug=False, threaded=True)
+    print(f"\n  AI Job Scout 已启动:  http://127.0.0.1:{port}")
+    print("  这个窗口是网站的服务器——用的时候别关，可以最小化。\n")
+    if FROZEN:  # exe 双击启动时自动打开浏览器
+        threading.Timer(1.5, lambda: webbrowser.open(f"http://127.0.0.1:{port}")).start()
+    try:
+        app.run(host="127.0.0.1", port=port, debug=False, threaded=True)
+    except OSError:
+        # 端口被占用：多半是工具已经开着了，直接打开页面即可
+        print("  看起来工具已经在运行了，直接打开浏览器页面。")
+        webbrowser.open(f"http://127.0.0.1:{port}")
+        time.sleep(3)
