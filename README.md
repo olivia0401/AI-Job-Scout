@@ -172,6 +172,21 @@
 
 ---
 
+# 🏢 已内置的大厂/AI 雇主（无需配置）
+
+工具**开箱就预置了一批**知名雇主，第一次启动就会加入清单并被扫描，你不用手动加：
+
+- **AI/ML 明星公司**（多在 Greenhouse/Lever/Ashby，自动识别）：Anthropic、OpenAI、Cohere、Hugging Face、DeepMind、Databricks、Palantir、Wayve、Faculty、Quantexa、Synthesia、Stability AI、ElevenLabs、Speechmatics、Graphcore、Monzo、Wise、Revolut 等。
+- **Workday 大厂**（用自建/Workday 系统，已内置直连地址）：NVIDIA、Salesforce、Adobe、Dell、Mastercard、Capital One、Autodesk、AstraZeneca、Sanofi 等。
+
+> ⚠️ Workday 地址是**尽力而为**的预置：某家若抓不到（公司改了地址），**不影响其它公司**，工具会自动跳过。
+> 想修正某家：在它的公司卡片上用「手动修正」填新的 `host`/`site` 即可（会存进 `data/slug_overrides.json`，覆盖内置）。
+>
+> ❗ **Google / Amazon / Meta / Microsoft / 摩根**等用的是**自建招聘系统（非 Workday）**，没有公开接口可抓——
+> 这几家只能靠公司卡片里的「Google 直达 / LinkedIn 搜索」手动查，这是所有工具都绕不过的硬限制。
+
+---
+
 # ✍️ 全平台简历提升建议
 
 上传简历、算完匹配度后，点简历卡片上的 **🎯 简历提升建议**：工具把**全部已匹配岗位**汇总，
