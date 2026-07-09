@@ -244,6 +244,23 @@ def test_off_target_never_strong():
     assert app.job_tier(80, {}, "register") == "strong"
 
 
+def test_rank_score_orders_by_direction_and_visa():
+    # 同分下：方向对口 + 签证明确 + 新 > 方向不对 / 签证未知 / 旧
+    strong = app.rank_score(80, "high", "yes", "target", 0)
+    offdir = app.rank_score(80, "high", "yes", "off_target", 0)
+    novisa = app.rank_score(80, "high", "uncertain", "target", 0)
+    old = app.rank_score(80, "high", "yes", "target", 200)
+    assert strong > offdir       # 方向不对分更低
+    assert strong > novisa       # 签证未知分更低
+    assert strong > old          # 老岗位分更低
+    # 分数单调
+    assert app.rank_score(90, "high", "register", "target", 5) > \
+           app.rank_score(50, "high", "register", "target", 5)
+    # 范围 0..100
+    assert 0 <= app.rank_score(0, "low", "no", "off_target", 999) <= 100
+    assert 0 <= app.rank_score(100, "high", "yes", "target", 0) <= 100
+
+
 def test_exclude_suggestions_learns_from_hidden(monkeypatch):
     hidden = {f"u{i}": {"title": t} for i, t in enumerate([
         "Salesforce Developer", "Senior Salesforce Engineer", "Salesforce Architect",

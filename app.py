@@ -1522,6 +1522,33 @@ def job_tier(score, ms, visa, tmatch="target"):
     return "weak"
 
 
+# 综合推荐分权重（方向对口是精准度命门，权重高于 roadmap 原案的 0.10）
+_CONF_W = {"high": 1.0, "mid": 0.6, "low": 0.3}
+_VISA_W = {"yes": 1.0, "register": 0.6, "uncertain": 0.3, "no": 0.0}
+_TMATCH_W = {"target": 1.0, "acceptable": 0.7, "off_target": 0.0}
+TIER_ORDER = {"strong": 0, "maybe": 1, "lowconf": 2, "weak": 3, "risk": 4}
+
+
+def rank_score(score, conf, visa, tmatch, days):
+    """综合推荐分 0..100：技能分×0.40 + 方向×0.20 + 签证×0.20 + 置信×0.12 + 新鲜×0.08。
+    tier 是粗分桶（strong/maybe/…），rank_score 用于桶内细排和"今日推荐 Top"。"""
+    s = max(0, min(score or 0, 100)) / 100.0
+    if days is None:
+        fresh = 0.3
+    elif days <= NEW_DAYS:
+        fresh = 1.0
+    elif days <= LONG_RUNNING_DAYS:
+        fresh = 0.5
+    else:
+        fresh = 0.2
+    val = (0.40 * s
+           + 0.20 * _TMATCH_W.get(tmatch, 0.0)
+           + 0.20 * _VISA_W.get(visa, 0.3)
+           + 0.12 * _CONF_W.get(conf, 0.3)
+           + 0.08 * fresh)
+    return round(100 * val)
+
+
 def run_match():
     resume = state.get("resume")
     if not resume:
@@ -2176,6 +2203,8 @@ def api_state():
                     "conf": ms.get("conf") if ms else None,
                     "visa": visa, "title_match": tmatch,
                     "tier": job_tier(ms["score"] if ms else None, ms, visa, tmatch),
+                    "rank": rank_score(ms["score"] if ms else None,
+                                       ms.get("conf") if ms else None, visa, tmatch, days),
                     "hit": ms["hit"] if ms else [],
                     "must_miss": (ms.get("must_miss") or ms.get("miss", [])) if ms else [],
                     "nice_miss": ms.get("nice_miss", []) if ms else [],
@@ -2213,13 +2242,19 @@ def api_state():
                 "conf": ms.get("conf") if ms else None,
                 "visa": visa, "title_match": tmatch,
                 "tier": job_tier(ms["score"] if ms else None, ms, visa, tmatch),
+                "rank": rank_score(ms["score"] if ms else None,
+                                   ms.get("conf") if ms else None, visa, tmatch, days),
                 "hit": ms["hit"] if ms else [],
                 "must_miss": ms.get("must_miss", []) if ms else [],
                 "nice_miss": ms.get("nice_miss", []) if ms else [],
                 "flags": ms.get("flags", []) if ms else [],
             })
         # 按前端请求的排序方式排好再截断，避免"高分老岗位"被时间序截断挡在 400 名外
-        if request.args.get("sort") == "score":
+        sort = request.args.get("sort")
+        if sort == "rank":   # 推荐优先：先按 tier 分桶优先级，桶内按综合分降序
+            feed.sort(key=lambda x: (TIER_ORDER.get(x["tier"], 9), -(x.get("rank") or 0),
+                                     x["first_seen"] or ""))
+        elif sort == "score":
             feed.sort(key=lambda x: (x["score"] if x["score"] is not None else -1,
                                      x["first_seen"] or ""), reverse=True)
         else:
