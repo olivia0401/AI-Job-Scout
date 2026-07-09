@@ -348,6 +348,9 @@
   .today-tiles .tile .n { font-size: 21px; font-weight: 700; line-height: 1.1; }
   .today-tiles .tile .l { font-size: 11.5px; color: var(--muted); }
   .today-acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .today-summary.nudge { border-left: 3px solid var(--accent, #4f63f5); padding: 12px 16px; }
+  .onboard { margin: 12px 0 4px; padding-left: 22px; }
+  .onboard li { margin: 7px 0; font-size: 13.5px; line-height: 1.6; color: var(--text2); }
   @media (max-width: 780px) {
     .workbench { flex-direction: column; }
     .sidenav { flex-basis: auto; position: static; flex-direction: row; flex-wrap: wrap; }
@@ -509,9 +512,9 @@
   <details class="howto" id="howto">
     <summary>📖 使用说明</summary>
     <div class="hbody">
-      <div><b class="stepn">1</b>点右上 <b>🔄 扫描新岗位</b> 抓取岗位<span id="step1ok"></span>　<span style="color:var(--muted)">（第一次用先点 ⋯ 菜单里的 🌊 全量清查，跑一夜，之后日常只需扫描）</span></div>
-      <div><b class="stepn">2</b>上传你的简历，自动给每个岗位算 0–100 匹配分<span id="step2ok"></span></div>
-      <div><b class="stepn">3</b><b>点任意岗位行展开</b> → 生成<b>✍️ 简历修改建议</b>和<b>💬 networking 搭话草稿</b>；想投的点 <b>☆ 收藏</b>，去 <b>📌 投递清单</b> 跟踪状态</div>
+      <div><b class="stepn">1</b><b>扫描岗位</b>：点右上「扫描新岗位」抓取最新岗位<span id="step1ok"></span>　<span style="color:var(--muted)">（第一次用，先在 ⋯ 菜单点「首次建立岗位库」跑一遍，约 1–2 小时；之后日常只需扫描）</span></div>
+      <div><b class="stepn">2</b><b>上传简历</b>：自动给每个岗位算技能匹配分，并按「方向对口 + 签证 + 匹配」综合排序<span id="step2ok"></span></div>
+      <div><b class="stepn">3</b><b>看今日推荐</b>：点岗位在右侧详情里看推荐理由、缺哪些技能，生成简历建议 / networking 草稿；想投的点收藏，去「投递清单」看板跟踪</div>
     </div>
   </details>
 
@@ -1313,6 +1316,29 @@ function cnDirectory() {
   </div>`;
 }
 
+// 新手 3 步开始卡（今日推荐没数据时显示）
+function onboardCard() {
+  return `<div class="today-summary">
+    <h2>开始使用 · 三步</h2>
+    <div class="sub">帮你在英国找工签雇主里方向对口的岗位：去哪找、哪些先看、简历差在哪。</div>
+    <ol class="onboard">
+      <li><b>建立岗位库</b>：首次点下面「首次建立岗位库」跑一遍（约 1–2 小时，摸出有招聘系统的工签雇主）；之后日常只需「扫描岗位」。</li>
+      <li><b>上传简历</b>：自动给每个岗位算技能匹配分。</li>
+      <li><b>看今日推荐</b>：按「方向对口 + 签证 + 匹配」综合排序，点岗位在右侧看详情、一键生成简历建议。</li>
+    </ol>
+    <div class="today-acts">
+      <button onclick="scan('pending')">首次建立岗位库</button>
+      <button class="ghost" onclick="scan('known')">扫描岗位</button>
+      <button class="ghost" onclick="document.getElementById('resumeFile').click()">上传简历</button>
+    </div></div>`;
+}
+function resumeNudge() {
+  return `<div class="today-summary nudge">
+    <div class="sub">还没上传简历——上传后才能算技能匹配、按匹配度排序。
+      <button class="mini" style="margin-left:8px" onclick="document.getElementById('resumeFile').click()">上传简历</button></div>
+  </div>`;
+}
+
 function render() {
   if (drawerUrl) renderDrawer();   // 抽屉里的建议/草稿随生成实时更新
   const q = document.getElementById('search').value.toLowerCase();
@@ -1328,9 +1354,7 @@ function render() {
     hint.innerHTML = '';
     const feed = (S.feed || []).filter(j => passJob(j, ''));
     if (!feed.length) {
-      list.innerHTML = `<div class="empty"><div class="big">🛰️</div>
-        <p>还没有岗位数据。先在右上「🔄 扫描新岗位」，或上传简历算匹配分。<br>
-        <span style="font-size:12.5px;color:var(--faint)">首次使用：⋯ 菜单里「🗂️ 首次建立岗位库」跑一遍</span></p></div>`;
+      list.innerHTML = onboardCard();
       return;
     }
     const byRank = (a, b) => (b.rank ?? -1) - (a.rank ?? -1);
@@ -1339,13 +1363,13 @@ function render() {
     const tiles = [['strong', '强推荐'], ['maybe', '可以看看'],
                    ['lowconf', '需确认'], ['risk', '有风险']]
       .map(([t, l]) => `<div class="tile"><div class="n"><span class="tdot ${TIER_CLASS[t]}"></span>${cnt[t]}</div><div class="l">${l}</div></div>`).join('');
-    let html = `<div class="today-summary">
+    let html = (S.resume ? '' : resumeNudge()) + `<div class="today-summary">
       <h2>今天该先看哪些岗位</h2>
       <div class="sub">按「方向对口 + 技能匹配 + 签证确定性」综合排序，方向不对的（IT Support 等）已自动沉底</div>
       <div class="today-tiles">${tiles}</div>
       <div class="today-acts">
-        <button onclick="scan('known')">🔄 刷新今天的新机会</button>
-        <button class="ghost" onclick="setView('goal')">🎯 调整求职目标</button>
+        <button onclick="scan('known')">扫描岗位</button>
+        <button class="ghost" onclick="setView('goal')">调整求职目标</button>
         <button class="ghost" onclick="setView('feed')">查看全部岗位 →</button>
       </div></div>`;
     for (const [t, meta] of [['strong', TIER_META.strong], ['maybe', TIER_META.maybe],
