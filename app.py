@@ -778,15 +778,40 @@ def _title_hit(title_l, phrases):
     return any(re.search(r"\b" + re.escape(p) + r"\b", title_l) for p in phrases)
 
 
+# 词元启发式：AI/ML 方向词 + 角色词。用于兜住写法千变万化的真实岗位标题
+# （如 "Software Engineer, Machine Learning" / "ML Platform Engineer" /
+#  "NLP Research Engineer" / "Research Scientist, Foundation Models"），
+# 避免"精确短语命中"把真实相关岗位误判成 off_target。
+_AI_TOKEN_RE = re.compile(
+    r"\b(machine learning|ml|deep learning|artificial intelligence|ai|"
+    r"llm|large language model|nlp|natural language|computer vision|"
+    r"genai|generative ai|foundation model|reinforcement learning|"
+    r"recommendations?|recommender|personali[sz]ations?|search ranking|"
+    r"mlops|applied ai|data science)\b")
+_ENG_ROLE_RE = re.compile(r"\b(engineer|developer|programmer)\b")
+_SCI_ROLE_RE = re.compile(r"\b(scientist|researcher|research)\b")
+
+
 def title_match(title, targets=None, acceptables=None):
     """岗位方向：target=正好想要 / acceptable=能接受 / off_target=方向不对。
-    off_target 的岗位无论技能分多高都不该被强推（例如 IT Support、Sales）。"""
+    off_target 的岗位无论技能分多高都不该被强推（例如 IT Support、Sales）。
+
+    判定顺序：① 明确黑名单角色(support/sales/qa…)直接 off_target；
+    ② 用户显式列的目标/可接受短语优先；③ 词元启发式：AI方向词+角色词——
+    兼容各种标题写法，避免误伤真实相关岗位。"""
     t = (title or "").lower()
     tg = targets if targets is not None else DEFAULT_TARGET_TITLES
     ac = acceptables if acceptables is not None else DEFAULT_ACCEPTABLE_TITLES
-    if _title_hit(t, tg):
+    if EXCLUDE_TITLE_RE.search(t):          # ① 黑名单：即便带 engineer/AI 也算方向不对
+        return "off_target"
+    if _title_hit(t, tg):                   # ② 用户/默认目标短语
         return "target"
     if _title_hit(t, ac):
+        return "acceptable"
+    has_ai = bool(_AI_TOKEN_RE.search(t))   # ③ 词元启发式
+    if has_ai and _ENG_ROLE_RE.search(t):
+        return "target"
+    if has_ai and _SCI_ROLE_RE.search(t):
         return "acceptable"
     return "off_target"
 

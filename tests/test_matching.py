@@ -220,11 +220,22 @@ def test_title_match_direction():
     assert app.title_match("Applied Scientist") == "acceptable"
     assert app.title_match("Research Engineer") == "acceptable"
     assert app.title_match("Data Scientist") == "acceptable"
+    # 写法千变万化的真实相关岗位（词元启发式兜住，别误判 off_target）
+    assert app.title_match("Software Engineer, Machine Learning") == "target"
+    assert app.title_match("ML Platform Engineer") == "target"
+    assert app.title_match("AI Platform Software Engineer") == "target"
+    assert app.title_match("Search & Recommendations Engineer") == "target"
+    # "research engineer" 命中可接受短语 → acceptable（仍算对口、仍可进 strong）
+    assert app.title_match("NLP Research Engineer") in ("target", "acceptable")
+    assert app.title_match("Research Scientist, Foundation Models") == "acceptable"
+    assert app.title_match("Data Scientist, Personalisation") == "acceptable"
     # 方向不对：技能可能重合，但不是目标岗位
     assert app.title_match("IT Support Engineer") == "off_target"
     assert app.title_match("Solutions Architect") == "off_target"
     assert app.title_match("QA Engineer") == "off_target"
     assert app.title_match("Sales Executive") == "off_target"
+    assert app.title_match("Frontend Engineer") == "off_target"    # 有 engineer 但无 AI 方向词
+    assert app.title_match("Financial Analyst") == "off_target"
 
 
 def test_off_target_never_strong():
