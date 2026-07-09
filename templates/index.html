@@ -421,6 +421,7 @@
       <span class="chip" data-t="titleonly" onclick="toggleT(this)" title="只看标题直接命中关键词的岗位，隐藏仅靠 JD 正文召回的低置信度岗位">🎯 仅标题命中</span>
       <span class="chip" data-t="derisk" onclick="toggleT(this)" title="隐藏 JD 明确声明不担保签证、或要求安全许可/英国国籍的岗位">🛂 排除签证风险</span>
       <span class="chip" data-t="unseen" onclick="toggleT(this)" title="只看你还没展开/打开过的岗位（看过的自动记住）">👀 未看过</span>
+      <span class="chip star" data-t="ontarget" onclick="toggleT(this)" title="只看岗位方向对口的（目标/可接受），隐藏方向不对的（IT Support / Sales / QA 等——它们可能技能重合高，但不是你要的岗位）">🧭 只看对口</span>
       <input type="text" id="search" placeholder="搜索岗位 / 公司…" oninput="render()">
     </div>
   </div>
@@ -453,6 +454,19 @@
                placeholder="标题含这些词的岗位直接隐藏，逗号分隔，如 sales, consultant, intern">
       </div>
       <div class="row" id="exSuggest" style="display:none"></div>
+      <div class="row" style="margin-top:6px">
+        <span class="note" title="标题命中这些=🧭目标岗位，能进强推荐">🎯 目标岗位：</span>
+        <input type="text" id="targetTitles" style="flex:1;min-width:280px"
+               placeholder="留空=用默认，逗号分隔，如 machine learning engineer, llm engineer, nlp engineer">
+      </div>
+      <div class="row" style="margin-top:6px">
+        <span class="note" title="能接受的相邻岗位，也能进强推荐">🧭 可接受岗位：</span>
+        <input type="text" id="acceptTitles" style="flex:1;min-width:280px"
+               placeholder="留空=用默认，如 applied scientist, research engineer, data scientist">
+      </div>
+      <div class="note" style="margin-top:2px;color:var(--muted)">
+        方向不在以上两栏的岗位（如 IT Support / Sales / QA），即使技能分很高也不会被强推。改完点「保存设置」即时生效。
+      </div>
       <div class="row">
         <span class="note">自动刷新间隔</span>
         <input type="number" id="autoHours" min="0" max="48" style="width:64px">
@@ -503,7 +517,7 @@ let S = { results: {}, feed: [], counts: {}, scan: {}, match: {}, resume: null,
 let F = { view: 'feed', region: 'all', level: 'all', csize: 'all', years: 'all',
           minscore: 0, tier: 'all', visa: 'all', layout: 'cards', sort: 'date' };
 let T = { llm: false, new: false, long: false, curated: false,
-          titleonly: false, derisk: false, unseen: false };
+          titleonly: false, derisk: false, unseen: false, ontarget: false };
 let FEED_LIMIT = 400;   // 「加载更多」逐步调大
 let expanded = new Set();
 let pollTimer = null;
@@ -591,6 +605,10 @@ async function refresh() {
   const exEl = document.getElementById('exkw');
   if (exEl && document.activeElement !== exEl)
     exEl.value = (S.exclude_keywords || []).join(', ');
+  for (const [id, key] of [['targetTitles', 'target_titles'], ['acceptTitles', 'acceptable_titles']]) {
+    const el = document.getElementById(id);
+    if (el && document.activeElement !== el) el.value = (S[key] || []).join(', ');
+  }
   // 排除词学习建议：从你隐藏的岗位标题里挖出来的高频词
   const sug = document.getElementById('exSuggest');
   if (sug) {
@@ -799,6 +817,7 @@ function passJob(j, q) {
   if (T.derisk && (j.flags || []).some(f =>
       (f.t || '').includes('不担保') || (f.t || '').includes('安全许可'))) return false;
   if (T.unseen && seenSet.has(j.url)) return false;
+  if (T.ontarget && j.title_match === 'off_target') return false;
   // 搜索：标题 / 公司 / 地点 / 国家 / 来源 / 命中技能
   if (q) {
     const hay = [j.title, j.company, j.location, j.country, j.source,
@@ -821,7 +840,11 @@ function scoreMini(j) {
 // 行内只放最关键的徽章（级别 / 地区 / NEW / LLM / ⚠️警告），次要信息移到展开详情里
 function jobBadges(j) {
   const d = jobDays(j);
-  let h = `<span class="badge lvl">${esc(S.consts.level_labels[j.level] || j.level || '')}</span>`;
+  let h = '';
+  if (j.title_match === 'target') h += `<span class="badge fgood" title="岗位方向：正是你的目标岗位">🧭 目标岗位</span>`;
+  else if (j.title_match === 'acceptable') h += `<span class="badge lvl" title="岗位方向：你能接受的相邻岗位">🧭 可接受</span>`;
+  else if (j.title_match === 'off_target') h += `<span class="badge fwarn" title="岗位方向：标题不像目标岗位（可能只是技能重合）——已不计入强推荐">🧭 方向存疑</span>`;
+  h += `<span class="badge lvl">${esc(S.consts.level_labels[j.level] || j.level || '')}</span>`;
   if (j.csize && j.csize !== 'unknown')
     h += `<span class="badge lvl" title="公司员工规模（大模型估）">🏢 ${esc((S.consts.size_labels || {})[j.csize] || j.csize)}</span>`;
   if (j.njobs) h += `<span class="badge lvl" title="该公司招聘页在招岗位总数">📋 在招 ${j.njobs}</span>`;
@@ -1305,10 +1328,12 @@ async function runSize() {
 
 async function saveSettings(silent) {
   const kws = document.getElementById('kw').value.split(',').map(s => s.trim()).filter(Boolean);
+  const splitList = id => document.getElementById(id).value.split(',').map(s => s.trim()).filter(Boolean);
   const body = { auto_hours: parseInt(document.getElementById('autoHours').value || '0', 10),
                  exp_years: parseInt(document.getElementById('expYears').value || '1', 10),
-                 exclude_keywords: document.getElementById('exkw').value
-                   .split(',').map(s => s.trim()).filter(Boolean) };
+                 exclude_keywords: splitList('exkw'),
+                 target_titles: splitList('targetTitles'),
+                 acceptable_titles: splitList('acceptTitles') };
   if (kws.length) body.keywords = kws;
   await fetch('/api/settings', { method: 'POST', headers: {'Content-Type':'application/json'},
     body: JSON.stringify(body) });

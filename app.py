@@ -169,6 +169,8 @@ state = {
     "companies": {},   # name -> {"tags": ["curated"|"register"], "town": str}
     "keywords": DEFAULT_KEYWORDS,
     "exclude_keywords": [],  # 标题命中即隐藏（如 sales / frontend / qa）
+    "target_titles": [],     # 目标岗位标题（空=用 DEFAULT_TARGET_TITLES）
+    "acceptable_titles": [], # 可接受岗位标题（空=用 DEFAULT_ACCEPTABLE_TITLES）
     "uk_only": True,
     "auto_hours": 0,   # >0 时后台每隔 N 小时自动快速刷新
     "results": {},     # name -> result（只存探测到招聘页的公司 + 精选公司）
@@ -251,6 +253,8 @@ def load_all():
             state["companies"] = comps
         state["keywords"] = saved.get("keywords", DEFAULT_KEYWORDS)
         state["exclude_keywords"] = saved.get("exclude_keywords", [])
+        state["target_titles"] = saved.get("target_titles", [])
+        state["acceptable_titles"] = saved.get("acceptable_titles", [])
         state["uk_only"] = saved.get("uk_only", True)
         state["auto_hours"] = saved.get("auto_hours", 0)
         state["jobs_seen"] = saved.get("jobs_seen", {})
@@ -289,6 +293,8 @@ def save_state():
         payload = json.dumps({
             "keywords": state["keywords"],
             "exclude_keywords": state["exclude_keywords"],
+            "target_titles": state["target_titles"],
+            "acceptable_titles": state["acceptable_titles"],
             "uk_only": state["uk_only"],
             "auto_hours": state["auto_hours"],
             "results": state["results"],
@@ -725,6 +731,40 @@ def match_job(title, desc, keywords):
         if kw_hit_count(desc.lower(), body_kws) >= 2:
             return "jd"
     return None
+
+
+# 目标岗位画像：区分"这个岗位方向是否对口"，与"简历技能是否重合"解耦。
+# 关键：技能重合高 ≠ 岗位对口——IT Support 的 JD 也会写 python/docker/aws。
+DEFAULT_TARGET_TITLES = [
+    "machine learning engineer", "ml engineer", "mle",
+    "ai engineer", "artificial intelligence engineer",
+    "llm engineer", "nlp engineer", "genai engineer", "generative ai engineer",
+    "deep learning engineer", "computer vision engineer",
+    "machine learning scientist", "ai scientist",
+]
+DEFAULT_ACCEPTABLE_TITLES = [
+    "applied scientist", "research engineer", "research scientist",
+    "data scientist", "data science", "applied ai",
+    "machine learning researcher", "ml researcher",
+    "mlops engineer", "ai platform engineer",
+]
+
+
+def _title_hit(title_l, phrases):
+    return any(re.search(r"\b" + re.escape(p) + r"\b", title_l) for p in phrases)
+
+
+def title_match(title, targets=None, acceptables=None):
+    """岗位方向：target=正好想要 / acceptable=能接受 / off_target=方向不对。
+    off_target 的岗位无论技能分多高都不该被强推（例如 IT Support、Sales）。"""
+    t = (title or "").lower()
+    tg = targets if targets is not None else DEFAULT_TARGET_TITLES
+    ac = acceptables if acceptables is not None else DEFAULT_ACCEPTABLE_TITLES
+    if _title_hit(t, tg):
+        return "target"
+    if _title_hit(t, ac):
+        return "acceptable"
+    return "off_target"
 
 
 def build_links(name):
@@ -1461,14 +1501,20 @@ def visa_certainty(ms, on_register):
     return "register" if on_register else "uncertain"
 
 
-def job_tier(score, ms, visa):
+def job_tier(score, ms, visa, tmatch="target"):
     """推荐分层：strong 强推荐 / maybe 可以看看 / weak 匹配弱 /
-    lowconf 低置信（没抓到JD或没算分） / risk 签证或安全许可风险。"""
+    lowconf 低置信（没抓到JD或没算分） / risk 签证或安全许可风险。
+
+    进 strong 必须三者同时成立：岗位方向对口(target/acceptable) + 分数≥60 +
+    无签证/许可风险。tmatch=off_target 的岗位（IT Support、Sales 等）即使技能分
+    很高也只归 weak——避免"技能重合"被误当成"岗位对口"。"""
     txts = [f.get("t", "") for f in ((ms or {}).get("flags") or [])]
     if visa == "no" or any("安全许可" in t for t in txts):
         return "risk"
     if score is None or any("仅按标题估分" in t for t in txts):
         return "lowconf"
+    if tmatch == "off_target":
+        return "weak"     # 方向不对：技能分再高也沉底，绝不强推
     if score >= 60:
         return "strong"
     if score >= 35:
@@ -2091,6 +2137,8 @@ def api_state():
         excl = state.get("exclude_keywords") or []
         excl_re = (re.compile(r"\b(" + "|".join(re.escape(k) for k in excl) + r")\b")
                    if excl else None)
+        tgt = state.get("target_titles") or DEFAULT_TARGET_TITLES
+        acc = state.get("acceptable_titles") or DEFAULT_ACCEPTABLE_TITLES
         show_hidden = request.args.get("hidden") == "1"  # 已隐藏视图：只看被隐藏的
 
         feed = []
@@ -2113,6 +2161,7 @@ def api_state():
                     days = None
                 ms = state["match_scores"].get(j.get("url", ""))
                 visa = visa_certainty(ms, on_reg)
+                tmatch = title_match(j.get("title", ""), tgt, acc)
                 feed.append({
                     "title": j.get("title", ""), "url": j.get("url", ""),
                     "location": j.get("location", ""), "company": n,
@@ -2125,8 +2174,8 @@ def api_state():
                     "req_years": ms.get("req_years", 0) if ms else 0,
                     "score": ms["score"] if ms else None,
                     "conf": ms.get("conf") if ms else None,
-                    "visa": visa,
-                    "tier": job_tier(ms["score"] if ms else None, ms, visa),
+                    "visa": visa, "title_match": tmatch,
+                    "tier": job_tier(ms["score"] if ms else None, ms, visa, tmatch),
                     "hit": ms["hit"] if ms else [],
                     "must_miss": (ms.get("must_miss") or ms.get("miss", [])) if ms else [],
                     "nice_miss": ms.get("nice_miss", []) if ms else [],
@@ -2148,6 +2197,7 @@ def api_state():
                 days = None
             ms = state["match_scores"].get(u)
             visa = visa_certainty(ms, bool(j.get("sponsor")))
+            tmatch = title_match(j.get("title", ""), tgt, acc)
             feed.append({
                 "title": j.get("title", ""), "url": u,
                 "location": j.get("location", ""), "company": j.get("company", ""),
@@ -2161,8 +2211,8 @@ def api_state():
                 "req_years": ms.get("req_years", 0) if ms else 0,
                 "score": ms["score"] if ms else None,
                 "conf": ms.get("conf") if ms else None,
-                "visa": visa,
-                "tier": job_tier(ms["score"] if ms else None, ms, visa),
+                "visa": visa, "title_match": tmatch,
+                "tier": job_tier(ms["score"] if ms else None, ms, visa, tmatch),
                 "hit": ms["hit"] if ms else [],
                 "must_miss": ms.get("must_miss", []) if ms else [],
                 "nice_miss": ms.get("nice_miss", []) if ms else [],
@@ -2212,6 +2262,7 @@ def api_state():
         return jsonify({
             "keywords": state["keywords"], "uk_only": state["uk_only"],
             "exclude_keywords": state["exclude_keywords"],
+            "target_titles": tgt, "acceptable_titles": acc,
             "excl_suggest": exclude_suggestions(),
             "auto_hours": state["auto_hours"], "exp_years": state["exp_years"],
             "counts": counts, "results": res_out, "feed": feed[:limit],
@@ -2240,6 +2291,12 @@ def api_settings():
         if "exclude_keywords" in data:  # 传空列表 = 清空排除词
             state["exclude_keywords"] = [
                 k.strip().lower() for k in data["exclude_keywords"] if k.strip()]
+        if "target_titles" in data:      # 传空列表 = 恢复默认目标标题
+            state["target_titles"] = [
+                k.strip().lower() for k in data["target_titles"] if k.strip()]
+        if "acceptable_titles" in data:
+            state["acceptable_titles"] = [
+                k.strip().lower() for k in data["acceptable_titles"] if k.strip()]
         if "uk_only" in data:
             state["uk_only"] = bool(data["uk_only"])
         if "auto_hours" in data:

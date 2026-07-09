@@ -211,6 +211,39 @@ def test_job_tier_layers():
     assert app.job_tier(90, clear, "register") == "risk"
 
 
+def test_title_match_direction():
+    # 目标岗位
+    assert app.title_match("Machine Learning Engineer") == "target"
+    assert app.title_match("Senior LLM Engineer") == "target"
+    assert app.title_match("NLP Engineer, Search") == "target"
+    # 可接受
+    assert app.title_match("Applied Scientist") == "acceptable"
+    assert app.title_match("Research Engineer") == "acceptable"
+    assert app.title_match("Data Scientist") == "acceptable"
+    # 方向不对：技能可能重合，但不是目标岗位
+    assert app.title_match("IT Support Engineer") == "off_target"
+    assert app.title_match("Solutions Architect") == "off_target"
+    assert app.title_match("QA Engineer") == "off_target"
+    assert app.title_match("Sales Executive") == "off_target"
+
+
+def test_off_target_never_strong():
+    """验收核心：技能分再高，方向不对(off_target)也绝不能进 strong。"""
+    # IT Support + 高技能重合（python/docker/aws）→ 高分，但方向不对 → 不能 strong
+    assert app.job_tier(94, {}, "register", "off_target") == "weak"
+    assert app.job_tier(90, {}, "yes", "off_target") == "weak"
+    # 目标/可接受方向 + 高分 → 才能 strong
+    assert app.job_tier(94, {}, "register", "target") == "strong"
+    assert app.job_tier(70, {}, "register", "acceptable") == "strong"
+    # 方向对但分不够 → maybe / weak（分层照旧）
+    assert app.job_tier(45, {}, "register", "target") == "maybe"
+    assert app.job_tier(20, {}, "register", "target") == "weak"
+    # 风险/低置信优先级高于方向判断
+    assert app.job_tier(94, {}, "no", "target") == "risk"
+    # 默认 tmatch=target，保持对旧调用的向后兼容
+    assert app.job_tier(80, {}, "register") == "strong"
+
+
 def test_exclude_suggestions_learns_from_hidden(monkeypatch):
     hidden = {f"u{i}": {"title": t} for i, t in enumerate([
         "Salesforce Developer", "Senior Salesforce Engineer", "Salesforce Architect",
