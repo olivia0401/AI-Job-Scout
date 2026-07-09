@@ -319,6 +319,32 @@
   .tierhead .tiercount { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .tierhead small { color: var(--faint); font-size: 11.5px; }
   .mlabel { font-size: 11px; color: var(--faint); padding: 6px 10px 2px; }
+  /* 决策工作台：左导航 + 主区 */
+  .workbench { display: flex; gap: 18px; align-items: flex-start; }
+  .sidenav { flex: 0 0 176px; position: sticky; top: 14px; display: flex; flex-direction: column; gap: 2px; }
+  .sidenav .navitem { text-align: left; padding: 9px 12px; border-radius: 10px; cursor: pointer;
+    color: var(--text2); font-size: 13.5px; border: 1px solid transparent; background: none;
+    display: flex; justify-content: space-between; align-items: center; gap: 8px; font-family: inherit; }
+  .sidenav .navitem:hover { background: var(--soft); }
+  .sidenav .navitem.on { background: var(--soft); color: var(--text); font-weight: 600; border-color: var(--border); }
+  .sidenav .navitem b { font-variant-numeric: tabular-nums; color: var(--muted); font-weight: 600; font-size: 12px; }
+  .sidenav .navsep { height: 1px; background: var(--border); margin: 8px 6px; }
+  .mainarea { flex: 1 1 auto; min-width: 0; }
+  .today-summary { background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+    padding: 16px 18px; margin-bottom: 14px; box-shadow: var(--shadow); }
+  .today-summary h2 { margin: 0 0 4px; font-size: 16px; }
+  .today-summary .sub { color: var(--muted); font-size: 12.5px; }
+  .today-tiles { display: flex; gap: 10px; flex-wrap: wrap; margin: 12px 0 4px; }
+  .today-tiles .tile { flex: 1 1 110px; background: var(--soft); border: 1px solid var(--border);
+    border-radius: 12px; padding: 9px 12px; }
+  .today-tiles .tile .n { font-size: 21px; font-weight: 700; line-height: 1.1; }
+  .today-tiles .tile .l { font-size: 11.5px; color: var(--muted); }
+  .today-acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  @media (max-width: 780px) {
+    .workbench { flex-direction: column; }
+    .sidenav { flex-basis: auto; position: static; flex-direction: row; flex-wrap: wrap; }
+    .sidenav .navitem { flex: 1 1 auto; }
+  }
 </style>
 </head>
 <body>
@@ -353,15 +379,13 @@
     <div class="progress"><div id="progBar"></div></div>
   </div>
 
+  <div class="workbench">
+  <nav class="sidenav" id="sidenav"></nav>
+  <div class="mainarea">
   <div class="resume" id="resumeCard"></div>
   <input type="file" id="resumeFile" accept=".pdf,.docx,.txt,.md" onchange="uploadResume()">
   <div id="suggestBox"></div>
-
-  <div class="bigtabs">
-    <span class="btab on" data-g="view" data-v="feed" onclick="setF(this)">🔍 岗位<b id="cntFeed"></b></span>
-    <span class="btab" data-g="view" data-v="company" onclick="setF(this)">🏢 公司<b id="cntCo"></b></span>
-    <span class="btab" data-g="view" data-v="tracker" onclick="setF(this)">📌 投递清单<b id="cntTrack"></b></span>
-  </div>
+  <span id="cntFeed" hidden></span><span id="cntCo" hidden></span><span id="cntTrack" hidden></span>
 
   <div class="filterbox" id="filterbox">
     <div class="frow">
@@ -449,7 +473,7 @@
   </details>
 
   <details class="adv">
-    <summary>⚙️ 设置：关键词 · 自动刷新 · 粘贴简历</summary>
+    <summary>🎯 我的求职目标（目标岗位 · 排除 · 年限 · 关键词 · 简历）</summary>
     <div class="advbody">
       <div class="row">
         <span class="note" id="pendingNote"></span>
@@ -498,6 +522,8 @@
       </div>
     </div>
   </details>
+  </div><!-- /mainarea -->
+  </div><!-- /workbench -->
 </div>
 
 <div class="wizmask" id="wizard" style="display:none">
@@ -524,7 +550,7 @@
 <script>
 let S = { results: {}, feed: [], counts: {}, scan: {}, match: {}, resume: null,
           consts: { new_days: 3, long_days: 30, level_labels: {} } };
-let F = { view: 'feed', region: 'all', level: 'all', csize: 'all', years: 'all',
+let F = { view: 'today', region: 'all', level: 'all', csize: 'all', years: 'all',
           minscore: 0, tier: 'all', visa: 'all', layout: 'cards', sort: 'rank' };
 let T = { llm: false, new: false, long: false, curated: false,
           titleonly: false, derisk: false, unseen: false, ontarget: false };
@@ -540,13 +566,13 @@ function markSeen(u) {
 }
 // 筛选条件记忆：改一次记一次，下次打开自动恢复
 function saveF() {
-  localStorage.setItem('filters', JSON.stringify({ F: { ...F, view: 'feed' }, T }));
+  localStorage.setItem('filters', JSON.stringify({ F: { ...F, view: 'today' }, T }));
 }
 function restoreF() {
   try {
     const s = JSON.parse(localStorage.getItem('filters') || 'null');
     if (!s) return;
-    Object.assign(F, s.F || {}, { view: 'feed' });
+    Object.assign(F, s.F || {}, { view: 'today' });
     Object.assign(T, s.T || {});
   } catch (e) {}
   if (F.tier === 'hidden') F.tier = 'all';  // 已隐藏视图不跨会话保留
@@ -669,6 +695,7 @@ async function refresh() {
   }
   renderResume();
   updateTrackerTab();
+  renderNav();
   render();
   renderScan();
 }
@@ -745,6 +772,48 @@ function mdToHtml(md) {
   }
   if (inList) html += '</ul>';
   return html;
+}
+
+// 左侧导航
+const NAV = [
+  ['today', '🏠 今日推荐'],
+  ['feed', '🔍 全部岗位', 'feed'],
+  ['company', '🏢 公司', 'co'],
+  ['tracker', '📌 投递清单', 'track'],
+  ['gaps', '🧩 简历缺口'],
+  ['goal', '🎯 我的求职目标'],
+  ['tools', '🛠️ 高级工具'],
+];
+function renderNav() {
+  const c = S.counts || {};
+  const badge = { feed: c.ai_jobs ? c.ai_jobs.toLocaleString() : '',
+                  co: c.has_ai || '', track: Object.keys(S.tracker || {}).length || '' };
+  const nav = document.getElementById('sidenav');
+  if (!nav) return;
+  nav.innerHTML = NAV.map(([v, label, bk]) => {
+    const sep = v === 'gaps' ? '<div class="navsep"></div>' : '';
+    const b = bk && badge[bk] ? `<b>${badge[bk]}</b>` : '';
+    return sep + `<button class="navitem ${F.view === v ? 'on' : ''}" onclick="setView('${v}')">${label}${b}</button>`;
+  }).join('');
+}
+function setView(v) {
+  if (v === 'goal') {  // 我的求职目标：打开设置区
+    const d = document.querySelector('details.adv');
+    if (d) { d.open = true; d.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    return;
+  }
+  if (v === 'tools') {  // 高级工具：打开右上 ⋯ 菜单
+    const m = document.getElementById('moreMenu');
+    if (m) { m.open = true; m.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    return;
+  }
+  if (v === 'gaps') {  // 简历缺口：触发全平台简历建议
+    F.view = 'feed'; saveF(); renderNav(); render();
+    if (typeof loadSuggestions === 'function') loadSuggestions();
+    document.getElementById('suggestBox')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+  F.view = v; saveF(); renderNav(); render();
 }
 
 function renderScan() {
@@ -873,7 +942,8 @@ function jobCard(j, inHidden) {
 function scoreBlock(j) {
   if (j.score == null) return `<div class="scorebox none">–<small>待算</small></div>`;
   const cls = j.score >= 60 ? 'hi' : j.score >= 35 ? 'md' : 'lo';
-  return `<div class="scorebox ${cls}">${j.score}<small>匹配%</small></div>`;
+  const lbl = j.title_match === 'off_target' ? '技能相似' : '技能匹配';
+  return `<div class="scorebox ${cls}" title="这是简历技能重合度，不代表岗位方向对口">${j.score}<small>${lbl}</small></div>`;
 }
 function scoreMini(j) {
   if (j.score == null) return '';
@@ -1152,8 +1222,49 @@ function render() {
   const list = document.getElementById('list');
   const hint = document.getElementById('emptyHint');
   const cnBox = F.region === 'china' ? cnDirectory() : '';
-  // 投递清单不需要筛选行
-  document.getElementById('filterbox').style.display = F.view === 'tracker' ? 'none' : '';
+  // 今日推荐/投递清单不需要横向筛选行
+  document.getElementById('filterbox').style.display =
+    (F.view === 'tracker' || F.view === 'today') ? 'none' : '';
+
+  // 今日推荐：打开即知今天该看什么——摘要 + 分层各取前几条
+  if (F.view === 'today') {
+    hint.innerHTML = '';
+    const feed = (S.feed || []).filter(j => passJob(j, ''));
+    if (!feed.length) {
+      list.innerHTML = `<div class="empty"><div class="big">🛰️</div>
+        <p>还没有岗位数据。先在右上「🔄 扫描新岗位」，或上传简历算匹配分。<br>
+        <span style="font-size:12.5px;color:var(--faint)">首次使用：⋯ 菜单里「🗂️ 首次建立岗位库」跑一遍</span></p></div>`;
+      return;
+    }
+    const byRank = (a, b) => (b.rank ?? -1) - (a.rank ?? -1);
+    const cnt = { strong: 0, maybe: 0, lowconf: 0, weak: 0, risk: 0 };
+    feed.forEach(j => { if (cnt[j.tier] != null) cnt[j.tier]++; });
+    const tiles = [['strong', '🔥 强推荐'], ['maybe', '👀 可以看看'],
+                   ['lowconf', '❔ 需确认'], ['risk', '⚠️ 有风险']]
+      .map(([t, l]) => `<div class="tile"><div class="n">${cnt[t]}</div><div class="l">${l}</div></div>`).join('');
+    let html = `<div class="today-summary">
+      <h2>今天该先看哪些岗位</h2>
+      <div class="sub">按「方向对口 + 技能匹配 + 签证确定性」综合排序，方向不对的（IT Support 等）已自动沉底</div>
+      <div class="today-tiles">${tiles}</div>
+      <div class="today-acts">
+        <button onclick="scan('known')">🔄 刷新今天的新机会</button>
+        <button class="ghost" onclick="setView('goal')">🎯 调整求职目标</button>
+        <button class="ghost" onclick="setView('feed')">查看全部岗位 →</button>
+      </div></div>`;
+    for (const [t, meta] of [['strong', TIER_META.strong], ['maybe', TIER_META.maybe],
+                             ['lowconf', TIER_META.lowconf], ['risk', TIER_META.risk]]) {
+      const grp = feed.filter(j => j.tier === t).sort(byRank);
+      if (!grp.length) continue;
+      const shown = grp.slice(0, 6);
+      html += `<div class="tierhead"><b>${meta[0]}</b><span class="tiercount">${grp.length}</span><small>${meta[1]}</small></div>`
+            + shown.map(j => jobCard(j, false)).join('')
+            + (grp.length > shown.length
+               ? `<div style="margin:4px 4px 10px"><button class="mini ghost" onclick="F.tier='${t}';document.getElementById('fTier').value='${t}';saveF();setView('feed')">查看全部 ${grp.length} 个${meta[0]} →</button></div>`
+               : '');
+    }
+    list.innerHTML = html;
+    return;
+  }
 
   // 投递清单视图
   if (F.view === 'tracker') {
@@ -1190,7 +1301,7 @@ function render() {
     if (!items.length) {
       list.innerHTML = `<div class="empty"><div class="big">📌</div>
         <p>清单还是空的。在岗位列表里点 <b>☆ 收藏</b>，把想投的岗位加进来，<br>然后在这里跟踪状态：待投 → 已投 → 面试中</p>
-        <button class="ghost" onclick="document.querySelector('[data-g=view][data-v=feed]').click()">← 去挑岗位</button></div>`;
+        <button class="ghost" onclick="setView('feed')">← 去挑岗位</button></div>`;
       hint.innerHTML = '';
       return;
     }
