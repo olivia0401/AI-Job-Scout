@@ -363,6 +363,12 @@ class RateLimited(Exception):
     """对方限流/暂时不可用；此时不能把公司记为 none，否则永久漏掉。"""
 
 
+# 停止扫描的全局开关。深度补扫时在飞任务可能卡在 Workable 信号量排队/退避 sleep 里
+# 几十秒到几分钟，光靠 run_scan 主循环检查 state["scan"]["stop"] 根本停不下来——
+# 所有慢环节（探测间隙、信号量等待、退避）都要能被这个事件秒级打断。
+_stop_event = threading.Event()
+
+
 # 近期限流(429/503)次数监控——run_scan 据此判断是否"命中 cap"并自动冷却
 _rl_lock = threading.Lock()
 _rl_hits = []          # 最近的 429/503 时间戳
@@ -463,7 +469,11 @@ def probe_workable(slug):
     # 让深度补扫最终能查完（退避期间占着并发槽 → 等于自动降速自愈）。只影响 deep 补扫，
     # 不进全量热路径，所以第一次全量不受它拖累。
     url = f"https://apply.workable.com/api/v1/widget/accounts/{slug}"
-    with _WORKABLE_SEM:
+    # 排队等并发槽时每 0.5s 看一眼停止开关；停止按 RateLimited 处理 → 不落 none 缓存
+    while not _WORKABLE_SEM.acquire(timeout=0.5):
+        if _stop_event.is_set():
+            raise RateLimited(url)
+    try:
         data = None
         for attempt in range(4):
             try:
@@ -472,7 +482,11 @@ def probe_workable(slug):
             except RateLimited:
                 if attempt == 3:
                     raise                       # 连试 4 次仍限流 → 本轮不落 none，下轮再补
-                time.sleep(1.5 * (2 ** attempt))  # 退避：1.5s, 3s, 6s
+                # 退避：1.5s, 3s, 6s；期间被停止则立刻放弃（wait 返回 True = 事件已置位）
+                if _stop_event.wait(1.5 * (2 ** attempt)):
+                    raise RateLimited(url)
+    finally:
+        _WORKABLE_SEM.release()
     if not data or "jobs" not in data:
         return None
     jobs = [{
@@ -691,6 +705,9 @@ def find_ats(name, probes=PROBES, max_slugs=SWEEP_SLUGS, force=False):
     rate_limited = False  # 被限流的探测视为"未知"而非"没有"
     for slug in slug_candidates(name)[:max_slugs]:
         for ats_name, fn in probes:
+            if _stop_event.is_set():
+                rate_limited = True  # 中途放弃按"未知"处理，不写 none 缓存
+                break
             try:
                 res = fn(slug)
             except RateLimited:
@@ -704,6 +721,8 @@ def find_ats(name, probes=PROBES, max_slugs=SWEEP_SLUGS, force=False):
                     return (ats_name, slug, res)
                 if fallback is None:
                     fallback = (ats_name, slug, res)
+        if _stop_event.is_set():
+            break
     if fallback:
         ats_cache[name] = {"ats": fallback[0], "slug": fallback[1]}
         return fallback
@@ -915,6 +934,7 @@ def run_scan(names, mode):
     state["scan"] = {"running": True, "done": 0, "total": len(names), "mode": mode,
                      "started_ts": time.time(), "stop": False, "new_jobs": 0,
                      "paused_until": 0}
+    _stop_event.clear()
     processed = 0
 
     def _cooldown_pause():
@@ -945,7 +965,10 @@ def run_scan(names, mode):
 
             submit_more()
             while futures:
-                done_set, _ = wait(list(futures), return_when=FIRST_COMPLETED)
+                # 带超时轮询：深度补扫时在飞任务可能几十秒都没有一家"完成"，
+                # 不加超时的话停止标志要等到有任务完成才会被检查
+                done_set, _ = wait(list(futures), timeout=2,
+                                   return_when=FIRST_COMPLETED)
                 for fut in done_set:
                     n = futures.pop(fut)
                     try:
@@ -1581,10 +1604,10 @@ def job_tier(score, ms, visa, tmatch="target"):
     txts = [f.get("t", "") for f in ((ms or {}).get("flags") or [])]
     if visa == "no" or any("安全许可" in t for t in txts):
         return "risk"
+    if tmatch == "off_target":
+        return "weak"     # 方向不对：直接沉底，绝不进今日推荐（在 lowconf 判断之前）
     if score is None or any("仅按标题估分" in t for t in txts):
         return "lowconf"
-    if tmatch == "off_target":
-        return "weak"     # 方向不对：技能分再高也沉底，绝不强推
     if score >= 60:
         return "strong"
     if score >= 35:
@@ -2433,6 +2456,7 @@ def api_scan():
 @app.route("/api/scan/stop", methods=["POST"])
 def api_scan_stop():
     state["scan"]["stop"] = True
+    _stop_event.set()  # 打断在飞任务的信号量排队/退避 sleep，让扫描秒级收尾
     return jsonify({"ok": True})
 
 

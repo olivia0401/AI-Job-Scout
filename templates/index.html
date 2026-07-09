@@ -9,15 +9,16 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #f7f8fa; --card: #ffffff; --soft: #f2f4f8; --border: #e8eaf0;
-    --text: #21273a; --text2: #4c5468; --muted: #8a91a5; --faint: #b4bac9;
-    --accent: #4f63f5; --accent-deep: #3d4ec2; --accent-soft: #eef0fe; --accent-line: #ccd3fb;
-    --green: #148b5c; --green-soft: #e8f6ef;
-    --amber: #a06c0c; --amber-soft: #fdf3e0;
-    --gold: #8f6c06; --gold-soft: #fdf7e2;
-    --red: #b23b4b; --red-soft: #fdecee;
-    --shadow: 0 1px 2px rgba(30,36,60,.04), 0 1px 6px rgba(30,36,60,.03);
-    --shadow-lift: 0 3px 14px rgba(30,36,60,.08);
+    --bg: #f4f5f7; --card: #ffffff; --soft: #f1f2f4; --border: #d8dbe0; --line: #e9ebee;
+    --text: #1a1d22; --text2: #464b53; --muted: #767b84; --faint: #9aa0a8;
+    --accent: #2f5fda; --accent-deep: #234aa6; --accent-soft: #eef2fc; --accent-line: #cdd8f3;
+    --green: #167a45; --green-soft: #e7f2ec;
+    --amber: #8a6000; --amber-soft: #f6eed9;
+    --gold: #8a6000; --gold-soft: #f6eed9;
+    --red: #b23124; --red-soft: #f9e9e7;
+    --shadow: 0 1px 2px rgba(20,25,35,.05);
+    --shadow-lift: 0 4px 16px rgba(20,25,35,.10);
+    --r: 7px; --r-sm: 5px;
   }
   * { box-sizing: border-box; }
   html { -webkit-text-size-adjust: 100%; }
@@ -391,6 +392,20 @@
   .kc-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 7px; }
   .kc-foot select { width: 100%; }
   .kempty { color: var(--faint); font-size: 12px; text-align: center; padding: 10px 0; }
+  /* 工具箱 / 设置面板 */
+  .toolsec { margin-bottom: 20px; }
+  .toolsec h3 { font-size: 13px; margin: 0 0 8px 2px; color: var(--muted); font-weight: 600;
+                letter-spacing: .3px; text-transform: none; }
+  .toolgrid { display: flex; flex-direction: column; gap: 10px; }
+  .toolcard { background: var(--card); border: 1px solid var(--border); border-radius: 13px;
+              padding: 15px 17px; box-shadow: var(--shadow); display: flex; gap: 14px; align-items: center; }
+  .toolcard .ti { flex: 1; min-width: 0; }
+  .toolcard .tn { font-weight: 650; font-size: 14.5px; letter-spacing: -.1px; }
+  .toolcard .td { color: var(--text2); font-size: 12.5px; margin-top: 4px; line-height: 1.65; }
+  .toolcard .td b { color: var(--text); }
+  .toolcard .ta { flex: 0 0 auto; }
+  .toolcard .ta button, .toolcard .ta .btn { white-space: nowrap; }
+  .toolcard.primary { border-color: var(--accent-line); background: var(--accent-soft); }
 </style>
 </head>
 <body>
@@ -400,27 +415,13 @@
     <span class="tagline">英国工签雇主 · 岗位雷达</span>
     <div class="actions">
       <button onclick="scan('known')" id="btnRefresh">🔄 扫描新岗位</button>
-      <details class="menu" id="moreMenu">
-        <summary>⋯</summary>
-        <div class="mitems">
-          <a href="/api/export">📥 导出 Excel</a>
-          <button id="btnAgg" onclick="menuDo(runAgg)">🌐 补充招聘网站岗位<small>从 LinkedIn / Indeed / Glassdoor 等聚合平台补岗位</small></button>
-          <button id="btnSize" onclick="menuDo(runSize)">🏢 识别公司规模<small>用大模型给有岗位的公司估员工规模（缓存，只查没查过的）</small></button>
-          <div class="msep"></div>
-          <div class="mlabel">高级工具（维护用，日常用不到）</div>
-          <button id="btnPending" onclick="menuDo(() => scan('pending'))">🗂️ 首次建立岗位库<small>第一次用跑一遍，把有招聘系统的雇主摸出来（1–2 小时）；之后日常只需扫描新岗位</small></button>
-          <button id="btnDeep" onclick="menuDo(() => scan('deep'))">🔍 查找遗漏公司<small>岗位库建好后再点：补查限流/冷门招聘系统（慢，可随时停）</small></button>
-          <div class="msep"></div>
-          <button onclick="menuDo(openSettings)">🎯 我的求职目标与设置</button>
-        </div>
-      </details>
     </div>
   </div>
 
   <div class="scanbar" id="scanbar">
     <div class="line">
       <span id="scanTxt"></span>
-      <button class="ghost" onclick="stopScan()">停止</button>
+      <button class="ghost" id="btnStop" onclick="stopScan()">停止</button>
     </div>
     <div class="progress"><div id="progBar"></div></div>
   </div>
@@ -450,12 +451,12 @@
         <option value="unknown">未知地点</option>
       </select>
       <select class="fsel" id="fTier" onchange="setTier(this.value)" title="综合推荐分层：匹配分 + JD 置信度 + 签证/许可风险">
-        <option value="all">全部分层</option>
-        <option value="strong">强推荐（≥60 分且已验证）</option>
-        <option value="maybe">可以看看（35–59 分）</option>
-        <option value="weak">匹配较弱（&lt;35 分）</option>
-        <option value="lowconf">低置信（没抓到 JD）</option>
-        <option value="risk">签证/许可风险</option>
+        <option value="all">全部</option>
+        <option value="strong">推荐投（方向对口·高匹配·无风险）</option>
+        <option value="maybe">谨慎投（匹配中等）</option>
+        <option value="lowconf">需人工确认（没抓到 JD）</option>
+        <option value="weak">不建议投（方向/匹配弱）</option>
+        <option value="risk">有风险（不担保/许可）</option>
         <option value="hidden">已隐藏</option>
       </select>
       <select class="fsel" id="fVisa" onchange="F.visa = this.value; saveF(); render()" title="签证确定性：公司在 sponsor 名单 ≠ 这个岗位一定担保，JD 明确写了才是确定的">
@@ -512,19 +513,20 @@
   <details class="howto" id="howto">
     <summary>📖 使用说明</summary>
     <div class="hbody">
-      <div><b class="stepn">1</b><b>扫描岗位</b>：点右上「扫描新岗位」抓取最新岗位<span id="step1ok"></span>　<span style="color:var(--muted)">（第一次用，先在 ⋯ 菜单点「首次建立岗位库」跑一遍，约 1–2 小时；之后日常只需扫描）</span></div>
+      <div><b class="stepn">1</b><b>扫描岗位</b>：点右上「扫描新岗位」抓取最新岗位<span id="step1ok"></span>　<span style="color:var(--muted)">（第一次用，先去左侧「工具箱」点「首次建立岗位库」跑一遍，约几小时；之后日常只需扫描）</span></div>
       <div><b class="stepn">2</b><b>上传简历</b>：自动给每个岗位算技能匹配分，并按「方向对口 + 签证 + 匹配」综合排序<span id="step2ok"></span></div>
       <div><b class="stepn">3</b><b>看今日推荐</b>：点岗位在右侧详情里看推荐理由、缺哪些技能，生成简历建议 / networking 草稿；想投的点收藏，去「投递清单」看板跟踪</div>
     </div>
   </details>
 
-  <details class="adv">
-    <summary>🎯 我的求职目标（目标岗位 · 排除 · 年限 · 关键词 · 简历）</summary>
+  <!-- ========== 求职目标设置（左侧导航「求职目标设置」） ========== -->
+  <div id="goalPanel" class="viewpanel" style="display:none">
+    <div class="today-summary">
+      <h2>🎯 求职目标设置</h2>
+      <div class="sub">告诉工具你要找什么、你的背景——它据此给岗位打分、排序、排雷。改完点「保存设置」即时生效。</div>
+    </div>
     <div class="advbody">
       <div class="row">
-        <span class="note" id="pendingNote"></span>
-      </div>
-      <div class="row" style="margin-top:10px">
         <span class="note">岗位关键词：</span>
         <input type="text" id="kw" style="flex:1;min-width:280px">
       </div>
@@ -563,11 +565,66 @@
         <button class="mini" onclick="pasteResume()" style="margin-top:8px">保存简历文本</button>
       </div>
       <div class="note" style="margin-top:10px">
-        全量清查逐家探测还没查过的 register 雇主，可随时停止，进度自动缓存、续跑不重复。
-        日常只需点顶部"🔄 刷新最新岗位"。
+        改完记得点「保存设置」。想扫描岗位、导出等操作，去左侧「工具箱」。
       </div>
     </div>
-  </details>
+  </div><!-- /goalPanel -->
+
+  <!-- ========== 工具箱（左侧导航「工具箱」） ========== -->
+  <div id="toolsPanel" class="viewpanel" style="display:none">
+    <div class="today-summary">
+      <h2>🧰 工具箱</h2>
+      <div class="sub">扫描岗位、补充来源、导出，都在这。日常只需第一张卡片「扫描新岗位」。</div>
+    </div>
+    <div class="advbody" style="margin-bottom:16px">
+      <div class="note" id="pendingNote">岗位库状态加载中…</div>
+    </div>
+    <div class="toolsec">
+      <h3>扫描岗位</h3>
+      <div class="toolgrid">
+        <div class="toolcard primary">
+          <div class="ti"><div class="tn">🔄 扫描新岗位</div>
+            <div class="td"><b>日常就用这个。</b>从已经找到招聘系统的雇主里抓最新岗位，几分钟就好。</div></div>
+          <div class="ta"><button onclick="scan('known')">开始扫描</button></div>
+        </div>
+        <div class="toolcard">
+          <div class="ti"><div class="tn">🗂️ 首次建立岗位库</div>
+            <div class="td">第一次使用时跑一遍：把 12 万家工签雇主里有招聘系统的摸出来。约几小时，可随时停，<b>进度自动保存、续跑不重复</b>。之后就不用再点了。</div></div>
+          <div class="ta"><button class="ghost" id="btnPending" onclick="scan('pending')">运行</button></div>
+        </div>
+        <div class="toolcard">
+          <div class="ti"><div class="tn">🔍 查找遗漏公司</div>
+            <div class="td">岗位库建好后偶尔跑：补查上次被限流、或用冷门招聘系统的公司。慢、产出少，可随时停。</div></div>
+          <div class="ta"><button class="ghost" id="btnDeep" onclick="scan('deep')">运行</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="toolsec">
+      <h3>补充岗位来源</h3>
+      <div class="toolgrid">
+        <div class="toolcard">
+          <div class="ti"><div class="tn">🌐 补充招聘网站岗位</div>
+            <div class="td">从 Adzuna / Reed 等聚合平台补岗位，覆盖自动扫描抓不到的大厂（Google / Amazon 等自建招聘系统）。结果带「来源」徽章。</div></div>
+          <div class="ta"><button class="ghost" id="btnAgg" onclick="runAgg()">搜索</button></div>
+        </div>
+        <div class="toolcard">
+          <div class="ti"><div class="tn">🏢 识别公司规模</div>
+            <div class="td">用 AI 给有岗位的公司估员工规模，之后可按「大型 / 中型 / 初创」筛选。只查没查过的，结果缓存。需配 AI key。</div></div>
+          <div class="ta"><button class="ghost" id="btnSize" onclick="runSize()">识别</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="toolsec">
+      <h3>导出</h3>
+      <div class="toolgrid">
+        <div class="toolcard">
+          <div class="ti"><div class="tn">📥 导出 Excel</div>
+            <div class="td">把当前岗位库导出成 Excel 表格，方便离线整理或分享。</div></div>
+          <div class="ta"><a class="btn ghost" href="/api/export">下载</a></div>
+        </div>
+      </div>
+    </div>
+  </div><!-- /toolsPanel -->
   </div><!-- /mainarea -->
   </div><!-- /workbench -->
 </div>
@@ -736,16 +793,14 @@ async function refresh() {
   if (btnAgg) {
     const running = (S.agg || {}).running;
     btnAgg.disabled = running;
-    btnAgg.innerHTML = (running ? '🌐 搜索中…' : '🌐 搜聚合平台')
-      + '<small>补 LinkedIn / Indeed / Glassdoor 盲区</small>';
+    btnAgg.textContent = running ? '搜索中…' : '搜索';
     if (!S.has_api_keys) btnAgg.title = '需先在 data/api_keys.json 配置 Adzuna/Reed 的免费 API key';
   }
   const btnSize = document.getElementById('btnSize');
   if (btnSize) {
     const sz = S.size || {};
     btnSize.disabled = !!sz.running;
-    btnSize.innerHTML = (sz.running ? `🏢 识别中… ${sz.done||0}/${sz.total||0}` : '🏢 识别公司规模')
-      + '<small>用大模型给有岗位的公司估员工规模（缓存，只查没查过的）</small>';
+    btnSize.textContent = sz.running ? `识别中… ${sz.done||0}/${sz.total||0}` : '识别';
     if (!S.has_llm) btnSize.title = '需先配置大模型 API key（data/api_keys.json 的 openai_api_key / anthropic_api_key）';
   }
   renderResume();
@@ -776,7 +831,7 @@ function renderResume() {
     <span class="info"><b>${esc(S.resume.name)}</b> ✓ ${S.resume.keywords.length} 个技能${status}</span>
     <span class="acts">
       <button class="mini ghost" onclick="document.getElementById('resumeFile').click()">重新上传</button>
-      <button class="mini ghost" onclick="loadSuggestions()" ${scored ? '' : 'disabled'}>🎯 全平台简历建议</button>
+      <button class="mini ghost" onclick="setView('gaps')" ${scored ? '' : 'disabled'}>🎯 全平台简历建议</button>
       ${!scored && !m.running ? `<button class="mini" onclick="runMatch()">🎯 计算匹配度</button>` : ''}
     </span>`;
   if (m.running && !pollTimer) pollTimer = setInterval(refresh, 2500);
@@ -829,16 +884,17 @@ function mdToHtml(md) {
   return html;
 }
 
-// 左侧导航
+// 左侧导航：每一项都是主区里的真实页面（不再有"点这里、内容在别处冒出来"）
 const NAV = [
   ['today', '今日推荐'],
   ['feed', '全部岗位', 'feed'],
   ['company', '公司', 'co'],
   ['tracker', '投递清单', 'track'],
   ['gaps', '简历缺口'],
-  ['goal', '我的求职目标'],
-  ['tools', '高级工具'],
+  ['goal', '求职目标设置'],
+  ['tools', '工具箱'],
 ];
+const NAV_SEP = { gaps: true, goal: true };  // 分组分隔线
 function renderNav() {
   const c = S.counts || {};
   const badge = { feed: c.ai_jobs ? c.ai_jobs.toLocaleString() : '',
@@ -846,48 +902,58 @@ function renderNav() {
   const nav = document.getElementById('sidenav');
   if (!nav) return;
   nav.innerHTML = NAV.map(([v, label, bk]) => {
-    const sep = v === 'gaps' ? '<div class="navsep"></div>' : '';
+    const sep = NAV_SEP[v] ? '<div class="navsep"></div>' : '';
     const b = bk && badge[bk] ? `<b>${badge[bk]}</b>` : '';
     return sep + `<button class="navitem ${F.view === v ? 'on' : ''}" onclick="setView('${v}')">${label}${b}</button>`;
   }).join('');
 }
+// 每个视图显示主区里的哪些面板——唯一的可见性开关
+function applyView() {
+  const v = F.view;
+  const show = (id, on) => { const e = document.getElementById(id); if (e) e.style.display = on ? '' : 'none'; };
+  show('resumeCard', ['today', 'feed', 'company', 'gaps'].includes(v));
+  show('filterbox', ['feed', 'company'].includes(v));
+  show('suggestBox', v === 'gaps');
+  show('goalPanel', v === 'goal');
+  show('toolsPanel', v === 'tools');
+  show('list', !['goal', 'tools', 'gaps'].includes(v));
+  show('emptyHint', !['goal', 'tools', 'gaps'].includes(v));
+  show('howto', ['today', 'feed'].includes(v));
+}
 function setView(v) {
-  if (v === 'goal') {  // 我的求职目标：打开设置区
-    const d = document.querySelector('details.adv');
-    if (d) { d.open = true; d.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
-    return;
-  }
-  if (v === 'tools') {  // 高级工具：打开右上 ⋯ 菜单
-    const m = document.getElementById('moreMenu');
-    if (m) { m.open = true; m.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
-    return;
-  }
-  if (v === 'gaps') {  // 简历缺口：触发全平台简历建议
-    F.view = 'feed'; saveF(); renderNav(); render();
-    if (typeof loadSuggestions === 'function') loadSuggestions();
-    document.getElementById('suggestBox')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    return;
-  }
-  F.view = v; saveF(); renderNav(); render();
+  F.view = v; saveF(); renderNav();
+  if (v === 'gaps' && typeof loadSuggestions === 'function') loadSuggestions();
+  render();
 }
 
 function renderScan() {
   const sc = S.scan || {};
   const bar = document.getElementById('scanbar');
   const running = !!sc.running;
+  if (!running) window._stopping = false;   // 扫描真的停了，复位"停止中"状态
+  const stopping = running && window._stopping;
   document.getElementById('btnRefresh').disabled = running;
-  document.getElementById('btnPending').disabled = running;
+  ['btnPending', 'btnDeep'].forEach(id => {
+    const b = document.getElementById(id); if (b) b.disabled = running;
+  });
+  const btnStop = document.getElementById('btnStop');
+  if (btnStop) { btnStop.disabled = stopping; btnStop.textContent = stopping ? '停止中…' : '停止'; }
   bar.style.display = running ? 'block' : 'none';
   if (running) {
     document.getElementById('progBar').style.width = (sc.total ? 100*sc.done/sc.total : 0) + '%';
     const eta = sc.eta_min != null ? (sc.eta_min > 90 ? `剩约 ${(sc.eta_min/60).toFixed(1)} 小时` : `剩约 ${sc.eta_min} 分钟`) : '';
     const modeTxt = { known: '刷新最新岗位', pending: '全量清查', curated: '精选扫描', all: '全部扫描', deep: '深度补扫' }[sc.mode] || '扫描';
     const pausedLeft = sc.paused_until ? Math.max(0, Math.round((sc.paused_until*1000 - Date.now())/60000)) : 0;
-    document.getElementById('scanTxt').textContent = pausedLeft > 0
+    document.getElementById('scanTxt').textContent = stopping
+      ? `⏹️ 正在停止${modeTxt}…（等在飞的任务收尾，最多几秒；进度已保存）`
+      : pausedLeft > 0
       ? `${modeTxt} · ⏸️ 触发对方限流，冷却中，约 ${pausedLeft} 分钟后自动继续（已扫 ${sc.done.toLocaleString()}/${sc.total.toLocaleString()}，进度已缓存）`
       : `${modeTxt}中 ${sc.done.toLocaleString()}/${sc.total.toLocaleString()} · 新发现岗位 ${sc.new_jobs} · ${eta}（进度实时缓存，停止不丢）`;
-    if (!pollTimer) pollTimer = setInterval(refresh, 2500);
-  } else if (!(S.match || {}).running && pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    // 停止中加快轮询，让进度条尽快消失；否则用常规间隔
+    const interval = stopping ? 800 : 2500;
+    if (pollTimer && window._pollInterval !== interval) { clearInterval(pollTimer); pollTimer = null; }
+    if (!pollTimer) { pollTimer = setInterval(refresh, interval); window._pollInterval = interval; }
+  } else if (!(S.match || {}).running && pollTimer) { clearInterval(pollTimer); pollTimer = null; window._pollInterval = null; }
 }
 
 function setF(el) {
@@ -898,16 +964,6 @@ function setF(el) {
   render();
   // 排序方式变了要向后端重取：后端按该排序截断
   if (el.dataset.g === 'sort') refresh();
-}
-// ⋯ 菜单项：先收起菜单再执行
-function menuDo(fn) {
-  document.getElementById('moreMenu').open = false;
-  fn();
-}
-function openSettings() {
-  const adv = document.querySelector('details.adv');
-  adv.open = true;
-  adv.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 function toggleT(el) {
   T[el.dataset.t] = !T[el.dataset.t];
@@ -962,11 +1018,11 @@ function passJob(j, q) {
 // 推荐分层分区（🔥 推荐优先视图用）
 const TIER_SEQ = ['strong', 'maybe', 'lowconf', 'weak', 'risk'];
 const TIER_META = {
-  strong:  ['强推荐',            '方向对口 · 匹配高 · 无签证/许可风险'],
-  maybe:   ['可以看看',          '方向对口但匹配中等，或信息略缺'],
-  lowconf: ['低置信',            '没抓到完整 JD、仅按标题估分，建议打开原岗位人工确认'],
-  weak:    ['匹配较弱 / 方向存疑', '技能重合低，或标题不像目标岗位'],
-  risk:    ['签证/许可风险',      'JD 明确不担保，或要求安全许可/英国国籍'],
+  strong:  ['推荐投',      '方向对口 · 匹配高 · 无签证/许可风险'],
+  maybe:   ['谨慎投',      '方向对口但匹配中等，或信息略缺'],
+  lowconf: ['需人工确认',  '没抓到完整 JD、仅按标题估分——打开原岗位确认地点/签证/要求'],
+  weak:    ['不建议投',    '技能重合低，或岗位方向不对口'],
+  risk:    ['有风险',      'JD 明确不担保，或要求安全许可/英国国籍'],
 };
 const TIER_CLASS = { strong: 'th-strong', maybe: 'th-maybe', lowconf: 'th-lowconf',
                      weak: 'th-weak', risk: 'th-risk' };
@@ -1010,31 +1066,39 @@ function scoreMini(j) {
 function jobBadges(j) {
   const d = jobDays(j);
   let h = '';
-  if (j.title_match === 'target') h += `<span class="badge fgood" title="正是你的目标岗位方向">目标岗位</span>`;
+  // 只留决策关键：方向 · 签证 · 风险 · 地区 · NEW（级别/规模/LLM 移到详情抽屉）
+  if (j.title_match === 'off_target') h += `<span class="badge fwarn" title="标题不像目标岗位（可能只是技能重合），已不计入推荐">方向存疑</span>`;
   else if (j.title_match === 'acceptable') h += `<span class="badge lvl" title="你能接受的相邻岗位方向">可接受</span>`;
-  else if (j.title_match === 'off_target') h += `<span class="badge fwarn" title="标题不像目标岗位（可能只是技能重合），已不计入强推荐">方向存疑</span>`;
-  h += `<span class="badge lvl">${esc(S.consts.level_labels[j.level] || j.level || '')}</span>`;
-  if (j.csize && j.csize !== 'unknown')
-    h += `<span class="badge lvl" title="公司员工规模（大模型估）">${esc((S.consts.size_labels || {})[j.csize] || j.csize)}</span>`;
-  if (j.njobs) h += `<span class="badge lvl" title="该公司招聘页在招岗位总数">在招 ${j.njobs}</span>`;
-  const _mine = S.exp_years ?? 99;
-  if (j.req_years && j.req_years <= _mine) h += `<span class="badge lvl" title="JD 要求的最低年限">${j.req_years}+ 年</span>`;
+  h += visaBadge(j);
   if (j.region === 'europe') h += `<span class="badge eu">${esc(j.country || 'Europe')}</span>`;
   if (j.region === 'china') h += `<span class="badge cn">中国</span>`;
   if (j.region === 'unknown') h += `<span class="badge lvl" title="招聘页没写工作地点，投递前先到 JD 里确认">未知地点</span>`;
+  const _mine = S.exp_years ?? 99;
+  if (j.req_years && j.req_years > _mine) h += `<span class="badge fwarn" title="JD 要求年限高于你填写的">要求 ${j.req_years}+ 年</span>`;
   if (d != null && d <= S.consts.new_days) h += `<span class="badge new">NEW</span>`;
-  if (j.llm) h += `<span class="badge llm">LLM</span>`;
   if (j.via === 'agg' && !j.sponsor)
-    h += `<span class="badge fwarn" title="公司不在工签 sponsor 名单里，投前请自行确认能否担保">非担保名单</span>`;
-  (j.flags || []).filter(f => f.lv !== 'good').forEach(f => {
+    h += `<span class="badge fwarn" title="公司不在工签 sponsor 名单里，投前请自行确认能否担保">非名单公司</span>`;
+  (j.flags || []).filter(f => f.lv !== 'good' && !/年经验/.test(f.t)).forEach(f => {
     h += `<span class="badge fwarn">${esc(f.t)}</span>`;
   });
   return h;
+}
+// 签证徽章：公司在名单 ≠ 这个岗位一定担保
+const VISA_META = { yes: ['可担保', 'fgood'], register: ['名单内·待确认', 'lvl'],
+                    uncertain: ['担保未知', 'lvl'], no: ['不担保', 'fwarn'] };
+function visaBadge(j) {
+  const m = VISA_META[j.visa];
+  return m ? `<span class="badge ${m[1]}" title="签证确定性：公司在 sponsor 名单 ≠ 这个岗位一定担保，JD 明确写了才确定">${m[0]}</span>` : '';
 }
 // 次要徽章：展开详情时才显示
 function extraBadges(j) {
   const d = jobDays(j);
   let h = '';
+  if (j.level) h += `<span class="badge lvl">${esc(S.consts.level_labels[j.level] || j.level)}</span>`;
+  if (j.title_match === 'target') h += `<span class="badge fgood">目标岗位</span>`;
+  if (j.csize && j.csize !== 'unknown') h += `<span class="badge lvl" title="公司员工规模（大模型估）">${esc((S.consts.size_labels || {})[j.csize] || j.csize)}</span>`;
+  if (j.njobs) h += `<span class="badge lvl" title="该公司招聘页在招岗位总数">公司在招 ${j.njobs}</span>`;
+  if (j.llm) h += `<span class="badge llm">LLM 相关</span>`;
   if (d != null && d >= S.consts.long_days) h += `<span class="badge long">长期在招 ${d} 天</span>`;
   if (j.via === 'jd') h += `<span class="badge viajd" title="标题没写 AI，是 JD 正文命中才召回的">正文命中</span>`;
   if (j.source) h += `<span class="badge src" title="来自聚合平台搜索">${esc(j.source)}</span>`;
@@ -1341,13 +1405,13 @@ function resumeNudge() {
 
 function render() {
   if (drawerUrl) renderDrawer();   // 抽屉里的建议/草稿随生成实时更新
+  applyView();                     // 按当前视图显隐主区各面板
+  // 设置 / 工具箱 / 简历缺口是独立面板，不走下面的岗位列表渲染
+  if (['goal', 'tools', 'gaps'].includes(F.view)) return;
   const q = document.getElementById('search').value.toLowerCase();
   const list = document.getElementById('list');
   const hint = document.getElementById('emptyHint');
   const cnBox = F.region === 'china' ? cnDirectory() : '';
-  // 今日推荐/投递清单不需要横向筛选行
-  document.getElementById('filterbox').style.display =
-    (F.view === 'tracker' || F.view === 'today') ? 'none' : '';
 
   // 今日推荐：打开即知今天该看什么——摘要 + 分层各取前几条
   if (F.view === 'today') {
@@ -1360,9 +1424,8 @@ function render() {
     const byRank = (a, b) => (b.rank ?? -1) - (a.rank ?? -1);
     const cnt = { strong: 0, maybe: 0, lowconf: 0, weak: 0, risk: 0 };
     feed.forEach(j => { if (cnt[j.tier] != null) cnt[j.tier]++; });
-    const tiles = [['strong', '强推荐'], ['maybe', '可以看看'],
-                   ['lowconf', '需确认'], ['risk', '有风险']]
-      .map(([t, l]) => `<div class="tile"><div class="n"><span class="tdot ${TIER_CLASS[t]}"></span>${cnt[t]}</div><div class="l">${l}</div></div>`).join('');
+    const tiles = ['strong', 'maybe', 'lowconf', 'risk']
+      .map(t => `<div class="tile"><div class="n"><span class="tdot ${TIER_CLASS[t]}"></span>${cnt[t]}</div><div class="l">${TIER_META[t][0]}</div></div>`).join('');
     let html = (S.resume ? '' : resumeNudge()) + `<div class="today-summary">
       <h2>今天该先看哪些岗位</h2>
       <div class="sub">按「方向对口 + 技能匹配 + 签证确定性」综合排序，方向不对的（IT Support 等）已自动沉底</div>
@@ -1433,8 +1496,9 @@ function render() {
     if (!(S.feed || []).length) {
       list.innerHTML = cnBox + `<div class="empty"><div class="big">🛰️</div>
         <p>还没抓到岗位。点下面的按钮开始扫描<br>
-        <span style="font-size:12.5px;color:var(--faint)">第一次使用：先点右上 ⋯ 菜单里的「🌊 全量清查」跑一夜，覆盖全部 12 万家工签雇主</span></p>
-        <button onclick="scan('known')">🔄 扫描新岗位</button></div>`;
+        <span style="font-size:12.5px;color:var(--faint)">第一次使用：先去左侧「工具箱」点「首次建立岗位库」跑一遍，覆盖全部 12 万家工签雇主</span></p>
+        <button onclick="scan('known')">🔄 扫描新岗位</button>
+        <button class="ghost" onclick="setView('tools')">🧰 打开工具箱</button></div>`;
       hint.innerHTML = '';
       return;
     }
@@ -1575,7 +1639,13 @@ async function scan(mode) {
   if (d.error) { alert(d.error); return; }
   refresh();
 }
-async function stopScan() { await fetch('/api/scan/stop', { method: 'POST' }); }
+async function stopScan() {
+  window._stopping = true;
+  renderScan();                       // 立刻把按钮变「停止中…」、进度文案变「正在停止」
+  try { await fetch('/api/scan/stop', { method: 'POST' }); }
+  catch (e) {}
+  refresh();                          // 尽快拉一次最新状态，别等下一个轮询周期
+}
 
 async function runAgg() {
   const r = await fetch('/api/aggregators', { method: 'POST' });

@@ -249,8 +249,12 @@ def test_off_target_never_strong():
     # 方向对但分不够 → maybe / weak（分层照旧）
     assert app.job_tier(45, {}, "register", "target") == "maybe"
     assert app.job_tier(20, {}, "register", "target") == "weak"
-    # 风险/低置信优先级高于方向判断
+    # 风险优先级最高；方向不对次之（沉底），即使没抓到 JD 也不进"需确认"
     assert app.job_tier(94, {}, "no", "target") == "risk"
+    assert app.job_tier(None, None, "register", "off_target") == "weak"    # off_target 无 JD → 沉底
+    assert app.job_tier(None, None, "register", "target") == "lowconf"     # 方向对但无 JD → 需确认
+    lowconf = {"flags": [{"t": "未抓到 JD，仅按标题估分", "lv": "warn"}]}
+    assert app.job_tier(70, lowconf, "register", "off_target") == "weak"   # off_target 压过 lowconf
     # 默认 tmatch=target，保持对旧调用的向后兼容
     assert app.job_tier(80, {}, "register") == "strong"
 
