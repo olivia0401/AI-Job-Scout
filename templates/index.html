@@ -353,6 +353,41 @@
     .sidenav { flex-basis: auto; position: static; flex-direction: row; flex-wrap: wrap; }
     .sidenav .navitem { flex: 1 1 auto; }
   }
+  /* 右侧详情抽屉 */
+  .drawer-mask { position: fixed; inset: 0; background: rgba(15,18,28,.35); z-index: 80;
+    opacity: 0; pointer-events: none; transition: opacity .18s; }
+  .drawer-mask.open { opacity: 1; pointer-events: auto; }
+  .drawer { position: fixed; top: 0; right: 0; height: 100vh; width: 460px; max-width: 92vw;
+    background: var(--card); border-left: 1px solid var(--border); box-shadow: -12px 0 40px rgba(0,0,0,.16);
+    z-index: 81; transform: translateX(100%); transition: transform .2s ease; display: flex; flex-direction: column; }
+  .drawer.open { transform: translateX(0); }
+  .drawer-head { display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 18px; border-bottom: 1px solid var(--border); flex: 0 0 auto; }
+  .drawer-head .drawer-h { font-weight: 700; font-size: 14px; }
+  .drawer-body { padding: 16px 18px; overflow-y: auto; flex: 1 1 auto; }
+  .drawer-title { font-size: 16px; font-weight: 700; line-height: 1.35; }
+  .drawer-title a { color: var(--text); text-decoration: none; }
+  .drawer-title a:hover { text-decoration: underline; }
+  .drawer-sub { color: var(--muted); font-size: 12.5px; margin: 4px 0 10px; }
+  .drawer-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .drawer-body .matchbox { border: none; padding: 0; margin: 0; background: none; }
+  @media (max-width: 520px) { .drawer { width: 100vw; } }
+  /* 投递看板 */
+  .kanban { display: flex; gap: 12px; align-items: flex-start; overflow-x: auto; padding-bottom: 6px; }
+  .kcol { flex: 1 1 0; min-width: 200px; background: var(--soft); border: 1px solid var(--border);
+    border-radius: 12px; padding: 8px; }
+  .kcol-head { font-size: 13px; font-weight: 700; padding: 4px 6px 8px; display: flex; gap: 6px; align-items: center; }
+  .kcol-head .tiercount { color: var(--muted); font-weight: 600; font-size: 12px; }
+  .kcard { background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 9px 11px; margin-bottom: 8px; cursor: pointer; }
+  .kcard:hover { border-color: var(--accent-line, var(--border)); }
+  .kcard.on { border-color: var(--accent, #4f63f5); box-shadow: 0 0 0 1px var(--accent, #4f63f5); }
+  .kc-title { font-size: 13px; font-weight: 600; line-height: 1.3; }
+  .kc-title a { color: var(--text); text-decoration: none; }
+  .kc-sub { color: var(--muted); font-size: 12px; margin: 2px 0 6px; }
+  .kc-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 7px; }
+  .kc-foot select { width: 100%; }
+  .kempty { color: var(--faint); font-size: 12px; text-align: center; padding: 10px 0; }
 </style>
 </head>
 <body>
@@ -533,6 +568,15 @@
   </div><!-- /mainarea -->
   </div><!-- /workbench -->
 </div>
+
+<div class="drawer-mask" id="drawerMask" onclick="closeDrawer()"></div>
+<aside class="drawer" id="drawer">
+  <div class="drawer-head">
+    <span class="drawer-h">岗位详情</span>
+    <button class="ghost mini" onclick="closeDrawer()">✕ 关闭</button>
+  </div>
+  <div class="drawer-body" id="drawerBody"></div>
+</aside>
 
 <div class="wizmask" id="wizard" style="display:none">
   <div class="wizard">
@@ -926,7 +970,7 @@ const TIER_CLASS = { strong: 'th-strong', maybe: 'th-maybe', lowconf: 'th-lowcon
 // 单个岗位卡片（分区视图与平铺视图共用）
 function jobCard(j, inHidden) {
   return `
-      <div class="jobrow ${expanded.has(j.url) ? 'open' : ''}" onclick="rowClick(event, '${esc(j.url)}')">
+      <div class="jobrow ${drawerUrl === j.url ? 'open' : ''}" onclick="rowClick(event, '${esc(j.url)}')">
         ${scoreBlock(j)}
         <div class="jr-main">
           <div class="l1">
@@ -941,10 +985,9 @@ function jobCard(j, inHidden) {
             <span style="margin-left:auto"></span>
             ${inHidden
               ? `<button class="starbtn" title="从已隐藏中恢复" onclick="hideJob('${esc(j.url)}', false)">↩ 恢复</button>`
-              : `${starBtn(j)}<button class="starbtn" title="隐藏这个岗位（可在分层筛选「已隐藏」里找回）" onclick="hideJob('${esc(j.url)}', true)">🚫</button>`}
-            <span class="expander" style="margin-left:0">${expanded.has(j.url) ? '收起 ▴' : '详情 · 改简历 ▾'}</span>
+              : `${starBtn(j)}<button class="starbtn" title="隐藏这个岗位（可在分层筛选「已隐藏」里找回）" onclick="hideJob('${esc(j.url)}', true)">隐藏</button>`}
+            <span class="expander" style="margin-left:0">详情 →</span>
           </div>
-          ${matchDetail(j)}
         </div>
       </div>`;
 }
@@ -1016,7 +1059,7 @@ function confBadge(j) {
   if (!j.conf || j.score == null) return '';
   const [l, tip] = CONF_LABELS[j.conf] || ['', ''];
   const cls = j.conf === 'high' ? 'fgood' : (j.conf === 'low' ? 'fwarn' : 'lvl');
-  return `<span class="badge ${cls}" title="${tip}">${j.conf === 'high' ? '✔' : (j.conf === 'low' ? '❔' : '')} ${l}</span>`;
+  return `<span class="badge ${cls}" title="${tip}">${l}</span>`;
 }
 // 为什么推荐这个岗位：标题命中了哪些关键词 + 简历重合 + 风险，一眼看懂
 function whyBlock(j) {
@@ -1033,8 +1076,8 @@ function whyBlock(j) {
   if (!parts.length) return '';
   return `<div class="mrow"><span class="mlabel">为什么推荐：</span><span>${parts.join('　·　')}</span></div>`;
 }
-function matchDetail(j) {
-  if (!expanded.has(j.url)) return '';
+function matchDetail(j) { return expanded.has(j.url) ? matchBody(j) : ''; }
+function matchBody(j) {
   if (!S.resume) {
     return `<div class="matchbox">
       <div class="mrow">还没上传简历。上传后展开岗位就能看到：你和这个岗位的<b>匹配细节</b>、缺哪些技能，
@@ -1087,10 +1130,53 @@ function netLinks(j) {
   return `<a class="btn ghost mini" style="padding:5px 14px;font-size:12.5px;border-radius:9px" href="${esc(L.li_people)}" target="_blank">👤 LinkedIn 找招聘官</a>
     <a class="btn ghost mini" style="padding:5px 14px;font-size:12.5px;border-radius:9px" href="${esc(L.hunter)}" target="_blank">📧 查邮箱</a>`;
 }
-// 点击岗位行任意空白处展开/收起；点链接、按钮、下拉框、已展开的详情区不触发
+// 点击岗位行任意空白处 → 右侧详情抽屉；点链接、按钮、下拉框不触发
 function rowClick(ev, url) {
   if (ev.target.closest('a, button, select, .matchbox')) return;
-  toggleMatch(url);
+  openDrawer(url);
+}
+
+// ---------------- 右侧详情抽屉 ----------------
+let drawerUrl = null;
+function jobByUrl(url) {
+  return (S.feed || []).find(x => x.url === url)
+      || (() => { const t = (S.tracker || {})[url];
+                  return t ? { url, title: t.title || url, company: t.company || '',
+                               location: t.location || '' } : null; })();
+}
+function openDrawer(url) {
+  drawerUrl = url;
+  markSeen(url);
+  renderDrawer();
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('drawerMask').classList.add('open');
+  render();  // 刷新列表高亮
+}
+function closeDrawer() {
+  drawerUrl = null;
+  document.getElementById('drawer').classList.remove('open');
+  document.getElementById('drawerMask').classList.remove('open');
+  render();
+}
+function renderDrawer() {
+  if (!drawerUrl) return;
+  const j = jobByUrl(drawerUrl);
+  const body = document.getElementById('drawerBody');
+  if (!j) { body.innerHTML = '<div class="mrow">岗位信息已不在当前列表。</div>'; return; }
+  const dirLabel = { target: '目标岗位', acceptable: '可接受岗位', off_target: '方向存疑' }[j.title_match] || '';
+  const dirCls = j.title_match === 'target' ? 'fgood' : j.title_match === 'off_target' ? 'fwarn' : 'lvl';
+  const tierLabel = (TIER_META[j.tier] || [''])[0];
+  body.innerHTML = `
+    <div class="drawer-title"><a href="${esc(j.url)}" target="_blank">${esc(j.title)}</a></div>
+    <div class="drawer-sub">${esc(j.company)} · ${esc(j.location || (j.region === 'unknown' ? '未知地点' : ''))}
+      ${daysTxt(j) ? ' · ' + daysTxt(j) : ''}</div>
+    <div class="drawer-chips">
+      ${tierLabel ? `<span class="badge ${dirCls}">${tierLabel}</span>` : ''}
+      ${dirLabel ? `<span class="badge ${dirCls}">${dirLabel}</span>` : ''}
+      ${j.score != null ? `<span class="badge lvl">${j.title_match === 'off_target' ? '技能相似' : '技能匹配'} ${j.score}%</span>` : ''}
+      ${confBadge(j)}
+    </div>
+    ${matchBody(j)}`;
 }
 
 // ---------------- 隐藏岗位 ----------------
@@ -1228,6 +1314,7 @@ function cnDirectory() {
 }
 
 function render() {
+  if (drawerUrl) renderDrawer();   // 抽屉里的建议/草稿随生成实时更新
   const q = document.getElementById('search').value.toLowerCase();
   const list = document.getElementById('list');
   const hint = document.getElementById('emptyHint');
@@ -1276,46 +1363,45 @@ function render() {
     return;
   }
 
-  // 投递清单视图
+  // 投递清单视图（看板：待投 → 已投 → 面试中 → 结束）
   if (F.view === 'tracker') {
     const feedMap = {};
     (S.feed || []).forEach(j => { feedMap[j.url] = j; });
-    const stOrder = { saved: 0, applied: 1, interview: 2, offer: 3, rejected: 4 };
-    const items = Object.entries(S.tracker || {}).map(([url, t]) => {
+    const entries = Object.entries(S.tracker || {}).map(([url, t]) => {
       const j = feedMap[url];
       return { ...(j || { url, title: t.title || url, company: t.company || '', location: t.location || '' }),
                t, gone: !j };
-    }).sort((a, b) => (stOrder[a.t.status] ?? 9) - (stOrder[b.t.status] ?? 9)
-                   || (b.score ?? -1) - (a.score ?? -1));
-    list.innerHTML = items.map(j => `
-      <div class="jobrow ${expanded.has(j.url) ? 'open' : ''}" onclick="rowClick(event, '${esc(j.url)}')">
-        ${scoreBlock(j)}
-        <div class="jr-main">
-          <div class="l1">
-            <a class="title" href="${esc(j.url)}" target="_blank">${esc(j.title)}</a>
-            ${j.gone ? '<span class="gonewarn">⚠️ 岗位可能已下架</span>' : jobBadges(j)}
-          </div>
-          <div class="l2">
-            <span class="co">${esc(j.company)}</span>
-            <span class="dot">·</span>
-            <span>${esc(j.location)}</span>
-            <span class="dot">·</span>
-            <span class="num">收藏于 ${esc(j.t.ts || '')}</span>
-            <span style="margin-left:auto"></span>
-            ${statusSel(j)}
-            <span class="expander" style="margin-left:8px">${expanded.has(j.url) ? '收起 ▴' : '详情 · 改简历 · 搭话 ▾'}</span>
-          </div>
-          ${matchDetail(j)}
-        </div>
-      </div>`).join('');
-    if (!items.length) {
+    });
+    if (!entries.length) {
       list.innerHTML = `<div class="empty"><div class="big">📌</div>
-        <p>清单还是空的。在岗位列表里点 <b>☆ 收藏</b>，把想投的岗位加进来，<br>然后在这里跟踪状态：待投 → 已投 → 面试中</p>
+        <p>清单还是空的。在岗位列表里点 <b>☆ 收藏</b>，把想投的岗位加进来，<br>然后在这里按状态跟踪：待投 → 已投 → 面试中</p>
         <button class="ghost" onclick="setView('feed')">← 去挑岗位</button></div>`;
       hint.innerHTML = '';
       return;
     }
-    hint.innerHTML = '在这里改状态（待投→已投→面试中）；展开岗位可生成定制简历建议和 networking 搭话草稿。';
+    const bucket = { saved: [], applied: [], interview: [], done: [] };
+    entries.forEach(j => {
+      const s = j.t.status;
+      (bucket[(s === 'offer' || s === 'rejected') ? 'done' : s] || bucket.saved).push(j);
+    });
+    const kcard = j => {
+      const dir = { target: '目标岗位', acceptable: '可接受', off_target: '方向存疑' }[j.title_match] || '';
+      const dcls = j.title_match === 'target' ? 'fgood' : j.title_match === 'off_target' ? 'fwarn' : 'lvl';
+      return `<div class="kcard ${drawerUrl === j.url ? 'on' : ''}" onclick="rowClick(event, '${esc(j.url)}')">
+        <div class="kc-title"><a href="${esc(j.url)}" target="_blank">${esc(j.title)}</a></div>
+        <div class="kc-sub">${esc(j.company)}</div>
+        <div class="kc-badges">${dir ? `<span class="badge ${dcls}">${dir}</span>` : ''}
+          ${j.score != null ? `<span class="badge lvl">技能 ${j.score}%</span>` : ''}
+          ${j.gone ? '<span class="badge fwarn">可能已下架</span>' : ''}</div>
+        <div class="kc-foot">${statusSel(j)}</div>
+      </div>`;
+    };
+    const cols = [['saved', '待投'], ['applied', '已投'], ['interview', '面试中'], ['done', '结束 / Offer']];
+    list.innerHTML = `<div class="kanban">${cols.map(([k, label]) => `
+      <div class="kcol"><div class="kcol-head">${label}<span class="tiercount">${bucket[k].length}</span></div>
+        ${bucket[k].map(kcard).join('') || '<div class="kempty">—</div>'}
+      </div>`).join('')}</div>`;
+    hint.innerHTML = '点卡片看详情、生成简历建议；用卡片上的状态下拉把它移到下一列。';
     return;
   }
 
@@ -1405,8 +1491,8 @@ function render() {
         ${scoreMini(j)}
         ${jobBadges(j)}
         <span class="loc">${esc(j.location)} ${daysTxt(j)}</span>
-        <span class="expander">${expanded.has(j.url) ? '收起 ▴' : '详情 ▾'}</span>
-      </div>${matchDetail(j)}`).join('');
+        <span class="expander">详情 →</span>
+      </div>`).join('');
     const stTxt = st === 'has_ai' ? `✅ ${r.fjobs.length} 个 AI 岗` : '🟡 暂无 AI 岗（可蹲守）';
     return `
     <div class="card ${st}">
