@@ -312,6 +312,13 @@
     background: var(--soft); border: 1px solid var(--border); color: var(--text);
     border-radius: 9px; padding: 8px 13px; font-size: 13px; outline: none; flex: 1; }
   .wizard .wbtns { display: flex; gap: 10px; margin-top: 18px; justify-content: flex-end; }
+  /* 推荐优先：分层分区标题 */
+  .tierhead { display: flex; align-items: baseline; gap: 8px; margin: 18px 4px 8px; flex-wrap: wrap; }
+  .tierhead:first-child { margin-top: 4px; }
+  .tierhead b { font-size: 14px; color: var(--text); }
+  .tierhead .tiercount { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .tierhead small { color: var(--faint); font-size: 11.5px; }
+  .mlabel { font-size: 11px; color: var(--faint); padding: 6px 10px 2px; }
 </style>
 </head>
 <body>
@@ -325,12 +332,14 @@
         <summary>⋯</summary>
         <div class="mitems">
           <a href="/api/export">📥 导出 Excel</a>
-          <button id="btnAgg" onclick="menuDo(runAgg)">🌐 搜聚合平台<small>补 LinkedIn / Indeed / Glassdoor 盲区</small></button>
+          <button id="btnAgg" onclick="menuDo(runAgg)">🌐 补充招聘网站岗位<small>从 LinkedIn / Indeed / Glassdoor 等聚合平台补岗位</small></button>
           <button id="btnSize" onclick="menuDo(runSize)">🏢 识别公司规模<small>用大模型给有岗位的公司估员工规模（缓存，只查没查过的）</small></button>
-          <button id="btnPending" onclick="menuDo(() => scan('pending'))">🌊 全量清查工签雇主<small>第一次用跑一夜即可，之后日常只需扫描新岗位</small></button>
-          <button id="btnDeep" onclick="menuDo(() => scan('deep'))">🔬 深度补扫<small>全量清查跑完后再点：对“无招聘页”的公司补查 Workable/Recruitee/Personio（慢，会限流，可随时停）</small></button>
           <div class="msep"></div>
-          <button onclick="menuDo(openSettings)">⚙️ 关键词与设置</button>
+          <div class="mlabel">高级工具（维护用，日常用不到）</div>
+          <button id="btnPending" onclick="menuDo(() => scan('pending'))">🗂️ 首次建立岗位库<small>第一次用跑一遍，把有招聘系统的雇主摸出来（1–2 小时）；之后日常只需扫描新岗位</small></button>
+          <button id="btnDeep" onclick="menuDo(() => scan('deep'))">🔍 查找遗漏公司<small>岗位库建好后再点：补查限流/冷门招聘系统（慢，可随时停）</small></button>
+          <div class="msep"></div>
+          <button onclick="menuDo(openSettings)">🎯 我的求职目标与设置</button>
         </div>
       </details>
     </div>
@@ -357,7 +366,8 @@
   <div class="filterbox" id="filterbox">
     <div class="frow">
       <div class="vtabs">
-        <span class="chip on" data-g="sort" data-v="date" onclick="setF(this)">最新</span>
+        <span class="chip on" data-g="sort" data-v="rank" onclick="setF(this)" title="综合推荐：方向对口 + 匹配分 + 签证确定性 + 置信度 + 新鲜度，按分层分区显示">🔥 推荐优先</span>
+        <span class="chip" data-g="sort" data-v="date" onclick="setF(this)">最新</span>
         <span class="chip" data-g="sort" data-v="score" onclick="setF(this)">匹配度</span>
       </div>
       <span class="chip" id="layoutChip" onclick="toggleLayout()" title="表格视图：一行一个岗位，方便批量比较">▦ 表格</span>
@@ -515,7 +525,7 @@
 let S = { results: {}, feed: [], counts: {}, scan: {}, match: {}, resume: null,
           consts: { new_days: 3, long_days: 30, level_labels: {} } };
 let F = { view: 'feed', region: 'all', level: 'all', csize: 'all', years: 'all',
-          minscore: 0, tier: 'all', visa: 'all', layout: 'cards', sort: 'date' };
+          minscore: 0, tier: 'all', visa: 'all', layout: 'cards', sort: 'rank' };
 let T = { llm: false, new: false, long: false, curated: false,
           titleonly: false, derisk: false, unseen: false, ontarget: false };
 let FEED_LIMIT = 400;   // 「加载更多」逐步调大
@@ -625,14 +635,11 @@ async function refresh() {
   document.getElementById('cntFeed').textContent = c.ai_jobs ? c.ai_jobs.toLocaleString() : '';
   document.getElementById('cntCo').textContent = c.has_ai ? c.has_ai.toLocaleString() : '';
   if (!window._wizChecked) { window._wizChecked = true; maybeWizard(); }
-  // 已有匹配分时，默认按匹配度排序——只在页面刚打开时设置一次
+  // 默认按「推荐优先」分层展示——只在页面刚打开时设置一次（用户手动改过就不再覆盖）
   if (!window._sortInit) {
     window._sortInit = true;
-    if ((S.feed || []).some(j => j.score != null)) {
-      F.sort = 'score';
-      document.querySelectorAll('.chip[data-g="sort"]').forEach(x =>
-        x.classList.toggle('on', x.dataset.v === 'score'));
-    }
+    document.querySelectorAll('.chip[data-g="sort"]').forEach(x =>
+      x.classList.toggle('on', x.dataset.v === F.sort));
   }
   const s1 = document.getElementById('step1ok'), s2 = document.getElementById('step2ok');
   if (s1) s1.innerHTML = c.ai_jobs > 0 ? '<span class="ok">✓ 已完成</span>' : '';
@@ -825,6 +832,40 @@ function passJob(j, q) {
     if (!hay.includes(q)) return false;
   }
   return true;
+}
+// 推荐分层分区（🔥 推荐优先视图用）
+const TIER_SEQ = ['strong', 'maybe', 'lowconf', 'weak', 'risk'];
+const TIER_META = {
+  strong:  ['🔥 强推荐',        '方向对口 · 匹配高 · 无签证/许可风险'],
+  maybe:   ['👀 可以看看',      '方向对口但匹配中等，或信息略缺'],
+  lowconf: ['❔ 低置信',        '没抓到完整 JD、仅按标题估分——建议打开原岗位人工确认'],
+  weak:    ['· 匹配较弱 / 方向存疑', '技能重合低，或标题不像目标岗位'],
+  risk:    ['⚠️ 签证/许可风险',  'JD 明确不担保，或要求安全许可/英国国籍'],
+};
+// 单个岗位卡片（分区视图与平铺视图共用）
+function jobCard(j, inHidden) {
+  return `
+      <div class="jobrow ${expanded.has(j.url) ? 'open' : ''}" onclick="rowClick(event, '${esc(j.url)}')">
+        ${scoreBlock(j)}
+        <div class="jr-main">
+          <div class="l1">
+            <a class="title" href="${esc(j.url)}" target="_blank" onclick="markSeen('${esc(j.url)}')">${esc(j.title)}</a>
+            ${jobBadges(j)}
+          </div>
+          <div class="l2">
+            <span class="co">${esc(j.company)}${j.curated ? ' ⭐' : ''}</span>
+            <span class="dot">·</span>
+            <span>${esc(j.location)}</span>
+            ${daysTxt(j) ? `<span class="dot">·</span><span class="num">${daysTxt(j)}</span>` : ''}
+            <span style="margin-left:auto"></span>
+            ${inHidden
+              ? `<button class="starbtn" title="从已隐藏中恢复" onclick="hideJob('${esc(j.url)}', false)">↩ 恢复</button>`
+              : `${starBtn(j)}<button class="starbtn" title="隐藏这个岗位（可在分层筛选「已隐藏」里找回）" onclick="hideJob('${esc(j.url)}', true)">🚫</button>`}
+            <span class="expander" style="margin-left:0">${expanded.has(j.url) ? '收起 ▴' : '详情 · 改简历 ▾'}</span>
+          </div>
+          ${matchDetail(j)}
+        </div>
+      </div>`;
 }
 // 匹配度色块：岗位行左侧，一眼可见
 function scoreBlock(j) {
@@ -1165,7 +1206,9 @@ function render() {
       return;
     }
     let items = (S.feed || []).filter(j => passJob(j, q));
+    const byRank = (a, b) => (b.rank ?? -1) - (a.rank ?? -1);
     if (F.sort === 'score') items = [...items].sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
+    else if (F.sort === 'rank') items = [...items].sort(byRank);
     else items = [...items].sort((a, b) => (b.first_seen || '').localeCompare(a.first_seen || ''));
     const inHidden = F.tier === 'hidden';
 
@@ -1189,29 +1232,19 @@ function render() {
             : `${starBtn(j)}<button class="starbtn" title="隐藏这个岗位" onclick="hideJob('${esc(j.url)}', true)">🚫</button>`}</td>
         </tr>`).join('')}
       </table></div>`;
+    } else if (F.sort === 'rank' && !inHidden && F.tier === 'all') {
+      // 🔥 推荐优先：按分层分区显示，区内按综合推荐分排序——打开就知道先看哪些
+      let html = '';
+      for (const t of TIER_SEQ) {
+        const grp = items.filter(j => j.tier === t).sort(byRank);
+        if (!grp.length) continue;
+        const [lbl, tip] = TIER_META[t];
+        html += `<div class="tierhead"><b>${lbl}</b><span class="tiercount">${grp.length}</span><small>${tip}</small></div>`
+              + grp.slice(0, 120).map(j => jobCard(j, inHidden)).join('');
+      }
+      list.innerHTML = cnBox + html;
     } else {
-      list.innerHTML = cnBox + items.slice(0, 250).map(j => `
-      <div class="jobrow ${expanded.has(j.url) ? 'open' : ''}" onclick="rowClick(event, '${esc(j.url)}')">
-        ${scoreBlock(j)}
-        <div class="jr-main">
-          <div class="l1">
-            <a class="title" href="${esc(j.url)}" target="_blank" onclick="markSeen('${esc(j.url)}')">${esc(j.title)}</a>
-            ${jobBadges(j)}
-          </div>
-          <div class="l2">
-            <span class="co">${esc(j.company)}${j.curated ? ' ⭐' : ''}</span>
-            <span class="dot">·</span>
-            <span>${esc(j.location)}</span>
-            ${daysTxt(j) ? `<span class="dot">·</span><span class="num">${daysTxt(j)}</span>` : ''}
-            <span style="margin-left:auto"></span>
-            ${inHidden
-              ? `<button class="starbtn" title="从已隐藏中恢复" onclick="hideJob('${esc(j.url)}', false)">↩ 恢复</button>`
-              : `${starBtn(j)}<button class="starbtn" title="隐藏这个岗位（可在分层筛选「已隐藏」里找回）" onclick="hideJob('${esc(j.url)}', true)">🚫</button>`}
-            <span class="expander" style="margin-left:0">${expanded.has(j.url) ? '收起 ▴' : '详情 · 改简历 ▾'}</span>
-          </div>
-          ${matchDetail(j)}
-        </div>
-      </div>`).join('');
+      list.innerHTML = cnBox + items.slice(0, 250).map(j => jobCard(j, inHidden)).join('');
     }
     const total = (S.counts || {}).ai_jobs || 0;
     const canMore = (S.feed || []).length >= FEED_LIMIT && total > (S.feed || []).length;
