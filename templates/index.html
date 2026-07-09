@@ -758,8 +758,10 @@ function renderScan() {
     document.getElementById('progBar').style.width = (sc.total ? 100*sc.done/sc.total : 0) + '%';
     const eta = sc.eta_min != null ? (sc.eta_min > 90 ? `剩约 ${(sc.eta_min/60).toFixed(1)} 小时` : `剩约 ${sc.eta_min} 分钟`) : '';
     const modeTxt = { known: '刷新最新岗位', pending: '全量清查', curated: '精选扫描', all: '全部扫描', deep: '深度补扫' }[sc.mode] || '扫描';
-    document.getElementById('scanTxt').textContent =
-      `${modeTxt}中 ${sc.done.toLocaleString()}/${sc.total.toLocaleString()} · 新发现岗位 ${sc.new_jobs} · ${eta}（进度实时缓存，停止不丢）`;
+    const pausedLeft = sc.paused_until ? Math.max(0, Math.round((sc.paused_until*1000 - Date.now())/60000)) : 0;
+    document.getElementById('scanTxt').textContent = pausedLeft > 0
+      ? `${modeTxt} · ⏸️ 触发对方限流，冷却中，约 ${pausedLeft} 分钟后自动继续（已扫 ${sc.done.toLocaleString()}/${sc.total.toLocaleString()}，进度已缓存）`
+      : `${modeTxt}中 ${sc.done.toLocaleString()}/${sc.total.toLocaleString()} · 新发现岗位 ${sc.new_jobs} · ${eta}（进度实时缓存，停止不丢）`;
     if (!pollTimer) pollTimer = setInterval(refresh, 2500);
   } else if (!(S.match || {}).running && pollTimer) { clearInterval(pollTimer); pollTimer = null; }
 }

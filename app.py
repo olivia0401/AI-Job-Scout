@@ -363,9 +363,33 @@ class RateLimited(Exception):
     """对方限流/暂时不可用；此时不能把公司记为 none，否则永久漏掉。"""
 
 
+# 近期限流(429/503)次数监控——run_scan 据此判断是否"命中 cap"并自动冷却
+_rl_lock = threading.Lock()
+_rl_hits = []          # 最近的 429/503 时间戳
+RL_WINDOW = 120        # 统计窗口（秒）
+RL_CAP = 40            # 窗口内 ≥ 此次数视为命中限流上限 → 暂停冷却
+RL_COOLDOWN = 300      # 冷却 5 分钟后自动继续
+
+
+def _note_rate_limit():
+    now = time.time()
+    with _rl_lock:
+        _rl_hits.append(now)
+        cutoff = now - RL_WINDOW
+        while _rl_hits and _rl_hits[0] < cutoff:
+            _rl_hits.pop(0)
+
+
+def _recent_rl():
+    now = time.time()
+    with _rl_lock:
+        return sum(1 for t in _rl_hits if t >= now - RL_WINDOW)
+
+
 def _get_json(url):
     r = _session().get(url, timeout=TIMEOUT)
     if r.status_code in (429, 503):
+        _note_rate_limit()
         raise RateLimited(url)
     if r.status_code != 200:
         return None
@@ -864,15 +888,29 @@ def run_scan(names, mode):
     else:                         # pending / all / known：只跑健康快探测
         probes, force = PROBES, False
     state["scan"] = {"running": True, "done": 0, "total": len(names), "mode": mode,
-                     "started_ts": time.time(), "stop": False, "new_jobs": 0}
+                     "started_ts": time.time(), "stop": False, "new_jobs": 0,
+                     "paused_until": 0}
     processed = 0
+
+    def _cooldown_pause():
+        """命中限流上限：暂停冷却，到点自动继续（进度已缓存，不丢）。stop 可提前打断。"""
+        until = time.time() + RL_COOLDOWN
+        state["scan"]["paused_until"] = until
+        with _rl_lock:
+            _rl_hits.clear()
+        while time.time() < until and not state["scan"]["stop"]:
+            time.sleep(2)
+        state["scan"]["paused_until"] = 0
+
     try:
         with ThreadPoolExecutor(max_workers=SCAN_WORKERS) as pool:
             it = iter(names)
             futures = {}
+            # 缓冲只比并发略多——按「停止」时要抛弃的在飞任务少，停得快
+            buf = SCAN_WORKERS * 2
 
             def submit_more():
-                while len(futures) < 256:
+                while len(futures) < buf:
                     try:
                         n = next(it)
                     except StopIteration:
@@ -897,8 +935,15 @@ def run_scan(names, mode):
                     if processed % 500 == 0:
                         save_ats_cache()
                         save_state()
-                if not state["scan"]["stop"]:
-                    submit_more()
+                if state["scan"]["stop"]:
+                    pool.shutdown(wait=False, cancel_futures=True)  # 取消还在排队的，秒停
+                    break
+                if _recent_rl() >= RL_CAP:        # 命中限流上限 → 冷却，到点自动续
+                    _cooldown_pause()
+                    if state["scan"]["stop"]:
+                        pool.shutdown(wait=False, cancel_futures=True)
+                        break
+                submit_more()
     finally:
         state["scan"]["running"] = False
         save_ats_cache()
