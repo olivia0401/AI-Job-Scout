@@ -318,6 +318,14 @@
   .tierhead b { font-size: 14px; color: var(--text); }
   .tierhead .tiercount { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .tierhead small { color: var(--faint); font-size: 11.5px; }
+  .tdot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px;
+    vertical-align: middle; background: var(--muted); }
+  .today-tiles .n .tdot { margin-right: 5px; }
+  .th-strong { background: #22a06b; }
+  .th-maybe { background: #4f63f5; }
+  .th-lowconf { background: #c9a227; }
+  .th-weak { background: #9aa0ad; }
+  .th-risk { background: #e5484d; }
   .mlabel { font-size: 11px; color: var(--faint); padding: 6px 10px 2px; }
   /* 决策工作台：左导航 + 主区 */
   .workbench { display: flex; gap: 18px; align-items: flex-start; }
@@ -390,34 +398,34 @@
   <div class="filterbox" id="filterbox">
     <div class="frow">
       <div class="vtabs">
-        <span class="chip on" data-g="sort" data-v="rank" onclick="setF(this)" title="综合推荐：方向对口 + 匹配分 + 签证确定性 + 置信度 + 新鲜度，按分层分区显示">🔥 推荐优先</span>
+        <span class="chip on" data-g="sort" data-v="rank" onclick="setF(this)" title="综合推荐：方向对口 + 匹配分 + 签证确定性 + 置信度 + 新鲜度，按分层分区显示">推荐优先</span>
         <span class="chip" data-g="sort" data-v="date" onclick="setF(this)">最新</span>
-        <span class="chip" data-g="sort" data-v="score" onclick="setF(this)">匹配度</span>
+        <span class="chip" data-g="sort" data-v="score" onclick="setF(this)">技能匹配</span>
       </div>
-      <span class="chip" id="layoutChip" onclick="toggleLayout()" title="表格视图：一行一个岗位，方便批量比较">▦ 表格</span>
+      <span class="chip" id="layoutChip" onclick="toggleLayout()" title="表格视图：一行一个岗位，方便批量比较">表格</span>
       <select class="fsel" id="fRegion" onchange="F.region = this.value; saveF(); render()">
-        <option value="all">🌍 所有地区</option>
-        <option value="uk">🇬🇧 英国</option>
-        <option value="europe">🇪🇺 欧洲</option>
-        <option value="china">🇨🇳 中国</option>
-        <option value="remote">🏠 Remote</option>
-        <option value="unknown">❓ 未知地点</option>
+        <option value="all">所有地区</option>
+        <option value="uk">英国</option>
+        <option value="europe">欧洲</option>
+        <option value="china">中国</option>
+        <option value="remote">Remote</option>
+        <option value="unknown">未知地点</option>
       </select>
       <select class="fsel" id="fTier" onchange="setTier(this.value)" title="综合推荐分层：匹配分 + JD 置信度 + 签证/许可风险">
-        <option value="all">📊 全部分层</option>
-        <option value="strong">🔥 强推荐（≥60 分且已验证）</option>
-        <option value="maybe">👀 可以看看（35–59 分）</option>
+        <option value="all">全部分层</option>
+        <option value="strong">强推荐（≥60 分且已验证）</option>
+        <option value="maybe">可以看看（35–59 分）</option>
         <option value="weak">匹配较弱（&lt;35 分）</option>
-        <option value="lowconf">❔ 低置信（没抓到 JD）</option>
-        <option value="risk">⚠️ 签证/许可风险</option>
-        <option value="hidden">🚫 已隐藏</option>
+        <option value="lowconf">低置信（没抓到 JD）</option>
+        <option value="risk">签证/许可风险</option>
+        <option value="hidden">已隐藏</option>
       </select>
       <select class="fsel" id="fVisa" onchange="F.visa = this.value; saveF(); render()" title="签证确定性：公司在 sponsor 名单 ≠ 这个岗位一定担保，JD 明确写了才是确定的">
-        <option value="all">🛂 签证不限</option>
-        <option value="yes">✅ JD 明确担保</option>
-        <option value="register">🟡 名单内·JD 未说明</option>
-        <option value="uncertain">❓ 担保不确定</option>
-        <option value="no">🚫 JD 明确不担保</option>
+        <option value="all">签证不限</option>
+        <option value="yes">JD 明确担保</option>
+        <option value="register">名单内·JD 未说明</option>
+        <option value="uncertain">担保不确定</option>
+        <option value="no">JD 明确不担保</option>
       </select>
       <select class="fsel" id="fLevel" onchange="F.level = this.value; saveF(); render()">
         <option value="all">所有级别</option>
@@ -429,7 +437,7 @@
         <option value="mgmt">管理层</option>
       </select>
       <select class="fsel" id="fCsize" onchange="F.csize = this.value; saveF(); render()" title="公司员工规模（大模型估）。需先点 ⋯ 菜单「识别公司规模」；模型不认识的会标为“规模未知”">
-        <option value="all">🏢 所有规模</option>
+        <option value="all">所有规模</option>
         <option value="large">大型 (500+)</option>
         <option value="mid">中型 (50–500)</option>
         <option value="startup">初创 (&lt;50)</option>
@@ -444,18 +452,18 @@
         <option value="y6">5 年以上</option>
       </select>
       <select class="fsel" id="fScore" onchange="F.minscore = parseInt(this.value, 10); saveF(); render()" title="按简历匹配分过滤（需先上传简历算分；没算出分的岗位会被隐藏）">
-        <option value="0">💯 所有匹配分</option>
+        <option value="0">所有匹配分</option>
         <option value="40">≥ 40 分</option>
         <option value="60">≥ 60 分</option>
         <option value="80">≥ 80 分</option>
       </select>
-      <span class="chip star" data-t="llm" onclick="toggleT(this)">⭐ LLM</span>
-      <span class="chip" data-t="new" onclick="toggleT(this)">🆕 新上架</span>
-      <span class="chip star" data-t="curated" onclick="toggleT(this)">精选公司</span>
-      <span class="chip" data-t="titleonly" onclick="toggleT(this)" title="只看标题直接命中关键词的岗位，隐藏仅靠 JD 正文召回的低置信度岗位">🎯 仅标题命中</span>
-      <span class="chip" data-t="derisk" onclick="toggleT(this)" title="隐藏 JD 明确声明不担保签证、或要求安全许可/英国国籍的岗位">🛂 排除签证风险</span>
-      <span class="chip" data-t="unseen" onclick="toggleT(this)" title="只看你还没展开/打开过的岗位（看过的自动记住）">👀 未看过</span>
-      <span class="chip star" data-t="ontarget" onclick="toggleT(this)" title="只看岗位方向对口的（目标/可接受），隐藏方向不对的（IT Support / Sales / QA 等——它们可能技能重合高，但不是你要的岗位）">🧭 只看对口</span>
+      <span class="chip" data-t="llm" onclick="toggleT(this)">LLM</span>
+      <span class="chip" data-t="new" onclick="toggleT(this)">新上架</span>
+      <span class="chip" data-t="curated" onclick="toggleT(this)">精选公司</span>
+      <span class="chip" data-t="titleonly" onclick="toggleT(this)" title="只看标题直接命中关键词的岗位，隐藏仅靠 JD 正文召回的低置信度岗位">仅标题命中</span>
+      <span class="chip" data-t="derisk" onclick="toggleT(this)" title="隐藏 JD 明确声明不担保签证、或要求安全许可/英国国籍的岗位">排除签证风险</span>
+      <span class="chip" data-t="unseen" onclick="toggleT(this)" title="只看你还没展开/打开过的岗位（看过的自动记住）">未看过</span>
+      <span class="chip" data-t="ontarget" onclick="toggleT(this)" title="只看岗位方向对口的（目标/可接受），隐藏方向不对的（IT Support / Sales / QA 等——它们可能技能重合高，但不是你要的岗位）">只看对口</span>
       <input type="text" id="search" placeholder="搜索岗位 / 公司…" oninput="render()">
     </div>
   </div>
@@ -776,13 +784,13 @@ function mdToHtml(md) {
 
 // 左侧导航
 const NAV = [
-  ['today', '🏠 今日推荐'],
-  ['feed', '🔍 全部岗位', 'feed'],
-  ['company', '🏢 公司', 'co'],
-  ['tracker', '📌 投递清单', 'track'],
-  ['gaps', '🧩 简历缺口'],
-  ['goal', '🎯 我的求职目标'],
-  ['tools', '🛠️ 高级工具'],
+  ['today', '今日推荐'],
+  ['feed', '全部岗位', 'feed'],
+  ['company', '公司', 'co'],
+  ['tracker', '投递清单', 'track'],
+  ['gaps', '简历缺口'],
+  ['goal', '我的求职目标'],
+  ['tools', '高级工具'],
 ];
 function renderNav() {
   const c = S.counts || {};
@@ -907,12 +915,14 @@ function passJob(j, q) {
 // 推荐分层分区（🔥 推荐优先视图用）
 const TIER_SEQ = ['strong', 'maybe', 'lowconf', 'weak', 'risk'];
 const TIER_META = {
-  strong:  ['🔥 强推荐',        '方向对口 · 匹配高 · 无签证/许可风险'],
-  maybe:   ['👀 可以看看',      '方向对口但匹配中等，或信息略缺'],
-  lowconf: ['❔ 低置信',        '没抓到完整 JD、仅按标题估分——建议打开原岗位人工确认'],
-  weak:    ['· 匹配较弱 / 方向存疑', '技能重合低，或标题不像目标岗位'],
-  risk:    ['⚠️ 签证/许可风险',  'JD 明确不担保，或要求安全许可/英国国籍'],
+  strong:  ['强推荐',            '方向对口 · 匹配高 · 无签证/许可风险'],
+  maybe:   ['可以看看',          '方向对口但匹配中等，或信息略缺'],
+  lowconf: ['低置信',            '没抓到完整 JD、仅按标题估分，建议打开原岗位人工确认'],
+  weak:    ['匹配较弱 / 方向存疑', '技能重合低，或标题不像目标岗位'],
+  risk:    ['签证/许可风险',      'JD 明确不担保，或要求安全许可/英国国籍'],
 };
+const TIER_CLASS = { strong: 'th-strong', maybe: 'th-maybe', lowconf: 'th-lowconf',
+                     weak: 'th-weak', risk: 'th-risk' };
 // 单个岗位卡片（分区视图与平铺视图共用）
 function jobCard(j, inHidden) {
   return `
@@ -924,7 +934,7 @@ function jobCard(j, inHidden) {
             ${jobBadges(j)}
           </div>
           <div class="l2">
-            <span class="co">${esc(j.company)}${j.curated ? ' ⭐' : ''}</span>
+            <span class="co">${esc(j.company)}${j.curated ? '<span class="badge lvl" style="margin-left:6px">精选</span>' : ''}</span>
             <span class="dot">·</span>
             <span>${esc(j.location)}</span>
             ${daysTxt(j) ? `<span class="dot">·</span><span class="num">${daysTxt(j)}</span>` : ''}
@@ -954,24 +964,24 @@ function scoreMini(j) {
 function jobBadges(j) {
   const d = jobDays(j);
   let h = '';
-  if (j.title_match === 'target') h += `<span class="badge fgood" title="岗位方向：正是你的目标岗位">🧭 目标岗位</span>`;
-  else if (j.title_match === 'acceptable') h += `<span class="badge lvl" title="岗位方向：你能接受的相邻岗位">🧭 可接受</span>`;
-  else if (j.title_match === 'off_target') h += `<span class="badge fwarn" title="岗位方向：标题不像目标岗位（可能只是技能重合）——已不计入强推荐">🧭 方向存疑</span>`;
+  if (j.title_match === 'target') h += `<span class="badge fgood" title="正是你的目标岗位方向">目标岗位</span>`;
+  else if (j.title_match === 'acceptable') h += `<span class="badge lvl" title="你能接受的相邻岗位方向">可接受</span>`;
+  else if (j.title_match === 'off_target') h += `<span class="badge fwarn" title="标题不像目标岗位（可能只是技能重合），已不计入强推荐">方向存疑</span>`;
   h += `<span class="badge lvl">${esc(S.consts.level_labels[j.level] || j.level || '')}</span>`;
   if (j.csize && j.csize !== 'unknown')
-    h += `<span class="badge lvl" title="公司员工规模（大模型估）">🏢 ${esc((S.consts.size_labels || {})[j.csize] || j.csize)}</span>`;
-  if (j.njobs) h += `<span class="badge lvl" title="该公司招聘页在招岗位总数">📋 在招 ${j.njobs}</span>`;
+    h += `<span class="badge lvl" title="公司员工规模（大模型估）">${esc((S.consts.size_labels || {})[j.csize] || j.csize)}</span>`;
+  if (j.njobs) h += `<span class="badge lvl" title="该公司招聘页在招岗位总数">在招 ${j.njobs}</span>`;
   const _mine = S.exp_years ?? 99;
-  if (j.req_years && j.req_years <= _mine) h += `<span class="badge lvl" title="JD 要求的最低年限">📅 ${j.req_years}+ 年</span>`;
-  if (j.region === 'europe') h += `<span class="badge eu">🇪🇺 ${esc(j.country || 'Europe')}</span>`;
-  if (j.region === 'china') h += `<span class="badge cn">🇨🇳 中国</span>`;
-  if (j.region === 'unknown') h += `<span class="badge lvl" title="招聘页没写工作地点，投递前先到 JD 里确认">❓ 未知地点</span>`;
+  if (j.req_years && j.req_years <= _mine) h += `<span class="badge lvl" title="JD 要求的最低年限">${j.req_years}+ 年</span>`;
+  if (j.region === 'europe') h += `<span class="badge eu">${esc(j.country || 'Europe')}</span>`;
+  if (j.region === 'china') h += `<span class="badge cn">中国</span>`;
+  if (j.region === 'unknown') h += `<span class="badge lvl" title="招聘页没写工作地点，投递前先到 JD 里确认">未知地点</span>`;
   if (d != null && d <= S.consts.new_days) h += `<span class="badge new">NEW</span>`;
-  if (j.llm) h += `<span class="badge llm">⭐LLM</span>`;
+  if (j.llm) h += `<span class="badge llm">LLM</span>`;
   if (j.via === 'agg' && !j.sponsor)
-    h += `<span class="badge fwarn" title="公司不在工签 sponsor 名单里，投前请自行确认能否担保">⚠️ 非担保名单</span>`;
+    h += `<span class="badge fwarn" title="公司不在工签 sponsor 名单里，投前请自行确认能否担保">非担保名单</span>`;
   (j.flags || []).filter(f => f.lv !== 'good').forEach(f => {
-    h += `<span class="badge fwarn">⚠️ ${esc(f.t)}</span>`;
+    h += `<span class="badge fwarn">${esc(f.t)}</span>`;
   });
   return h;
 }
@@ -979,12 +989,12 @@ function jobBadges(j) {
 function extraBadges(j) {
   const d = jobDays(j);
   let h = '';
-  if (d != null && d >= S.consts.long_days) h += `<span class="badge long">⏳ 长期在招 ${d}天</span>`;
-  if (j.via === 'jd') h += `<span class="badge viajd" title="标题没写 AI，是 JD 正文命中才召回的">📄 正文AI</span>`;
-  if (j.source) h += `<span class="badge src" title="来自聚合平台搜索">🌐 ${esc(j.source)}</span>`;
-  if (j.via === 'agg' && j.sponsor) h += `<span class="badge fgood" title="公司在官方工签 sponsor 名单里">✅ 担保名单</span>`;
+  if (d != null && d >= S.consts.long_days) h += `<span class="badge long">长期在招 ${d} 天</span>`;
+  if (j.via === 'jd') h += `<span class="badge viajd" title="标题没写 AI，是 JD 正文命中才召回的">正文命中</span>`;
+  if (j.source) h += `<span class="badge src" title="来自聚合平台搜索">${esc(j.source)}</span>`;
+  if (j.via === 'agg' && j.sponsor) h += `<span class="badge fgood" title="公司在官方工签 sponsor 名单里">担保名单</span>`;
   (j.flags || []).filter(f => f.lv === 'good').forEach(f => {
-    h += `<span class="badge fgood">✅ ${esc(f.t)}</span>`;
+    h += `<span class="badge fgood">${esc(f.t)}</span>`;
   });
   return h;
 }
@@ -1239,9 +1249,9 @@ function render() {
     const byRank = (a, b) => (b.rank ?? -1) - (a.rank ?? -1);
     const cnt = { strong: 0, maybe: 0, lowconf: 0, weak: 0, risk: 0 };
     feed.forEach(j => { if (cnt[j.tier] != null) cnt[j.tier]++; });
-    const tiles = [['strong', '🔥 强推荐'], ['maybe', '👀 可以看看'],
-                   ['lowconf', '❔ 需确认'], ['risk', '⚠️ 有风险']]
-      .map(([t, l]) => `<div class="tile"><div class="n">${cnt[t]}</div><div class="l">${l}</div></div>`).join('');
+    const tiles = [['strong', '强推荐'], ['maybe', '可以看看'],
+                   ['lowconf', '需确认'], ['risk', '有风险']]
+      .map(([t, l]) => `<div class="tile"><div class="n"><span class="tdot ${TIER_CLASS[t]}"></span>${cnt[t]}</div><div class="l">${l}</div></div>`).join('');
     let html = `<div class="today-summary">
       <h2>今天该先看哪些岗位</h2>
       <div class="sub">按「方向对口 + 技能匹配 + 签证确定性」综合排序，方向不对的（IT Support 等）已自动沉底</div>
@@ -1256,7 +1266,7 @@ function render() {
       const grp = feed.filter(j => j.tier === t).sort(byRank);
       if (!grp.length) continue;
       const shown = grp.slice(0, 6);
-      html += `<div class="tierhead"><b>${meta[0]}</b><span class="tiercount">${grp.length}</span><small>${meta[1]}</small></div>`
+      html += `<div class="tierhead"><span class="tdot ${TIER_CLASS[t]}"></span><b>${meta[0]}</b><span class="tiercount">${grp.length}</span><small>${meta[1]}</small></div>`
             + shown.map(j => jobCard(j, false)).join('')
             + (grp.length > shown.length
                ? `<div style="margin:4px 4px 10px"><button class="mini ghost" onclick="F.tier='${t}';document.getElementById('fTier').value='${t}';saveF();setView('feed')">查看全部 ${grp.length} 个${meta[0]} →</button></div>`
@@ -1352,7 +1362,7 @@ function render() {
         const grp = items.filter(j => j.tier === t).sort(byRank);
         if (!grp.length) continue;
         const [lbl, tip] = TIER_META[t];
-        html += `<div class="tierhead"><b>${lbl}</b><span class="tiercount">${grp.length}</span><small>${tip}</small></div>`
+        html += `<div class="tierhead"><span class="tdot ${TIER_CLASS[t]}"></span><b>${lbl}</b><span class="tiercount">${grp.length}</span><small>${tip}</small></div>`
               + grp.slice(0, 120).map(j => jobCard(j, inHidden)).join('');
       }
       list.innerHTML = cnBox + html;
