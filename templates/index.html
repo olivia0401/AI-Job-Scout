@@ -55,7 +55,8 @@
 
   /* ---------- 扫描/匹配进度 ---------- */
   .scanbar { background: var(--accent-soft); border: 1px solid #e0e4fd; border-radius: 14px;
-             padding: 14px 18px; margin-bottom: 18px; display: none; }
+             padding: 14px 18px; margin-bottom: 18px; display: none;
+             position: sticky; top: 10px; z-index: 50; box-shadow: 0 6px 20px rgba(60,70,160,.14); }
   .scanbar .progress { height: 6px; background: #dde2fc; border-radius: 3px; overflow: hidden; margin-top: 10px; }
   .scanbar .progress > div { height: 100%; background: var(--accent); width: 0%; transition: width .5s; border-radius: 3px; }
   .scanbar .line { font-size: 13px; color: var(--accent-deep); display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
@@ -1632,12 +1633,27 @@ async function runMatch() {
 }
 
 async function scan(mode) {
-  await saveSettings(true);
-  const r = await fetch('/api/scan', { method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ mode }) });
-  const d = await r.json();
-  if (d.error) { alert(d.error); return; }
-  refresh();
+  // 立刻给反馈：即使扫描要几十秒，用户点下去也能马上看到"已开始"，不会以为没反应
+  const bar = document.getElementById('scanbar');
+  const modeTxt = { known: '刷新最新岗位', pending: '全量清查', curated: '精选扫描', all: '全部扫描', deep: '深度补扫' }[mode] || '扫描';
+  bar.style.display = 'block';
+  document.getElementById('scanTxt').textContent = `⏳ 正在启动${modeTxt}…（在后台扫描英国工签雇主，新岗位会陆续出现，可继续浏览）`;
+  document.getElementById('progBar').style.width = '0%';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  document.getElementById('btnRefresh').disabled = true;
+  try {
+    await saveSettings(true);
+    const r = await fetch('/api/scan', { method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ mode }) });
+    const d = await r.json();
+    if (d.error) { bar.style.display = 'none'; document.getElementById('btnRefresh').disabled = false; alert(d.error); return; }
+  } catch (e) {
+    bar.style.display = 'none';
+    document.getElementById('btnRefresh').disabled = false;
+    alert('启动扫描失败：' + (e && e.message || e));
+    return;
+  }
+  refresh();   // 拉最新状态，进度条与轮询由 renderScan 接管
 }
 async function stopScan() {
   window._stopping = true;

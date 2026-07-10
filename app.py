@@ -162,6 +162,9 @@ LONG_RUNNING_DAYS = 30   # 岗位在线 ≥30 天算“长期在招”
 NEW_DAYS = 3             # 首次发现 ≤3 天算“新岗位”
 
 app = Flask(__name__, template_folder=os.path.join(RES_DIR, "templates"))
+# 模板改动后浏览器刷新即生效，不必重启服务器（前端调整迭代更省心）
+app.config["TEMPLATES_AUTO_RELOAD"] = True
+app.jinja_env.auto_reload = True
 
 # ---------------------------------------------------------------- state
 _lock = threading.Lock()
