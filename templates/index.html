@@ -150,6 +150,10 @@
            padding: 48px 24px; text-align: center; }
   .empty .big { font-size: 40px; margin-bottom: 10px; }
   .empty p { color: var(--muted); font-size: 14px; margin: 6px 0 18px; line-height: 1.9; }
+  .emptyfilters { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;
+                  margin: 0 0 20px; color: var(--muted); font-size: 12.5px; }
+  .emptyfilters .ftag { background: var(--soft); border: 1px solid var(--border);
+                        border-radius: 999px; padding: 3px 12px; color: var(--text); }
 
   /* ---------- 岗位卡片 ---------- */
   .jobrow { background: var(--card); border: 1px solid var(--border); border-radius: 14px;
@@ -667,7 +671,9 @@ let F = { view: 'today', region: 'all', level: 'all', csize: 'all', years: 'all'
           minscore: 0, tier: 'all', visa: 'all', layout: 'cards', sort: 'rank' };
 let T = { llm: false, new: false, long: false, curated: false,
           titleonly: false, derisk: false, unseen: false, ontarget: false };
-let FEED_LIMIT = 400;   // 「加载更多」逐步调大
+// 一次把全部岗位取到前端，筛选(地区/签证/分数)才能在完整数据上做——
+// 只取 400 会导致"选英国却看不到大多数英国岗位"。本机访问 4MB 秒开。
+let FEED_LIMIT = 5000;   // 后端上限即 5000，等于"全都要"
 let expanded = new Set();
 let pollTimer = null;
 // 看过的岗位（展开过/点开过链接）——存本地，供「👀 未看过」筛选
@@ -969,6 +975,40 @@ function setF(el) {
 function toggleT(el) {
   T[el.dataset.t] = !T[el.dataset.t];
   el.classList.toggle('on', T[el.dataset.t]);
+  saveF();
+  render();
+}
+
+// 当前生效的"缩小范围"筛选，给空结果时提示用（不含排序/布局这类展示项）
+const T_LABELS = { llm: 'LLM 相关', new: '新上架', long: '上架较久', curated: '精选公司',
+                   titleonly: '仅标题命中', derisk: '排除签证风险', unseen: '未看过', ontarget: '只看对口' };
+function activeFilterLabels() {
+  const L = [];
+  const rg = { uk: '英国', europe: '欧洲', china: '中国', remote: '远程', unknown: '地点未知' }[F.region];
+  if (rg) L.push('地区：' + rg);
+  if (F.visa === 'yes') L.push('签证：JD 明确担保');
+  if (F.minscore > 0) L.push('匹配分 ≥ ' + F.minscore);
+  if (F.tier !== 'all' && F.tier !== 'hidden') L.push('分层：' + (TIER_META[F.tier] ? TIER_META[F.tier][0] : F.tier));
+  if (F.level !== 'all') L.push('级别：' + ((S.consts && S.consts.level_labels[F.level]) || F.level));
+  if (F.csize !== 'all') L.push('规模：' + F.csize);
+  if (F.years !== 'all') L.push('经验年限筛选');
+  for (const k in T) if (T[k] && T_LABELS[k]) L.push(T_LABELS[k]);
+  const q = (document.getElementById('search') || {}).value;
+  if (q) L.push('搜索：' + q);
+  return L;
+}
+// 一键清除所有缩小范围的筛选（排序/布局保留），把卡在空列表的状态解开
+function resetFilters() {
+  Object.assign(F, { region: 'all', level: 'all', csize: 'all', years: 'all',
+                     minscore: 0, tier: 'all', visa: 'all' });
+  for (const k in T) T[k] = false;
+  const sb = document.getElementById('search'); if (sb) sb.value = '';
+  const ids = { fRegion: 'all', fTier: 'all', fVisa: 'all', fLevel: 'all',
+                fCsize: 'all', fYears: 'all', fScore: '0' };
+  for (const [id, v] of Object.entries(ids)) {
+    const el = document.getElementById(id); if (el) el.value = v;
+  }
+  document.querySelectorAll('.chip[data-t]').forEach(el => el.classList.remove('on'));
   saveF();
   render();
 }
@@ -1419,6 +1459,15 @@ function render() {
     hint.innerHTML = '';
     const feed = (S.feed || []).filter(j => passJob(j, ''));
     if (!feed.length) {
+      // 有岗位却被筛选滤空 → 别显示"开始使用"的空态（会让人以为没数据），给清除筛选入口
+      const labels = activeFilterLabels();
+      if ((S.feed || []).length && labels.length) {
+        list.innerHTML = `<div class="empty"><div class="big">🔍</div>
+          <p>库里有 <b>${((S.counts || {}).ai_jobs || 0).toLocaleString()}</b> 个岗位，但都被你当前的筛选挡住了。</p>
+          <div class="emptyfilters">当前筛选：${labels.map(l => `<span class="ftag">${esc(l)}</span>`).join('')}</div>
+          <button onclick="resetFilters()">✕ 清除所有筛选，显示全部岗位</button></div>`;
+        return;
+      }
       list.innerHTML = onboardCard();
       return;
     }
@@ -1510,6 +1559,19 @@ function render() {
     else items = [...items].sort((a, b) => (b.first_seen || '').localeCompare(a.first_seen || ''));
     const inHidden = F.tier === 'hidden';
 
+    // 明明有岗位、却被筛选滤空 —— 直接告诉用户是哪些筛选在挡，一键清除
+    if (!items.length && !inHidden && F.region !== 'china') {
+      const labels = activeFilterLabels();
+      if (labels.length) {
+        list.innerHTML = `<div class="empty"><div class="big">🔍</div>
+          <p>库里有 <b>${((S.counts || {}).ai_jobs || 0).toLocaleString()}</b> 个岗位，但没有一个同时满足你当前的筛选条件。</p>
+          <div class="emptyfilters">当前筛选：${labels.map(l => `<span class="ftag">${esc(l)}</span>`).join('')}</div>
+          <button onclick="resetFilters()">✕ 清除所有筛选，显示全部岗位</button></div>`;
+        hint.innerHTML = '';
+        return;
+      }
+    }
+
     if (F.layout === 'table') {
       // 表格视图：一行一个岗位，方便批量比较
       const VISA_ICON = { yes: '✅', register: '🟡', uncertain: '❓', no: '🚫' };
@@ -1546,11 +1608,14 @@ function render() {
     }
     const total = (S.counts || {}).ai_jobs || 0;
     const canMore = (S.feed || []).length >= FEED_LIMIT && total > (S.feed || []).length;
+    const nFilters = activeFilterLabels().length;
     hint.innerHTML = (items.length
-      ? (items.length > 250 && F.layout !== 'table' ? `已显示前 250 条 / 筛选后共 ${items.length} 条，可用筛选或搜索缩小范围　` : '')
+      ? (`筛选后共 ${items.length} 条${items.length > 250 && F.layout !== 'table' ? '，已显示前 250 条' : ''}　`)
       : (inHidden ? '还没有隐藏过岗位。在岗位行点 🚫 可以把不想再看到的岗位收进这里。'
          : F.region === 'china' ? '扫描到的中国岗位会显示在这里（TikTok、Airbnb 等公司的中国区岗位）；上方是大厂直达链接。'
          : '没有符合当前筛选的岗位——试试放宽筛选，或点顶部 🔄 刷新最新岗位。'))
+      // 只要有筛选生效，就常驻一个一键清除入口——避免"筛太窄看不到岗位又不知怎么复原"
+      + (nFilters ? `<button class="mini ghost" onclick="resetFilters()">✕ 清除筛选（${nFilters}）· 共 ${total.toLocaleString()} 个岗位</button>` : '')
       + (canMore ? `<button class="mini ghost" onclick="loadMore()">⬇ 加载更多（已取 ${(S.feed || []).length} / 共 ${total} 条）</button>` : '');
     return;
   }
