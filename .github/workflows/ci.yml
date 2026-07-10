@@ -1,0 +1,33 @@
+name: CI
+
+# 每次 push 到 main、以及针对 main 的 Pull Request 都会跑单元测试。
+# 只跑 tests/ 下的离线单元测试，不碰 eval/（那个要 API key 和网络）。
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        # 只装跑测试需要的：Flask/requests（app.py 顶层 import）+ 解析/导出用到的库 + pytest。
+        # openai / anthropic 是可选的在线功能，测试不需要，故不安装。
+        run: |
+          python -m pip install --upgrade pip
+          pip install flask requests openpyxl pypdf pytest
+
+      - name: Run unit tests
+        run: pytest tests/ -q
