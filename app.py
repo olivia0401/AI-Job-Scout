@@ -4,6 +4,7 @@
 用法:  python app.py  然后浏览器打开 http://127.0.0.1:5050
 """
 import csv as csvmod
+import hmac
 import json
 from collections import Counter
 import os
@@ -19,7 +20,7 @@ from io import BytesIO
 from urllib.parse import quote_plus
 
 import requests
-from flask import Flask, jsonify, render_template, request, send_file
+from flask import Flask, Response, jsonify, render_template, request, send_file
 
 FROZEN = getattr(sys, "frozen", False)  # PyInstaller 打包后的 exe 模式
 if FROZEN:
@@ -165,6 +166,28 @@ app = Flask(__name__, template_folder=os.path.join(RES_DIR, "templates"))
 # 模板改动后浏览器刷新即生效，不必重启服务器（前端调整迭代更省心）
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 app.jinja_env.auto_reload = True
+
+# ---- 可选登录保护（部署到公网时用）----------------------------------------
+# 设了环境变量 APP_USER + APP_PASSWORD，就对所有请求要求 HTTP Basic 登录。
+# 本地不设这两个变量 → 行为完全不变，不需要登录。
+# ⚠️ 这个工具会展示你的简历全文、消耗你的 API key——放到公网前务必设置密码。
+APP_USER = os.environ.get("APP_USER", "")
+APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
+
+
+@app.before_request
+def _require_login():
+    if not APP_PASSWORD:
+        return  # 未配置密码 → 不启用登录（本地单机使用）
+    if request.path == "/healthz":
+        return  # 健康检查不需要登录（云平台负载均衡用）
+    auth = request.authorization
+    ok = (auth is not None
+          and hmac.compare_digest(auth.username or "", APP_USER)
+          and hmac.compare_digest(auth.password or "", APP_PASSWORD))
+    if not ok:
+        return Response("需要登录", 401,
+                        {"WWW-Authenticate": 'Basic realm="AI Job Scout"'})
 
 # ---------------------------------------------------------------- state
 _lock = threading.Lock()
@@ -2231,6 +2254,11 @@ def api_companies():
 
 
 # ---------------------------------------------------------------- 路由
+@app.route("/healthz")
+def healthz():
+    return "ok", 200
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -2594,12 +2622,14 @@ if __name__ == "__main__":
         save_companies()  # 从旧格式迁移时立即落盘，防止丢名单
     threading.Thread(target=auto_loop, daemon=True).start()
     port = int(os.environ.get("PORT", "5050"))
+    # 默认只绑本机（安全）；容器/服务器里设 HOST=0.0.0.0 才能对外访问。
+    host = os.environ.get("HOST", "127.0.0.1")
     print(f"\n  AI Job Scout 已启动:  http://127.0.0.1:{port}")
     print("  这个窗口是网站的服务器——用的时候别关，可以最小化。\n")
     if FROZEN:  # exe 双击启动时自动打开浏览器
         threading.Timer(1.5, lambda: webbrowser.open(f"http://127.0.0.1:{port}")).start()
     try:
-        app.run(host="127.0.0.1", port=port, debug=False, threaded=True)
+        app.run(host=host, port=port, debug=False, threaded=True)
     except OSError:
         # 端口被占用：多半是工具已经开着了，直接打开页面即可
         print("  看起来工具已经在运行了，直接打开浏览器页面。")

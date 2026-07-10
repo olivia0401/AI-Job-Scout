@@ -1,0 +1,20 @@
+# 自建服务器 / 本机用 Docker 跑：docker compose up -d
+# 说明：这个应用是单进程内存态 + 后台扫描线程，务必单实例（不要 scale / 多副本）。
+services:
+  app:
+    build: .
+    image: ai-job-scout
+    container_name: ai-job-scout
+    restart: unless-stopped
+    ports:
+      - "8080:8080"          # 浏览器访问 http://<服务器IP>:8080
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "8080"
+      # ⚠️ 部署到公网务必设置登录，否则任何人都能看到你的简历、消耗你的 API key。
+      # 本机测试可留空（不启用登录）。上线时改成你自己的用户名/强密码：
+      APP_USER: "${APP_USER:-}"
+      APP_PASSWORD: "${APP_PASSWORD:-}"
+    volumes:
+      # 把宿主机的 data/ 挂进容器：你现有的公司库/设置/结果直接复用，且持久化不丢。
+      - ./data:/app/data
