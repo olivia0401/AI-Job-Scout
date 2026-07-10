@@ -215,6 +215,7 @@
   .badge.fgood { background: var(--green-soft); color: var(--green); }
   .badge.viajd { background: var(--accent-soft); color: var(--accent); cursor: help; }
   .badge.src { background: var(--soft); color: var(--text2); cursor: help; }
+  .badge.hn { background: #fff0e6; color: #d2691e; border: 1px solid #ffd9bf; cursor: help; }
 
   /* 简历提升建议 */
   .suggest { background: #fafbfd; border: 1px solid var(--soft); border-radius: 12px;
@@ -611,6 +612,11 @@
           <div class="ti"><div class="tn">🌐 补充招聘网站岗位</div>
             <div class="td">从 Adzuna / Reed 等聚合平台补岗位，覆盖自动扫描抓不到的大厂（Google / Amazon 等自建招聘系统）。结果带「来源」徽章。</div></div>
           <div class="ta"><button class="ghost" id="btnAgg" onclick="runAgg()">搜索</button></div>
+        </div>
+        <div class="toolcard">
+          <div class="ti"><div class="tn">🗞 社媒招聘帖（Hacker News）</div>
+            <div class="td">抓 Hacker News 每月「Who is hiring」帖里的招聘信息，按你的关键词过滤后并入岗位流，带 <b>🗞 HN 招聘帖</b> 徽章。<b>免费、无需 key</b>，多为 AI / 远程岗，常写明 remote / 签证。</div></div>
+          <div class="ta"><button class="ghost" id="btnSocial" onclick="runSocial()">抓取</button></div>
         </div>
         <div class="toolcard">
           <div class="ti"><div class="tn">🏢 识别公司规模</div>
@@ -1117,7 +1123,9 @@ function jobBadges(j) {
   const _mine = S.exp_years ?? 99;
   if (j.req_years && j.req_years > _mine) h += `<span class="badge fwarn" title="JD 要求年限高于你填写的">要求 ${j.req_years}+ 年</span>`;
   if (d != null && d <= S.consts.new_days) h += `<span class="badge new">NEW</span>`;
-  if (j.via === 'agg' && !j.sponsor)
+  if (j.source === 'HackerNews')
+    h += `<span class="badge hn" title="来自 Hacker News「Who is hiring」每月招聘帖，点标题看原帖/申请方式">🗞 HN 招聘帖${j.mentions_visa ? ' · 提到签证' : ''}</span>`;
+  if (j.via === 'agg' && !j.sponsor && j.source !== 'HackerNews')
     h += `<span class="badge fwarn" title="公司不在工签 sponsor 名单里，投前请自行确认能否担保">非名单公司</span>`;
   (j.flags || []).filter(f => f.lv !== 'good' && !/年经验/.test(f.t)).forEach(f => {
     h += `<span class="badge fwarn">${esc(f.t)}</span>`;
@@ -1475,6 +1483,7 @@ function render() {
     const cnt = { strong: 0, maybe: 0, lowconf: 0, weak: 0, risk: 0 };
     feed.forEach(j => { if (cnt[j.tier] != null) cnt[j.tier]++; });
     const tiles = ['strong', 'maybe', 'lowconf', 'risk']
+      .filter(t => cnt[t] > 0)   // 零值卡片不渲染：有风险/需人工确认为 0 时隐藏，真出现时才跳出来，避免"0 0"稀释信号
       .map(t => `<div class="tile"><div class="n"><span class="tdot ${TIER_CLASS[t]}"></span>${cnt[t]}</div><div class="l">${TIER_META[t][0]}</div></div>`).join('');
     let html = (S.resume ? '' : resumeNudge()) + `<div class="today-summary">
       <h2>今天该先看哪些岗位</h2>
@@ -1741,6 +1750,29 @@ async function runSize() {
   if (d.error) { alert(d.error); return; }
   alert(`已开始识别 ${d.total} 家公司的规模（大模型估，结果缓存）。稍后规模徽章和筛选会自动出现。`);
   refresh();
+}
+async function runSocial() {
+  const btn = document.getElementById('btnSocial');
+  const reset = () => { btn.disabled = false; btn.textContent = '抓取'; };
+  btn.disabled = true; btn.textContent = '抓取中…';
+  try {
+    const r = await fetch('/api/social', { method: 'POST' });
+    const d = await r.json();
+    if (d.error) { alert(d.error); reset(); return; }
+  } catch (e) { alert('启动失败：' + (e && e.message || e)); reset(); return; }
+  // HN 抓取一般几秒完成；轮询到结束，期间刷新让新岗位陆续并入
+  const t0 = Date.now();
+  const poll = setInterval(async () => {
+    await refresh();
+    const s = S.social || {};
+    if (!s.running || Date.now() - t0 > 90000) {
+      clearInterval(poll); reset();
+      if (s.err) { alert('抓取 Hacker News 招聘帖失败：' + s.err + '\n（可稍后重试，通常是临时网络问题）'); return; }
+      alert(`已从 Hacker News「Who is hiring」招聘帖抓取 ${s.total || 0} 条，`
+        + `按你的关键词并入 ${s.found || 0} 个岗位（带 🗞 HN 招聘帖 徽章）。\n`
+        + `去「全部岗位」在搜索框输入 HackerNews 即可只看这些。`);
+    }
+  }, 2500);
 }
 
 async function saveSettings(silent) {

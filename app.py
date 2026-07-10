@@ -209,8 +209,9 @@ state = {
     "match": {"running": False, "done": 0, "total": 0},
     "match_stats": {},     # JD 抓取覆盖率：{"jd_ok","jd_fail","updated"}
     "exp_years": 1,        # 我的工作年限（用于年限门槛检测）
-    "agg_jobs": {},        # 聚合器(Adzuna/Reed)岗位：url -> {...}
+    "agg_jobs": {},        # 聚合器(Adzuna/Reed)/社媒招聘帖岗位：url -> {...}
     "agg": {"running": False, "done": 0, "total": 0},
+    "social": {"running": False, "done": 0, "total": 0},  # 社媒招聘帖(HN)抓取进度
     "tracker": {},         # 投递清单：job_url -> {"status","ts","title","company","location"}
     "size": {"running": False, "done": 0, "total": 0},  # 公司规模识别进度
     "hidden": {},          # 用户手动隐藏的岗位：url -> {"ts","title"}
@@ -1227,6 +1228,127 @@ def run_aggregators():
             _atomic_write(DESC_CACHE_FILE, json.dumps(cache, ensure_ascii=False))
         save_state()
         # 抓完顺手把新岗位的匹配分算出来
+        if state.get("resume") and not state["match"]["running"]:
+            threading.Thread(target=run_match, daemon=True).start()
+
+
+# ---------------------------------------------------------------- 社媒招聘帖（Hacker News）
+# HN 每月有一贴 "Ask HN: Who is hiring?"（机器人 whoishiring 于每月 1 号发），
+# 下面每条顶层评论就是一个招聘帖，惯例首行：Company | Role | Location | Remote | Visa | tech | url。
+# Algolia 提供免费无鉴权检索接口，无需 API key，是这个工具最契合的社媒来源。
+HN_ALGOLIA = "http://hn.algolia.com/api/v1"
+_HN_URL_RE = re.compile(r"https?://[^\s|)<>\"']+")
+_HN_VISA_RE = re.compile(r"\b(visa|sponsor|sponsorship|relocation|relocat\w*|h1b|h-1b|tier 2|skilled worker)\b", re.I)
+
+
+def _hn_first_para(html_text):
+    """取评论第一段（招聘帖的抬头行：公司 | 岗位 | 地点 | Remote | …）。
+    HN 评论各段用 <p> 分隔，首段在第一个 <p> 之前。"""
+    head = re.split(r"<p>", html_text or "", maxsplit=1)[0]
+    return _strip_html(head)
+
+
+def _hn_get(url):
+    """HN Algolia 专用取数：宽松超时 + 一次重试。不走 ATS 那套 (2,5) 超时和限流抛错，
+    因为 items 端点是 ~500KB 的大 JSON，用短超时会偶发失败被静默吞成 0。"""
+    for attempt in range(2):
+        try:
+            r = _session().get(url, timeout=(5, 30))
+            if r.status_code == 200:
+                return r.json()
+        except Exception:
+            if attempt == 0 and _stop_event.wait(1.0):
+                break
+    return None
+
+
+def _hn_hiring_threads(n_threads=1):
+    data = _hn_get(f"{HN_ALGOLIA}/search_by_date?tags=story,author_whoishiring&hitsPerPage=8")
+    hits = (data or {}).get("hits") or []
+    threads = [h for h in hits if "who is hiring" in (h.get("title") or "").lower()]
+    return threads[:n_threads]
+
+
+def search_hackernews(n_threads=1):
+    """把最近 n 期 HN 'Who is hiring' 主帖下的每条招聘评论解析成一个岗位。
+    返回形状与 search_adzuna 一致：{company,title,url,location,desc,source}。"""
+    out = []
+    for th in _hn_hiring_threads(n_threads):
+        item = _hn_get(f"{HN_ALGOLIA}/items/{th.get('objectID')}")
+        for c in (item or {}).get("children") or []:
+            raw = c.get("text")
+            if not raw:
+                continue
+            plain = _strip_html(raw)
+            if len(plain) < 30:       # 跳过 "[dead]"、纯 meta 之类的短评论
+                continue
+            header = _hn_first_para(raw)[:200] or plain[:200]
+            m = _HN_URL_RE.search(plain)          # 正文里的外部申请链接
+            apply_url = m.group(0) if m and "ycombinator.com" not in m.group(0) else None
+            hn_url = f"https://news.ycombinator.com/item?id={c.get('id')}"
+            company = re.split(r"[|:\-–—]", header)[0].strip()[:80]
+            out.append({
+                "company": company, "title": header,
+                "url": apply_url or hn_url, "hn_url": hn_url,
+                "location": header,   # 抬头行常含地点/Remote，交给 classify_region 识别
+                "desc": (plain + f"  · 原帖：{hn_url}")[:8000],
+                "source": "HackerNews",
+            })
+    return out
+
+
+def run_social():
+    """抓 HN 招聘帖，按用户关键词过滤后并入 agg_jobs（复用聚合器的展示/匹配管线）。
+    无需任何 API key。"""
+    if state["social"]["running"]:
+        return
+    kws = [k.lower() for k in state["keywords"]]
+    today = date.today().isoformat()
+    with _lock:
+        sponsor_idx = {_norm_company(n) for n in state["companies"]}
+    state["social"] = {"running": True, "done": 0, "total": 0, "found": 0, "err": ""}
+    new_descs = {}
+    added = 0
+    try:
+        try:
+            posts = search_hackernews(n_threads=1)
+        except Exception as e:
+            posts = []
+            state["social"]["err"] = f"抓取 HN 失败：{e}"[:200]
+        state["social"]["total"] = len(posts)
+        with _lock:
+            for j in posts:
+                u = j.get("url")
+                title = (j.get("title") or "").lower()
+                desc = j.get("desc") or ""
+                state["social"]["done"] += 1
+                if not u or not match_job(title, desc, kws):
+                    continue
+                added += 1
+                new_descs[u] = desc[:8000]
+                region, rlabel = classify_region(j.get("location"))
+                seen = state["agg_jobs"].get(u)
+                state["agg_jobs"][u] = {
+                    "company": j.get("company", ""), "title": j.get("title", ""),
+                    "url": u, "location": rlabel or "",
+                    "source": "HackerNews", "region": region, "country": rlabel,
+                    "level": classify_level(title),
+                    "llm": kw_match(title, LLM_KEYWORDS) or kw_match(desc.lower(), LLM_KEYWORDS),
+                    "sponsor": _norm_company(j.get("company", "")) in sponsor_idx,
+                    "mentions_visa": bool(_HN_VISA_RE.search(desc)),
+                    "first_seen": seen["first_seen"] if seen else today,
+                    "last_seen": today,
+                }
+    finally:
+        state["social"]["found"] = added
+        state["social"]["running"] = False
+        if new_descs:
+            cache = load_desc_cache()
+            for u, d in new_descs.items():
+                if len(d) > len(cache.get(u) or ""):
+                    cache[u] = d
+            _atomic_write(DESC_CACHE_FILE, json.dumps(cache, ensure_ascii=False))
+        save_state()
         if state.get("resume") and not state["match"]["running"]:
             threading.Thread(target=run_match, daemon=True).start()
 
@@ -2426,7 +2548,7 @@ def api_state():
             "auto_hours": state["auto_hours"], "exp_years": state["exp_years"],
             "counts": counts, "results": res_out, "feed": feed[:limit],
             "scan": scan, "match": dict(state["match"]), "agg": dict(state["agg"]),
-            "size": dict(state["size"]),
+            "size": dict(state["size"]), "social": dict(state["social"]),
             "has_api_keys": _has_agg_keys(),
             "has_llm": _llm_ready(),
             "llm_label": LLM_LABELS.get(_llm_provider()),
@@ -2535,6 +2657,15 @@ def api_aggregators():
     threading.Thread(target=run_aggregators, daemon=True).start()
     return jsonify({"started": True,
                     "queries": len(state["keywords"][:AGG_MAX_QUERIES])})
+
+
+@app.route("/api/social", methods=["POST"])
+def api_social():
+    """抓 Hacker News 'Who is hiring' 招聘帖，按关键词过滤后并入岗位流。无需 API key。"""
+    if state["social"]["running"]:
+        return jsonify({"error": "社媒招聘帖抓取进行中"}), 409
+    threading.Thread(target=run_social, daemon=True).start()
+    return jsonify({"started": True})
 
 
 @app.route("/api/company_size", methods=["POST"])
