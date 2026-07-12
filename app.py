@@ -6,7 +6,7 @@
 import csv as csvmod
 import hmac
 import json
-from collections import Counter
+from collections import Counter, deque
 import os
 import re
 import sys
@@ -20,7 +20,7 @@ from io import BytesIO
 from urllib.parse import quote_plus
 
 import requests
-from flask import Flask, Response, jsonify, render_template, request, send_file
+from flask import Flask, Response, g, jsonify, render_template, request, send_file
 
 FROZEN = getattr(sys, "frozen", False)  # PyInstaller 打包后的 exe 模式
 if FROZEN:
@@ -166,6 +166,96 @@ app = Flask(__name__, template_folder=os.path.join(RES_DIR, "templates"))
 # 模板改动后浏览器刷新即生效，不必重启服务器（前端调整迭代更省心）
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 app.jinja_env.auto_reload = True
+
+# ---- 可观测性：RED 指标（Rate / Errors / Duration）--------------------------
+# 记录最近请求的耗时与状态码，暴露两个端点：
+#   /stats   —— 人可读 JSON：p50/p95/p99、错误率、吞吐、uptime（可截图当证据）
+#   /metrics —— Prometheus 文本格式：以后接 Grafana 画图用
+_metrics_lock = threading.Lock()
+_lat_samples = deque(maxlen=2000)   # 最近 N 次请求耗时（毫秒），环形缓冲省内存
+_req_total = 0                      # 累计请求数
+_req_by_status = Counter()          # 按 HTTP 状态码计数
+_req_errors = 0                     # 5xx 数
+_proc_start = time.time()           # 进程启动时刻（算 uptime）
+_METRICS_SKIP = ("/stats", "/metrics", "/healthz")  # 这些自身不计入，避免污染真实流量
+
+
+@app.before_request
+def _metrics_start():
+    g._t0 = time.time()
+
+
+@app.after_request
+def _metrics_end(resp):
+    global _req_total, _req_errors
+    t0 = g.get("_t0")
+    if t0 is not None and request.path not in _METRICS_SKIP:
+        dur_ms = (time.time() - t0) * 1000.0
+        with _metrics_lock:
+            _lat_samples.append(dur_ms)
+            _req_total += 1
+            _req_by_status[resp.status_code] += 1
+            if resp.status_code >= 500:
+                _req_errors += 1
+    return resp
+
+
+def _percentile(sorted_vals, p):
+    """从已排序列表取第 p 百分位（p=95 表示 p95）。空列表返回 0。"""
+    if not sorted_vals:
+        return 0.0
+    k = min(len(sorted_vals) - 1, int(round((p / 100.0) * (len(sorted_vals) - 1))))
+    return sorted_vals[k]
+
+
+@app.route("/stats")
+def stats():
+    with _metrics_lock:
+        lat = sorted(_lat_samples)
+        total, errors = _req_total, _req_errors
+        by_status = dict(_req_by_status)
+    uptime = time.time() - _proc_start
+    return jsonify({
+        "uptime_seconds": round(uptime),
+        "requests_total": total,
+        "requests_per_min": round(total / (uptime / 60), 2) if uptime > 0 else 0,
+        "errors_5xx": errors,
+        "error_rate": round(errors / total, 4) if total else 0.0,
+        "latency_ms": {
+            "p50": round(_percentile(lat, 50), 1),
+            "p95": round(_percentile(lat, 95), 1),
+            "p99": round(_percentile(lat, 99), 1),
+            "max": round(lat[-1], 1) if lat else 0.0,
+        },
+        "by_status": by_status,
+        "samples": len(lat),
+    })
+
+
+@app.route("/metrics")
+def metrics():
+    with _metrics_lock:
+        lat = sorted(_lat_samples)
+        total, errors = _req_total, _req_errors
+    uptime = time.time() - _proc_start
+    lines = [
+        "# HELP jobscout_requests_total Total HTTP requests handled.",
+        "# TYPE jobscout_requests_total counter",
+        f"jobscout_requests_total {total}",
+        "# HELP jobscout_request_errors_total HTTP 5xx responses.",
+        "# TYPE jobscout_request_errors_total counter",
+        f"jobscout_request_errors_total {errors}",
+        "# HELP jobscout_uptime_seconds Process uptime in seconds.",
+        "# TYPE jobscout_uptime_seconds gauge",
+        f"jobscout_uptime_seconds {round(uptime)}",
+        "# HELP jobscout_request_latency_ms Request latency percentiles in milliseconds.",
+        "# TYPE jobscout_request_latency_ms gauge",
+        f'jobscout_request_latency_ms{{quantile="0.5"}} {round(_percentile(lat, 50), 1)}',
+        f'jobscout_request_latency_ms{{quantile="0.95"}} {round(_percentile(lat, 95), 1)}',
+        f'jobscout_request_latency_ms{{quantile="0.99"}} {round(_percentile(lat, 99), 1)}',
+    ]
+    return Response("\n".join(lines) + "\n", mimetype="text/plain; version=0.0.4")
+
 
 # ---- 可选登录保护（部署到公网时用）----------------------------------------
 # 设了环境变量 APP_USER + APP_PASSWORD，就对所有请求要求 HTTP Basic 登录。
