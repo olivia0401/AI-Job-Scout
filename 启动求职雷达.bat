@@ -10,5 +10,5 @@ rem 3 秒后自动打开浏览器（等服务器先起来）
 start "" cmd /c "timeout /t 3 /nobreak >nul & start "" http://127.0.0.1:5050"
 python app.py
 echo.
-echo 程序已退出。如果上面有红色报错，整段复制去问 claude.ai 即可。
+echo 程序已退出。如果上面有红色报错，整段复制去问 AI 助手（ChatGPT / Claude 等）即可。
 pause

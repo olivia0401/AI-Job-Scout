@@ -876,7 +876,7 @@ async function loadSuggestions() {
 
 async function genAdvice() {
   const out = document.getElementById('adviceOut');
-  out.innerHTML = `<div class="info" style="margin-top:8px">Claude 正在生成建议（约需十几秒）…</div>`;
+  out.innerHTML = `<div class="info" style="margin-top:8px">AI 正在生成建议（约需十几秒）…</div>`;
   const r = await fetch('/api/resume_suggestions/generate', { method: 'POST' });
   const d = await r.json();
   if (d.error) { out.innerHTML = `<div class="info" style="margin-top:8px;color:var(--red)">${esc(d.error)}</div>`; return; }
@@ -1224,7 +1224,7 @@ function matchBody(j) {
         : `<button disabled title="在 data/api_keys.json 填 openai_api_key（ChatGPT）或 anthropic_api_key（Claude）后可用">✍️ 生成简历修改建议（需先配 ChatGPT/Claude key）</button>`}
       ${S.has_llm
         ? `<button class="ghost" onclick="genOutreach('${esc(j.url)}')" ${outreachBusy.has(j.url) ? 'disabled' : ''}>💬 生成 networking 搭话草稿</button>` : ''}
-      <button class="mini ghost" onclick="copyPrompt('${esc(j.url)}')">📋 复制 Prompt（贴给别处的 Claude/ChatGPT）</button>
+      <button class="mini ghost" onclick="copyPrompt('${esc(j.url)}')">📋 复制 Prompt（贴给别处的 AI 助手）</button>
       <a class="btn ghost mini" style="padding:5px 14px;font-size:12.5px;border-radius:9px" href="${esc(j.url)}" target="_blank">↗ 打开岗位/申请页</a>
       ${netLinks(j)}
     </div>
@@ -1405,7 +1405,7 @@ ${flagsTxt ? `【注意事项】${flagsTxt}` : ''}
 ${(S.resume && S.resume.text) || ''}`;
   try {
     await navigator.clipboard.writeText(prompt);
-    alert('优化 Prompt 已复制！粘贴给 Claude / ChatGPT 即可。');
+    alert('优化 Prompt 已复制！粘贴给 AI 助手（ChatGPT / Claude 等）即可。');
   } catch (e) {
     prompt_fallback(prompt);
   }

@@ -9,3 +9,12 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+
+# 云凭证 / 敏感文件 —— 绝不上传（AWS access keys 等）
+*.csv
+
+# 开发工具产物
+.claude/
+*.spec
+build/
+dist/
