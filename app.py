@@ -3,6 +3,7 @@
 
 用法:  python app.py  然后浏览器打开 http://127.0.0.1:5050
 """
+import contextvars
 import csv as csvmod
 import hashlib
 import hmac
@@ -295,6 +296,48 @@ _OPEN_PATHS = {"/login", "/register", "/logout", "/healthz"}  # 免登录路径
 users = {}  # 用户名 -> {"salt","hash","created"}；明文密码从不落盘
 _users_lock = threading.Lock()
 
+# ---- 每人每日用量上限（花钱护栏）------------------------------------------
+# 开放注册后，所有 LLM 调用都烧 owner 的 API key。用每人每日配额挡住刷爆。
+# 都可用环境变量覆盖；owner(APP_USER) 不受限；本地单机模式不限。
+OWNER = os.environ.get("APP_USER") or None
+LLM_DAILY_CAP = int(os.environ.get("LLM_DAILY_CAP", "100"))
+SCAN_DAILY_CAP = int(os.environ.get("SCAN_DAILY_CAP", "10"))
+usage = {}   # uid -> {"day": "YYYY-MM-DD", "llm": int, "scan": int}
+_usage_lock = threading.Lock()
+
+
+class UsageLimitError(Exception):
+    """超出每日配额。请求处理里由 errorhandler 转成 429。"""
+
+
+def _usage_today(uid):
+    today = date.today().isoformat()
+    u = usage.get(uid)
+    if u is None or u.get("day") != today:
+        u = {"day": today, "llm": 0, "scan": 0}
+        usage[uid] = u
+    return u
+
+
+def _charge(kind, cap, n=1):
+    """在配额内则计数；超限抛 UsageLimitError。owner/本地不计。"""
+    if not MULTIUSER:
+        return
+    uid = _uid()
+    if OWNER and uid == OWNER:
+        return
+    with _usage_lock:
+        u = _usage_today(uid)
+        if u[kind] + n > cap:
+            raise UsageLimitError(
+                f"Daily {kind} limit reached ({cap}/day). Please try again tomorrow.")
+        u[kind] += n
+
+
+@app.errorhandler(UsageLimitError)
+def _handle_usage_limit(e):
+    return jsonify({"error": str(e)}), 429
+
 
 def _hash_pw(password, salt=None):
     if salt is None:
@@ -366,17 +409,26 @@ def create_user(name, password):
     return True, ""
 
 
+def _bind_user(uid):
+    """把本次请求绑定到某用户：加载其数据 + 设置上下文（供 state[...] 路由）。"""
+    g.user = uid
+    ensure_user(uid)
+    _ctx_user.set(uid)
+
+
 @app.before_request
 def _require_login():
+    # 每个请求先重置上下文，防止复用的工作线程串到上一个请求的用户
+    _ctx_user.set(None)
     if not MULTIUSER:
-        g.user = LOCAL_USER   # 本地单机模式，不登录
+        _bind_user(LOCAL_USER)   # 本地单机模式，不登录
         return
     p = request.path
     if p in _OPEN_PATHS or p.startswith("/static/"):
-        return
+        return  # 这些路径不碰 state；上下文保持 None
     user = session.get("user")
     if user and user in users:
-        g.user = user
+        _bind_user(user)
         return
     # 未登录：页面导航跳登录页，前端 fetch 拿到 401（避免把登录 HTML 当 JSON 解析）
     if request.method == "GET" and "text/html" in request.headers.get("Accept", ""):
@@ -433,35 +485,102 @@ def logout_page():
     session.pop("user", None)
     return redirect(url_for("login_page"))
 
-# ---------------------------------------------------------------- state
-_lock = threading.Lock()
-state = {
-    "companies": {},   # name -> {"tags": ["curated"|"register"], "town": str}
-    "keywords": DEFAULT_KEYWORDS,
-    "exclude_keywords": [],  # 标题命中即隐藏（如 sales / frontend / qa）
-    "target_titles": [],     # 目标岗位标题（空=用 DEFAULT_TARGET_TITLES）
-    "acceptable_titles": [], # 可接受岗位标题（空=用 DEFAULT_ACCEPTABLE_TITLES）
-    "uk_only": True,
-    "auto_hours": 0,   # >0 时后台每隔 N 小时自动快速刷新
-    "results": {},     # name -> result（只存探测到招聘页的公司 + 精选公司）
-    "jobs_seen": {},   # job_url -> {"first_seen","last_seen"}
-    "scan": {"running": False, "done": 0, "total": 0, "mode": None,
-             "started_ts": 0, "stop": False, "new_jobs": 0},
-    "last_auto": 0,
-    "resume": None,        # {"text","keywords","updated","name"}
-    "match_scores": {},    # job_url -> {"score","hit","must_miss","nice_miss","flags","n"}
-    "match": {"running": False, "done": 0, "total": 0},
-    "match_stats": {},     # JD 抓取覆盖率：{"jd_ok","jd_fail","updated"}
-    "exp_years": 1,        # 我的工作年限（用于年限门槛检测）
-    "agg_jobs": {},        # 聚合器(Adzuna/Reed)/社媒招聘帖岗位：url -> {...}
-    "agg": {"running": False, "done": 0, "total": 0},
-    "social": {"running": False, "done": 0, "total": 0},  # 社媒招聘帖(HN)抓取进度
-    "tracker": {},         # 投递清单：job_url -> {"status","ts","title","company","location"}
-    "size": {"running": False, "done": 0, "total": 0},  # 公司规模识别进度
-    "hidden": {},          # 用户手动隐藏的岗位：url -> {"ts","title"}
-    "advice": {},          # 岗位简历建议缓存：url -> markdown（刷新页面不丢、不重复扣 LLM 费）
-    "outreach": {},        # networking 草稿缓存：url -> markdown
-}
+# ---------------------------------------------------------------- state（多租户）
+# 每个用户一份独立的 state（简历/岗位/匹配/投递…各自独立）。
+# `state` 是一个按「当前用户」路由的代理：所有 state[...] 访问自动落到当前用户的数据上。
+# 当前用户由 contextvars 决定——请求线程在 before_request 里设，后台线程在入口处设。
+# 公司总目录（含 12 万赞助商）是所有用户共享的一份对象，避免重复占内存/硬盘。
+_lock = threading.Lock()                 # 保护 state 写入（全局粗粒度锁，够用）
+_states_lock = threading.Lock()          # 保护 user_states 字典本身
+user_states = {}                         # uid -> 该用户的 state dict
+_shared_companies = {}                   # 公司总目录：所有用户共享同一个对象
+_ctx_user = contextvars.ContextVar("ctx_user", default=None)
+
+
+def _uid():
+    """当前上下文用户；未设置时回落到 LOCAL_USER（本地单机 / 免登录路径）。"""
+    return _ctx_user.get() or LOCAL_USER
+
+
+def blank_state():
+    """一份全新的用户 state。companies 指向共享目录（同一对象，不复制 12 万条）。"""
+    return {
+        "companies": _shared_companies,   # 共享引用（所有用户同一份公司目录）
+        "keywords": list(DEFAULT_KEYWORDS),
+        "exclude_keywords": [],  # 标题命中即隐藏（如 sales / frontend / qa）
+        "target_titles": [],     # 目标岗位标题（空=用 DEFAULT_TARGET_TITLES）
+        "acceptable_titles": [], # 可接受岗位标题（空=用 DEFAULT_ACCEPTABLE_TITLES）
+        "uk_only": True,
+        "auto_hours": 0,   # >0 时后台每隔 N 小时自动快速刷新
+        "results": {},     # name -> result（只存探测到招聘页的公司 + 精选公司）
+        "jobs_seen": {},   # job_url -> {"first_seen","last_seen"}
+        "scan": {"running": False, "done": 0, "total": 0, "mode": None,
+                 "started_ts": 0, "stop": False, "new_jobs": 0},
+        "last_auto": 0,
+        "resume": None,        # {"text","keywords","updated","name"}
+        "match_scores": {},    # job_url -> {"score","hit","must_miss","nice_miss","flags","n"}
+        "match": {"running": False, "done": 0, "total": 0},
+        "match_stats": {},     # JD 抓取覆盖率：{"jd_ok","jd_fail","updated"}
+        "exp_years": 1,        # 我的工作年限（用于年限门槛检测）
+        "agg_jobs": {},        # 聚合器(Adzuna/Reed)/社媒招聘帖岗位：url -> {...}
+        "agg": {"running": False, "done": 0, "total": 0},
+        "social": {"running": False, "done": 0, "total": 0},  # 社媒招聘帖(HN)抓取进度
+        "tracker": {},         # 投递清单：job_url -> {"status","ts","title","company","location"}
+        "size": {"running": False, "done": 0, "total": 0},  # 公司规模识别进度
+        "hidden": {},          # 用户手动隐藏的岗位：url -> {"ts","title"}
+        "advice": {},          # 岗位简历建议缓存：url -> markdown（刷新页面不丢、不重复扣 LLM 费）
+        "outreach": {},        # networking 草稿缓存：url -> markdown
+    }
+
+
+def ensure_user(uid):
+    """确保该用户的 state 已在内存（首次访问时从磁盘懒加载）。返回其 state dict。"""
+    with _states_lock:
+        st = user_states.get(uid)
+        if st is not None:
+            return st
+    st = blank_state()          # 锁外构建 + 读盘，避免半成品被别的线程看到
+    load_user_state(uid, st)
+    with _states_lock:
+        existing = user_states.get(uid)
+        if existing is not None:  # 竞态：别的线程已建好，用它的
+            return existing
+        user_states[uid] = st
+        return st
+
+
+class _StateProxy:
+    """把全局名字 `state` 变成「当前用户的 state」。只需 __getitem__/__setitem__/get。"""
+    def _d(self):
+        uid = _uid()
+        st = user_states.get(uid)
+        return st if st is not None else ensure_user(uid)
+
+    def __getitem__(self, k):
+        return self._d()[k]
+
+    def __setitem__(self, k, v):
+        self._d()[k] = v
+
+    def get(self, k, default=None):
+        return self._d().get(k, default)
+
+
+state = _StateProxy()
+
+
+def _spawn(fn, *args):
+    """启动一个后台线程，并把「当前用户」绑定进新线程的上下文。
+    新线程默认不继承 contextvars，所以这里显式捕获 + 设置，避免跑到别人的数据上。"""
+    u = _uid()
+
+    def runner():
+        _ctx_user.set(u)
+        fn(*args)
+
+    threading.Thread(target=runner, daemon=True).start()
+
+
 ats_cache = {}  # name -> {"ats","slug"} | "none"
 company_sizes = {}  # company name -> {"band": startup|mid|large|unknown, "note": str}
 api_keys = {}   # {"adzuna_app_id","adzuna_app_key","reed_api_key"}
@@ -477,7 +596,18 @@ def _valid_override(v):
     return bool(v.get("slug"))
 
 
+def _user_dir(uid):
+    d = os.path.join(DATA_DIR, "users", uid)
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def _user_state_file(uid):
+    return os.path.join(_user_dir(uid), "state.json")
+
+
 def load_all():
+    """启动时载入所有用户共享的数据：探测缓存 + 公司总目录。各用户 state 懒加载。"""
     global ats_cache, slug_overrides, api_keys, company_sizes
     if os.path.exists(COMPANY_SIZE_FILE):
         try:
@@ -505,42 +635,67 @@ def load_all():
                               if isinstance(v, dict) and _valid_override(v)}
         except Exception:
             slug_overrides = {}
+    # 公司总目录（共享）：就地填充 _shared_companies，保持 blank_state 里的引用有效
     if os.path.exists(COMPANIES_FILE):
         try:
             with open(COMPANIES_FILE, encoding="utf-8") as f:
-                state["companies"] = json.load(f)
+                _shared_companies.update(json.load(f))
         except Exception:
             pass
-    if os.path.exists(STATE_FILE):
-        try:
-            with open(STATE_FILE, encoding="utf-8") as f:
-                saved = json.load(f)
-        except Exception:
-            return
-        comps = saved.get("companies", {})
-        if isinstance(comps, list):  # 旧版本格式迁移：当时导入的就是精选清单
-            comps = {c["name"]: {"tags": ["curated"], "town": ""} for c in comps}
-        if comps and not state["companies"]:
-            state["companies"] = comps
-        state["keywords"] = saved.get("keywords", DEFAULT_KEYWORDS)
-        state["exclude_keywords"] = saved.get("exclude_keywords", [])
-        state["target_titles"] = saved.get("target_titles", [])
-        state["acceptable_titles"] = saved.get("acceptable_titles", [])
-        state["uk_only"] = saved.get("uk_only", True)
-        state["auto_hours"] = saved.get("auto_hours", 0)
-        state["jobs_seen"] = saved.get("jobs_seen", {})
-        state["resume"] = saved.get("resume")
-        state["match_scores"] = saved.get("match_scores", {})
-        state["match_stats"] = saved.get("match_stats", {})
-        state["agg_jobs"] = saved.get("agg_jobs", {})
-        state["exp_years"] = saved.get("exp_years", 1)
-        state["tracker"] = saved.get("tracker", {})
-        state["hidden"] = saved.get("hidden", {})
-        state["advice"] = saved.get("advice", {})
-        state["outreach"] = saved.get("outreach", {})
-        for name, r in saved.get("results", {}).items():
-            r.pop("links", None)  # 旧版把链接存了盘，现在改为按需生成
-            state["results"][name] = r
+    migrate_legacy_state()
+
+
+def migrate_legacy_state():
+    """把老的单租户 data/state.json 迁移成 owner 账号的 per-user state（只做一次）。
+    老文件里的 companies 并入共享目录。原文件保留作备份，不删除。"""
+    if not os.path.exists(STATE_FILE):
+        return
+    owner = os.environ.get("APP_USER") or LOCAL_USER
+    dest = _user_state_file(owner)
+    if os.path.exists(dest):
+        return  # 已迁移
+    try:
+        with open(STATE_FILE, encoding="utf-8") as f:
+            saved = json.load(f)
+    except Exception:
+        return
+    comps = saved.pop("companies", {})
+    if isinstance(comps, list):  # 更老的格式：当时导入的就是精选清单
+        comps = {c["name"]: {"tags": ["curated"], "town": ""} for c in comps}
+    for k, v in (comps or {}).items():
+        _shared_companies.setdefault(k, v)
+    _atomic_write(dest, json.dumps(saved, ensure_ascii=False))
+
+
+def load_user_state(uid, st):
+    """把某用户的 per-user state.json 载入到 st（companies 不在此文件里，是共享的）。"""
+    path = _user_state_file(uid)
+    if not os.path.exists(path):
+        return
+    try:
+        with open(path, encoding="utf-8") as f:
+            saved = json.load(f)
+    except Exception:
+        return
+    st["keywords"] = saved.get("keywords", list(DEFAULT_KEYWORDS))
+    st["exclude_keywords"] = saved.get("exclude_keywords", [])
+    st["target_titles"] = saved.get("target_titles", [])
+    st["acceptable_titles"] = saved.get("acceptable_titles", [])
+    st["uk_only"] = saved.get("uk_only", True)
+    st["auto_hours"] = saved.get("auto_hours", 0)
+    st["jobs_seen"] = saved.get("jobs_seen", {})
+    st["resume"] = saved.get("resume")
+    st["match_scores"] = saved.get("match_scores", {})
+    st["match_stats"] = saved.get("match_stats", {})
+    st["agg_jobs"] = saved.get("agg_jobs", {})
+    st["exp_years"] = saved.get("exp_years", 1)
+    st["tracker"] = saved.get("tracker", {})
+    st["hidden"] = saved.get("hidden", {})
+    st["advice"] = saved.get("advice", {})
+    st["outreach"] = saved.get("outreach", {})
+    for name, r in saved.get("results", {}).items():
+        r.pop("links", None)  # 旧版把链接存了盘，现在改为按需生成
+        st["results"][name] = r
 
 
 def _atomic_write(path, payload):
@@ -559,7 +714,10 @@ def save_companies():
 
 
 def save_state():
-    """锁内序列化（results/jobs_seen 都不大），锁外写盘。调用方不得持锁。"""
+    """把「当前用户」的 state 落盘到 data/users/<uid>/state.json。
+    锁内序列化（results/jobs_seen 都不大），锁外写盘。调用方不得持锁。
+    companies 是共享的，单独由 save_companies() 存，不进本文件。"""
+    dest = _user_state_file(_uid())
     with _lock:
         payload = json.dumps({
             "keywords": state["keywords"],
@@ -580,7 +738,7 @@ def save_state():
             "advice": state["advice"],
             "outreach": state["outreach"],
         }, ensure_ascii=False)
-    _atomic_write(STATE_FILE, payload)
+    _atomic_write(dest, payload)
 
 
 def save_ats_cache():
@@ -1257,7 +1415,7 @@ def run_scan(names, mode):
         save_state()
         # 扫描结束后自动重算匹配度（有简历时），新岗位无需手动点"计算匹配度"
         if state.get("resume") and not state["match"]["running"]:
-            threading.Thread(target=run_match, daemon=True).start()
+            _spawn(run_match)
 
 
 def start_scan(mode):
@@ -1280,22 +1438,27 @@ def start_scan(mode):
         names = sorted(curated) + [n for n in known if n not in curated] + pending
     if not names:
         return 0
-    threading.Thread(target=run_scan, args=(names, mode), daemon=True).start()
+    _charge("scan", SCAN_DAILY_CAP)   # 扣每日扫描配额（超限抛 UsageLimitError）
+    _spawn(run_scan, names, mode)
     return len(names)
 
 
 def auto_loop():
-    """auto_hours>0 时定时快速刷新已知招聘系统，第一时间发现新岗位。"""
+    """auto_hours>0 时定时快速刷新已知招聘系统，第一时间发现新岗位。
+    多租户：逐个用户检查各自的 auto_hours（只覆盖当前已在内存的用户；
+    某用户重启后首次登录会重新进入内存，其定时随之恢复）。"""
     while True:
         time.sleep(300)
-        try:
-            h = state["auto_hours"]
-            if h > 0 and not state["scan"]["running"] \
-                    and time.time() - state["last_auto"] > h * 3600:
-                if start_scan("known"):
-                    state["last_auto"] = time.time()
-        except Exception:
-            pass
+        for uid in list(user_states.keys()):
+            try:
+                _ctx_user.set(uid)   # 把上下文切到这个用户，state[...] 即其数据
+                h = state["auto_hours"]
+                if h > 0 and not state["scan"]["running"] \
+                        and time.time() - state["last_auto"] > h * 3600:
+                    if start_scan("known"):   # 内部 _spawn 会捕获当前 uid
+                        state["last_auto"] = time.time()
+            except Exception:
+                pass
 
 
 # ---------------------------------------------------------------- 聚合平台搜索
@@ -1461,7 +1624,7 @@ def run_aggregators():
         save_state()
         # 抓完顺手把新岗位的匹配分算出来
         if state.get("resume") and not state["match"]["running"]:
-            threading.Thread(target=run_match, daemon=True).start()
+            _spawn(run_match)
 
 
 # ---------------------------------------------------------------- 社媒招聘帖（Hacker News）
@@ -1582,7 +1745,7 @@ def run_social():
             _atomic_write(DESC_CACHE_FILE, json.dumps(cache, ensure_ascii=False))
         save_state()
         if state.get("resume") and not state["match"]["running"]:
-            threading.Thread(target=run_match, daemon=True).start()
+            _spawn(run_match)
 
 
 # ---------------------------------------------------------------- 公司规模（大模型估）
@@ -2088,7 +2251,7 @@ def api_resume():
                            "updated": date.today().isoformat()}
         state["match_scores"] = {}
     save_state()
-    threading.Thread(target=run_match, daemon=True).start()
+    _spawn(run_match)
     return jsonify({"ok": True, "keywords": kws, "chars": len(text)})
 
 
@@ -2098,7 +2261,7 @@ def api_match():
         return jsonify({"error": "请先上传简历"}), 400
     if state["match"]["running"]:
         return jsonify({"error": "匹配计算进行中"}), 409
-    threading.Thread(target=run_match, daemon=True).start()
+    _spawn(run_match)
     return jsonify({"started": True})
 
 
@@ -2235,7 +2398,9 @@ def _anthropic_complete(prompt, max_tokens):
 
 
 def _llm_complete(prompt, max_tokens=6000):
-    """按所配 provider 调用大模型生成建议，返回纯文本。"""
+    """按所配 provider 调用大模型生成建议，返回纯文本。
+    多租户下先扣当前用户的每日 LLM 配额，超限抛 UsageLimitError。"""
+    _charge("llm", LLM_DAILY_CAP)
     return (_openai_complete if _llm_provider() == "openai"
             else _anthropic_complete)(prompt, max_tokens)
 
@@ -2790,7 +2955,20 @@ def api_state():
                        if resume else None),
             "consts": {"new_days": NEW_DAYS, "long_days": LONG_RUNNING_DAYS,
                        "level_labels": LEVEL_LABELS, "size_labels": SIZE_LABELS},
+            "auth": _auth_info(),
         })
+
+
+def _auth_info():
+    """给前端：当前登录名、是否多用户、以及当日剩余配额（用于显示退出/额度）。"""
+    uid = _uid()
+    info = {"multiuser": MULTIUSER, "user": (uid if MULTIUSER else None)}
+    if MULTIUSER and not (OWNER and uid == OWNER):
+        with _usage_lock:
+            u = _usage_today(uid)
+            info["usage"] = {"llm": u["llm"], "llm_cap": LLM_DAILY_CAP,
+                             "scan": u["scan"], "scan_cap": SCAN_DAILY_CAP}
+    return info
 
 
 @app.route("/api/settings", methods=["POST"])
@@ -2886,7 +3064,7 @@ def api_aggregators():
         return jsonify({"error": "未配置 Adzuna/Reed 的 API key（见 data/api_keys.json）"}), 400
     if state["agg"]["running"]:
         return jsonify({"error": "聚合搜索进行中"}), 409
-    threading.Thread(target=run_aggregators, daemon=True).start()
+    _spawn(run_aggregators)
     return jsonify({"started": True,
                     "queries": len(state["keywords"][:AGG_MAX_QUERIES])})
 
@@ -2896,7 +3074,7 @@ def api_social():
     """抓 Hacker News 'Who is hiring' 招聘帖，按关键词过滤后并入岗位流。无需 API key。"""
     if state["social"]["running"]:
         return jsonify({"error": "社媒招聘帖抓取进行中"}), 409
-    threading.Thread(target=run_social, daemon=True).start()
+    _spawn(run_social)
     return jsonify({"started": True})
 
 
@@ -2910,17 +3088,19 @@ def api_company_size():
     n = len(_size_targets())
     if not n:
         return jsonify({"error": "没有需要识别的新公司（有岗位的都已识别过）"}), 400
-    threading.Thread(target=run_company_size, daemon=True).start()
+    _spawn(run_company_size)
     return jsonify({"started": True, "total": n})
 
 
 @app.route("/api/clear", methods=["POST"])
 def api_clear():
+    # 多租户：只清「我」的扫描数据；公司总目录是共享的，不在这里动
+    # （否则一个人清空会抹掉所有人共享的 12 万公司目录）。
     with _lock:
-        state["companies"] = {}
         state["results"] = {}
         state["jobs_seen"] = {}
-    save_companies()
+        state["agg_jobs"] = {}
+        state["match_scores"] = {}
     save_state()
     return jsonify({"ok": True})
 

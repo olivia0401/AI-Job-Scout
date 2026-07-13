@@ -420,6 +420,8 @@
     <h1>AI Job Scout</h1>
     <span class="tagline" data-i18n="tagline">英国工签雇主 · 岗位雷达</span>
     <div class="actions">
+      <span class="userchip" id="userChip" style="display:none"></span>
+      <button class="ghost mini" id="btnLogout" onclick="location.href='/logout'" style="display:none">Logout</button>
       <button class="ghost mini" id="btnLang" onclick="toggleLang()" title="中文 / English">EN</button>
       <button onclick="scan('known')" id="btnRefresh" data-i18n="btn_scan_new">扫描新岗位</button>
     </div>
@@ -1365,10 +1367,30 @@ const CN_BIGTECH = [
 
 function esc(s) { return (s || '').toString().replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
+function updateAuth() {
+  const a = S.auth || {};
+  const chip = document.getElementById('userChip');
+  const btn = document.getElementById('btnLogout');
+  if (!chip || !btn) return;
+  if (a.multiuser && a.user) {
+    let label = a.user;
+    if (a.usage) label += ` · LLM ${a.usage.llm}/${a.usage.llm_cap}`;
+    chip.textContent = label;
+    chip.title = 'Signed in';
+    chip.style.cssText = 'display:inline-block;font-size:12.5px;color:var(--muted);'
+      + 'padding:4px 10px;border:1px solid var(--border);border-radius:9px;background:var(--card);';
+    btn.style.display = '';
+  } else {
+    chip.style.display = 'none';
+    btn.style.display = 'none';
+  }
+}
+
 async function refresh() {
   const r = await fetch('/api/state?sort=' + encodeURIComponent(F.sort)
     + '&limit=' + FEED_LIMIT + (F.tier === 'hidden' ? '&hidden=1' : ''));
   S = await r.json();
+  updateAuth();
   document.getElementById('kw').value = (S.keywords || []).join(', ');
   const exEl = document.getElementById('exkw');
   if (exEl && document.activeElement !== exEl)
