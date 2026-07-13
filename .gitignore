@@ -1,7 +1,7 @@
-# 个人数据：简历全文、扫描结果、缓存 —— 绝不上传
+# Personal data: full resume text, scan results, caches — never upload
 data/
 
-# 导出的结果表格（含个人求职数据）
+# Exported result spreadsheets (contain personal job-search data)
 *.xlsx
 
 # Python
@@ -10,10 +10,16 @@ __pycache__/
 .venv/
 venv/
 
-# 云凭证 / 敏感文件 —— 绝不上传（AWS access keys 等）
+# Cloud credentials / sensitive files — never upload (AWS access keys, etc.)
 *.csv
 
-# 开发工具产物
+# Installers / large binaries that don't belong in the repo
+*.exe
+
+# Local deployment runbook (contains server IP / personal infra steps)
+如何部署说明.md
+
+# Dev-tool artifacts
 .claude/
 *.spec
 build/

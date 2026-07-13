@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AI Job Scout · 工签雇主 AI 岗位</title>
+<title data-i18n="page_title">AI Job Scout · Visa-sponsor AI jobs</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -418,16 +418,17 @@
 <div class="wrap">
   <div class="top">
     <h1>🎯 AI Job Scout</h1>
-    <span class="tagline">英国工签雇主 · 岗位雷达</span>
+    <span class="tagline" data-i18n="tagline">英国工签雇主 · 岗位雷达</span>
     <div class="actions">
-      <button onclick="scan('known')" id="btnRefresh">🔄 扫描新岗位</button>
+      <button class="ghost mini" id="btnLang" onclick="toggleLang()" title="中文 / English">EN</button>
+      <button onclick="scan('known')" id="btnRefresh" data-i18n="btn_scan_new">🔄 扫描新岗位</button>
     </div>
   </div>
 
   <div class="scanbar" id="scanbar">
     <div class="line">
       <span id="scanTxt"></span>
-      <button class="ghost" id="btnStop" onclick="stopScan()">停止</button>
+      <button class="ghost" id="btnStop" onclick="stopScan()" data-i18n="btn_stop">停止</button>
     </div>
     <div class="progress"><div id="progBar"></div></div>
   </div>
@@ -443,73 +444,73 @@
   <div class="filterbox" id="filterbox">
     <div class="frow">
       <div class="vtabs">
-        <span class="chip on" data-g="sort" data-v="rank" onclick="setF(this)" title="综合推荐：方向对口 + 匹配分 + 签证确定性 + 置信度 + 新鲜度，按分层分区显示">推荐优先</span>
-        <span class="chip" data-g="sort" data-v="date" onclick="setF(this)">最新</span>
-        <span class="chip" data-g="sort" data-v="score" onclick="setF(this)">技能匹配</span>
+        <span class="chip on" data-g="sort" data-v="rank" onclick="setF(this)" data-i18n-title="sort_rank_tip" data-i18n="sort_rank" title="综合推荐：方向对口 + 匹配分 + 签证确定性 + 置信度 + 新鲜度，按分层分区显示">推荐优先</span>
+        <span class="chip" data-g="sort" data-v="date" onclick="setF(this)" data-i18n="sort_date">最新</span>
+        <span class="chip" data-g="sort" data-v="score" onclick="setF(this)" data-i18n="sort_score">技能匹配</span>
       </div>
-      <span class="chip" id="layoutChip" onclick="toggleLayout()" title="表格视图：一行一个岗位，方便批量比较">表格</span>
+      <span class="chip" id="layoutChip" onclick="toggleLayout()" data-i18n-title="layout_tip" data-i18n="layout_table" title="表格视图：一行一个岗位，方便批量比较">表格</span>
       <select class="fsel" id="fRegion" onchange="F.region = this.value; saveF(); render()">
-        <option value="all">所有地区</option>
-        <option value="uk">英国</option>
-        <option value="europe">欧洲</option>
-        <option value="china">中国</option>
+        <option value="all" data-i18n="region_all">所有地区</option>
+        <option value="uk" data-i18n="region_uk">英国</option>
+        <option value="europe" data-i18n="region_europe">欧洲</option>
+        <option value="china" data-i18n="region_china">中国</option>
         <option value="remote">Remote</option>
-        <option value="unknown">未知地点</option>
+        <option value="unknown" data-i18n="region_unknown">未知地点</option>
       </select>
-      <select class="fsel" id="fTier" onchange="setTier(this.value)" title="综合推荐分层：匹配分 + JD 置信度 + 签证/许可风险">
-        <option value="all">全部</option>
-        <option value="strong">推荐投（方向对口·高匹配·无风险）</option>
-        <option value="maybe">谨慎投（匹配中等）</option>
-        <option value="lowconf">需人工确认（没抓到 JD）</option>
-        <option value="weak">不建议投（方向/匹配弱）</option>
-        <option value="risk">有风险（不担保/许可）</option>
-        <option value="hidden">已隐藏</option>
+      <select class="fsel" id="fTier" onchange="setTier(this.value)" data-i18n-title="tier_sel_tip" title="综合推荐分层：匹配分 + JD 置信度 + 签证/许可风险">
+        <option value="all" data-i18n="tier_all">全部</option>
+        <option value="strong" data-i18n="tier_strong_opt">推荐投（方向对口·高匹配·无风险）</option>
+        <option value="maybe" data-i18n="tier_maybe_opt">谨慎投（匹配中等）</option>
+        <option value="lowconf" data-i18n="tier_lowconf_opt">需人工确认（没抓到 JD）</option>
+        <option value="weak" data-i18n="tier_weak_opt">不建议投（方向/匹配弱）</option>
+        <option value="risk" data-i18n="tier_risk_opt">有风险（不担保/许可）</option>
+        <option value="hidden" data-i18n="tier_hidden_opt">已隐藏</option>
       </select>
-      <select class="fsel" id="fVisa" onchange="F.visa = this.value; saveF(); render()" title="签证确定性：公司在 sponsor 名单 ≠ 这个岗位一定担保，JD 明确写了才是确定的">
-        <option value="all">签证不限</option>
-        <option value="yes">JD 明确担保</option>
-        <option value="register">名单内·JD 未说明</option>
-        <option value="uncertain">担保不确定</option>
-        <option value="no">JD 明确不担保</option>
+      <select class="fsel" id="fVisa" onchange="F.visa = this.value; saveF(); render()" data-i18n-title="visa_sel_tip" title="签证确定性：公司在 sponsor 名单 ≠ 这个岗位一定担保，JD 明确写了才是确定的">
+        <option value="all" data-i18n="visa_all">签证不限</option>
+        <option value="yes" data-i18n="visa_yes">JD 明确担保</option>
+        <option value="register" data-i18n="visa_register">名单内·JD 未说明</option>
+        <option value="uncertain" data-i18n="visa_uncertain">担保不确定</option>
+        <option value="no" data-i18n="visa_no">JD 明确不担保</option>
       </select>
       <select class="fsel" id="fLevel" onchange="F.level = this.value; saveF(); render()">
-        <option value="all">所有级别</option>
-        <option value="grad">实习/毕业生</option>
-        <option value="junior">初级</option>
-        <option value="mid">中级</option>
-        <option value="senior">高级</option>
+        <option value="all" data-i18n="level_all">所有级别</option>
+        <option value="grad" data-i18n="level_grad">实习/毕业生</option>
+        <option value="junior" data-i18n="level_junior">初级</option>
+        <option value="mid" data-i18n="level_mid">中级</option>
+        <option value="senior" data-i18n="level_senior">高级</option>
         <option value="staff">Staff/Lead</option>
-        <option value="mgmt">管理层</option>
+        <option value="mgmt" data-i18n="level_mgmt">管理层</option>
       </select>
-      <select class="fsel" id="fCsize" onchange="F.csize = this.value; saveF(); render()" title="公司员工规模（大模型估）。需先点 ⋯ 菜单「识别公司规模」；模型不认识的会标为“规模未知”">
-        <option value="all">所有规模</option>
-        <option value="large">大型 (500+)</option>
-        <option value="mid">中型 (50–500)</option>
-        <option value="startup">初创 (&lt;50)</option>
-        <option value="unknown">规模未知</option>
+      <select class="fsel" id="fCsize" onchange="F.csize = this.value; saveF(); render()" data-i18n-title="csize_sel_tip" title="公司员工规模（大模型估）。需先点 ⋯ 菜单「识别公司规模」；模型不认识的会标为“规模未知”">
+        <option value="all" data-i18n="csize_all">所有规模</option>
+        <option value="large" data-i18n="csize_large">大型 (500+)</option>
+        <option value="mid" data-i18n="csize_mid">中型 (50–500)</option>
+        <option value="startup" data-i18n="csize_startup">初创 (&lt;50)</option>
+        <option value="unknown" data-i18n="csize_unknown">规模未知</option>
       </select>
-      <select class="fsel" id="fYears" onchange="F.years = this.value; saveF(); render()" title="按 JD 里的最低要求年限筛选（需已算匹配度才有数据）">
-        <option value="all">所有经验</option>
-        <option value="fit">我够格（≤我的年限）</option>
-        <option value="none">未注明年限</option>
-        <option value="y12">1–2 年</option>
-        <option value="y35">3–5 年</option>
-        <option value="y6">5 年以上</option>
+      <select class="fsel" id="fYears" onchange="F.years = this.value; saveF(); render()" data-i18n-title="years_sel_tip" title="按 JD 里的最低要求年限筛选（需已算匹配度才有数据）">
+        <option value="all" data-i18n="years_all">所有经验</option>
+        <option value="fit" data-i18n="years_fit">我够格（≤我的年限）</option>
+        <option value="none" data-i18n="years_none">未注明年限</option>
+        <option value="y12" data-i18n="years_y12">1–2 年</option>
+        <option value="y35" data-i18n="years_y35">3–5 年</option>
+        <option value="y6" data-i18n="years_y6">5 年以上</option>
       </select>
-      <select class="fsel" id="fScore" onchange="F.minscore = parseInt(this.value, 10); saveF(); render()" title="按简历匹配分过滤（需先上传简历算分；没算出分的岗位会被隐藏）">
-        <option value="0">所有匹配分</option>
-        <option value="40">≥ 40 分</option>
-        <option value="60">≥ 60 分</option>
-        <option value="80">≥ 80 分</option>
+      <select class="fsel" id="fScore" onchange="F.minscore = parseInt(this.value, 10); saveF(); render()" data-i18n-title="score_sel_tip" title="按简历匹配分过滤（需先上传简历算分；没算出分的岗位会被隐藏）">
+        <option value="0" data-i18n="score_all">所有匹配分</option>
+        <option value="40" data-i18n="score_40">≥ 40 分</option>
+        <option value="60" data-i18n="score_60">≥ 60 分</option>
+        <option value="80" data-i18n="score_80">≥ 80 分</option>
       </select>
       <span class="chip" data-t="llm" onclick="toggleT(this)">LLM</span>
-      <span class="chip" data-t="new" onclick="toggleT(this)">新上架</span>
-      <span class="chip" data-t="curated" onclick="toggleT(this)">精选公司</span>
-      <span class="chip" data-t="titleonly" onclick="toggleT(this)" title="只看标题直接命中关键词的岗位，隐藏仅靠 JD 正文召回的低置信度岗位">仅标题命中</span>
-      <span class="chip" data-t="derisk" onclick="toggleT(this)" title="隐藏 JD 明确声明不担保签证、或要求安全许可/英国国籍的岗位">排除签证风险</span>
-      <span class="chip" data-t="unseen" onclick="toggleT(this)" title="只看你还没展开/打开过的岗位（看过的自动记住）">未看过</span>
-      <span class="chip" data-t="ontarget" onclick="toggleT(this)" title="只看岗位方向对口的（目标/可接受），隐藏方向不对的（IT Support / Sales / QA 等——它们可能技能重合高，但不是你要的岗位）">只看对口</span>
-      <input type="text" id="search" placeholder="搜索岗位 / 公司…" oninput="render()">
+      <span class="chip" data-t="new" onclick="toggleT(this)" data-i18n="chip_new">新上架</span>
+      <span class="chip" data-t="curated" onclick="toggleT(this)" data-i18n="chip_curated">精选公司</span>
+      <span class="chip" data-t="titleonly" onclick="toggleT(this)" data-i18n-title="chip_titleonly_tip" data-i18n="chip_titleonly" title="只看标题直接命中关键词的岗位，隐藏仅靠 JD 正文召回的低置信度岗位">仅标题命中</span>
+      <span class="chip" data-t="derisk" onclick="toggleT(this)" data-i18n-title="chip_derisk_tip" data-i18n="chip_derisk" title="隐藏 JD 明确声明不担保签证、或要求安全许可/英国国籍的岗位">排除签证风险</span>
+      <span class="chip" data-t="unseen" onclick="toggleT(this)" data-i18n-title="chip_unseen_tip" data-i18n="chip_unseen" title="只看你还没展开/打开过的岗位（看过的自动记住）">未看过</span>
+      <span class="chip" data-t="ontarget" onclick="toggleT(this)" data-i18n-title="chip_ontarget_tip" data-i18n="chip_ontarget" title="只看岗位方向对口的（目标/可接受），隐藏方向不对的（IT Support / Sales / QA 等——它们可能技能重合高，但不是你要的岗位）">只看对口</span>
+      <input type="text" id="search" data-i18n-ph="search_ph" placeholder="搜索岗位 / 公司…" oninput="render()">
     </div>
   </div>
 
@@ -517,60 +518,60 @@
   <div class="hint" id="emptyHint"></div>
 
   <details class="howto" id="howto">
-    <summary>📖 使用说明</summary>
+    <summary data-i18n="howto_summary">📖 使用说明</summary>
     <div class="hbody">
-      <div><b class="stepn">1</b><b>扫描岗位</b>：点右上「扫描新岗位」抓取最新岗位<span id="step1ok"></span>　<span style="color:var(--muted)">（第一次用，先去左侧「工具箱」点「首次建立岗位库」跑一遍，约几小时；之后日常只需扫描）</span></div>
-      <div><b class="stepn">2</b><b>上传简历</b>：自动给每个岗位算技能匹配分，并按「方向对口 + 签证 + 匹配」综合排序<span id="step2ok"></span></div>
-      <div><b class="stepn">3</b><b>看今日推荐</b>：点岗位在右侧详情里看推荐理由、缺哪些技能，生成简历建议 / networking 草稿；想投的点收藏，去「投递清单」看板跟踪</div>
+      <div><b class="stepn">1</b><span data-i18n-html="howto_1"><b>扫描岗位</b>：点右上「扫描新岗位」抓取最新岗位</span><span id="step1ok"></span>　<span style="color:var(--muted)" data-i18n="howto_1_note">（第一次用，先去左侧「工具箱」点「首次建立岗位库」跑一遍，约几小时；之后日常只需扫描）</span></div>
+      <div><b class="stepn">2</b><span data-i18n-html="howto_2"><b>上传简历</b>：自动给每个岗位算技能匹配分，并按「方向对口 + 签证 + 匹配」综合排序</span><span id="step2ok"></span></div>
+      <div><b class="stepn">3</b><span data-i18n-html="howto_3"><b>看今日推荐</b>：点岗位在右侧详情里看推荐理由、缺哪些技能，生成简历建议 / networking 草稿；想投的点收藏，去「投递清单」看板跟踪</span></div>
     </div>
   </details>
 
   <!-- ========== 求职目标设置（左侧导航「求职目标设置」） ========== -->
   <div id="goalPanel" class="viewpanel" style="display:none">
     <div class="today-summary">
-      <h2>🎯 求职目标设置</h2>
-      <div class="sub">告诉工具你要找什么、你的背景——它据此给岗位打分、排序、排雷。改完点「保存设置」即时生效。</div>
+      <h2 data-i18n="goal_title">🎯 求职目标设置</h2>
+      <div class="sub" data-i18n="goal_sub">告诉工具你要找什么、你的背景——它据此给岗位打分、排序、排雷。改完点「保存设置」即时生效。</div>
     </div>
     <div class="advbody">
       <div class="row">
-        <span class="note">岗位关键词：</span>
+        <span class="note" data-i18n="goal_kw">岗位关键词：</span>
         <input type="text" id="kw" style="flex:1;min-width:280px">
       </div>
       <div class="row" style="margin-top:6px">
-        <span class="note">排除词：</span>
+        <span class="note" data-i18n="goal_exkw">排除词：</span>
         <input type="text" id="exkw" style="flex:1;min-width:280px"
-               placeholder="标题含这些词的岗位直接隐藏，逗号分隔，如 sales, consultant, intern">
+               data-i18n-ph="goal_exkw_ph" placeholder="标题含这些词的岗位直接隐藏，逗号分隔，如 sales, consultant, intern">
       </div>
       <div class="row" id="exSuggest" style="display:none"></div>
       <div class="row" style="margin-top:6px">
-        <span class="note" title="标题命中这些=🧭目标岗位，能进强推荐">🎯 目标岗位：</span>
+        <span class="note" data-i18n-title="goal_target_tip" data-i18n="goal_target" title="标题命中这些=🧭目标岗位，能进强推荐">🎯 目标岗位：</span>
         <input type="text" id="targetTitles" style="flex:1;min-width:280px"
-               placeholder="留空=用默认，逗号分隔，如 machine learning engineer, llm engineer, nlp engineer">
+               data-i18n-ph="goal_target_ph" placeholder="留空=用默认，逗号分隔，如 machine learning engineer, llm engineer, nlp engineer">
       </div>
       <div class="row" style="margin-top:6px">
-        <span class="note" title="能接受的相邻岗位，也能进强推荐">🧭 可接受岗位：</span>
+        <span class="note" data-i18n-title="goal_accept_tip" data-i18n="goal_accept" title="能接受的相邻岗位，也能进强推荐">🧭 可接受岗位：</span>
         <input type="text" id="acceptTitles" style="flex:1;min-width:280px"
-               placeholder="留空=用默认，如 applied scientist, research engineer, data scientist">
+               data-i18n-ph="goal_accept_ph" placeholder="留空=用默认，如 applied scientist, research engineer, data scientist">
       </div>
-      <div class="note" style="margin-top:2px;color:var(--muted)">
+      <div class="note" style="margin-top:2px;color:var(--muted)" data-i18n="goal_dir_note">
         方向不在以上两栏的岗位（如 IT Support / Sales / QA），即使技能分很高也不会被强推。改完点「保存设置」即时生效。
       </div>
       <div class="row">
-        <span class="note">自动刷新间隔</span>
+        <span class="note" data-i18n="goal_auto">自动刷新间隔</span>
         <input type="number" id="autoHours" min="0" max="48" style="width:64px">
-        <span class="note">小时（0 = 关闭；程序开着才生效）</span>
-        <span class="note" style="margin-left:14px">我的工作年限</span>
+        <span class="note" data-i18n="goal_auto_unit">小时（0 = 关闭；程序开着才生效）</span>
+        <span class="note" style="margin-left:14px" data-i18n="goal_years">我的工作年限</span>
         <input type="number" id="expYears" min="0" max="30" style="width:56px">
-        <span class="note">年（用于检测"要求 N 年经验"门槛）</span>
-        <button onclick="saveSettings()">保存设置</button>
+        <span class="note" data-i18n="goal_years_unit">年（用于检测"要求 N 年经验"门槛）</span>
+        <button onclick="saveSettings()" data-i18n="goal_save">保存设置</button>
       </div>
       <div class="row" style="margin-top:10px; align-items:flex-start">
-        <span class="note" style="padding-top:8px">粘贴简历：</span>
+        <span class="note" style="padding-top:8px" data-i18n="goal_paste">粘贴简历：</span>
         <textarea id="resumeText" style="flex:1;min-width:280px;min-height:80px"
-                  placeholder="也可以直接把简历全文粘贴到这里（PDF 上传识别不了时用）"></textarea>
-        <button class="mini" onclick="pasteResume()" style="margin-top:8px">保存简历文本</button>
+                  data-i18n-ph="goal_paste_ph" placeholder="也可以直接把简历全文粘贴到这里（PDF 上传识别不了时用）"></textarea>
+        <button class="mini" onclick="pasteResume()" style="margin-top:8px" data-i18n="goal_paste_save">保存简历文本</button>
       </div>
-      <div class="note" style="margin-top:10px">
+      <div class="note" style="margin-top:10px" data-i18n="goal_foot">
         改完记得点「保存设置」。想扫描岗位、导出等操作，去左侧「工具箱」。
       </div>
     </div>
@@ -579,59 +580,59 @@
   <!-- ========== 工具箱（左侧导航「工具箱」） ========== -->
   <div id="toolsPanel" class="viewpanel" style="display:none">
     <div class="today-summary">
-      <h2>🧰 工具箱</h2>
-      <div class="sub">扫描岗位、补充来源、导出，都在这。日常只需第一张卡片「扫描新岗位」。</div>
+      <h2 data-i18n="tools_title">🧰 工具箱</h2>
+      <div class="sub" data-i18n="tools_sub">扫描岗位、补充来源、导出，都在这。日常只需第一张卡片「扫描新岗位」。</div>
     </div>
     <div class="advbody" style="margin-bottom:16px">
-      <div class="note" id="pendingNote">岗位库状态加载中…</div>
+      <div class="note" id="pendingNote" data-i18n="tools_lib_loading">岗位库状态加载中…</div>
     </div>
     <div class="toolsec">
-      <h3>扫描岗位</h3>
+      <h3 data-i18n="tools_sec_scan">扫描岗位</h3>
       <div class="toolgrid">
         <div class="toolcard primary">
-          <div class="ti"><div class="tn">🔄 扫描新岗位</div>
-            <div class="td"><b>日常就用这个。</b>从已经找到招聘系统的雇主里抓最新岗位，几分钟就好。</div></div>
-          <div class="ta"><button onclick="scan('known')">开始扫描</button></div>
+          <div class="ti"><div class="tn" data-i18n="tool_scan_new_t">🔄 扫描新岗位</div>
+            <div class="td" data-i18n-html="tool_scan_new_d"><b>日常就用这个。</b>从已经找到招聘系统的雇主里抓最新岗位，几分钟就好。</div></div>
+          <div class="ta"><button onclick="scan('known')" data-i18n="tool_start_scan">开始扫描</button></div>
         </div>
         <div class="toolcard">
-          <div class="ti"><div class="tn">🗂️ 首次建立岗位库</div>
-            <div class="td">第一次使用时跑一遍：把 12 万家工签雇主里有招聘系统的摸出来。约几小时，可随时停，<b>进度自动保存、续跑不重复</b>。之后就不用再点了。</div></div>
-          <div class="ta"><button class="ghost" id="btnPending" onclick="scan('pending')">运行</button></div>
+          <div class="ti"><div class="tn" data-i18n="tool_build_t">🗂️ 首次建立岗位库</div>
+            <div class="td" data-i18n-html="tool_build_d">第一次使用时跑一遍：把 12 万家工签雇主里有招聘系统的摸出来。约几小时，可随时停，<b>进度自动保存、续跑不重复</b>。之后就不用再点了。</div></div>
+          <div class="ta"><button class="ghost" id="btnPending" onclick="scan('pending')" data-i18n="tool_run">运行</button></div>
         </div>
         <div class="toolcard">
-          <div class="ti"><div class="tn">🔍 查找遗漏公司</div>
-            <div class="td">岗位库建好后偶尔跑：补查上次被限流、或用冷门招聘系统的公司。慢、产出少，可随时停。</div></div>
-          <div class="ta"><button class="ghost" id="btnDeep" onclick="scan('deep')">运行</button></div>
-        </div>
-      </div>
-    </div>
-    <div class="toolsec">
-      <h3>补充岗位来源</h3>
-      <div class="toolgrid">
-        <div class="toolcard">
-          <div class="ti"><div class="tn">🌐 补充招聘网站岗位</div>
-            <div class="td">从 Adzuna / Reed 等聚合平台补岗位，覆盖自动扫描抓不到的大厂（Google / Amazon 等自建招聘系统）。结果带「来源」徽章。</div></div>
-          <div class="ta"><button class="ghost" id="btnAgg" onclick="runAgg()">搜索</button></div>
-        </div>
-        <div class="toolcard">
-          <div class="ti"><div class="tn">🗞 社媒招聘帖（Hacker News）</div>
-            <div class="td">抓 Hacker News 每月「Who is hiring」帖里的招聘信息，按你的关键词过滤后并入岗位流，带 <b>🗞 HN 招聘帖</b> 徽章。<b>免费、无需 key</b>，多为 AI / 远程岗，常写明 remote / 签证。</div></div>
-          <div class="ta"><button class="ghost" id="btnSocial" onclick="runSocial()">抓取</button></div>
-        </div>
-        <div class="toolcard">
-          <div class="ti"><div class="tn">🏢 识别公司规模</div>
-            <div class="td">用 AI 给有岗位的公司估员工规模，之后可按「大型 / 中型 / 初创」筛选。只查没查过的，结果缓存。需配 AI key。</div></div>
-          <div class="ta"><button class="ghost" id="btnSize" onclick="runSize()">识别</button></div>
+          <div class="ti"><div class="tn" data-i18n="tool_deep_t">🔍 查找遗漏公司</div>
+            <div class="td" data-i18n="tool_deep_d">岗位库建好后偶尔跑：补查上次被限流、或用冷门招聘系统的公司。慢、产出少，可随时停。</div></div>
+          <div class="ta"><button class="ghost" id="btnDeep" onclick="scan('deep')" data-i18n="tool_run">运行</button></div>
         </div>
       </div>
     </div>
     <div class="toolsec">
-      <h3>导出</h3>
+      <h3 data-i18n="tools_sec_src">补充岗位来源</h3>
       <div class="toolgrid">
         <div class="toolcard">
-          <div class="ti"><div class="tn">📥 导出 Excel</div>
-            <div class="td">把当前岗位库导出成 Excel 表格，方便离线整理或分享。</div></div>
-          <div class="ta"><a class="btn ghost" href="/api/export">下载</a></div>
+          <div class="ti"><div class="tn" data-i18n="tool_agg_t">🌐 补充招聘网站岗位</div>
+            <div class="td" data-i18n="tool_agg_d">从 Adzuna / Reed 等聚合平台补岗位，覆盖自动扫描抓不到的大厂（Google / Amazon 等自建招聘系统）。结果带「来源」徽章。</div></div>
+          <div class="ta"><button class="ghost" id="btnAgg" onclick="runAgg()" data-i18n="tool_search">搜索</button></div>
+        </div>
+        <div class="toolcard">
+          <div class="ti"><div class="tn" data-i18n="tool_social_t">🗞 社媒招聘帖（Hacker News）</div>
+            <div class="td" data-i18n-html="tool_social_d">抓 Hacker News 每月「Who is hiring」帖里的招聘信息，按你的关键词过滤后并入岗位流，带 <b>🗞 HN 招聘帖</b> 徽章。<b>免费、无需 key</b>，多为 AI / 远程岗，常写明 remote / 签证。</div></div>
+          <div class="ta"><button class="ghost" id="btnSocial" onclick="runSocial()" data-i18n="tool_fetch">抓取</button></div>
+        </div>
+        <div class="toolcard">
+          <div class="ti"><div class="tn" data-i18n="tool_size_t">🏢 识别公司规模</div>
+            <div class="td" data-i18n="tool_size_d">用 AI 给有岗位的公司估员工规模，之后可按「大型 / 中型 / 初创」筛选。只查没查过的，结果缓存。需配 AI key。</div></div>
+          <div class="ta"><button class="ghost" id="btnSize" onclick="runSize()" data-i18n="tool_size_btn">识别</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="toolsec">
+      <h3 data-i18n="tools_sec_export">导出</h3>
+      <div class="toolgrid">
+        <div class="toolcard">
+          <div class="ti"><div class="tn" data-i18n="tool_export_t">📥 导出 Excel</div>
+            <div class="td" data-i18n="tool_export_d">把当前岗位库导出成 Excel 表格，方便离线整理或分享。</div></div>
+          <div class="ta"><a class="btn ghost" href="/api/export" data-i18n="tool_download">下载</a></div>
         </div>
       </div>
     </div>
@@ -643,34 +644,643 @@
 <div class="drawer-mask" id="drawerMask" onclick="closeDrawer()"></div>
 <aside class="drawer" id="drawer">
   <div class="drawer-head">
-    <span class="drawer-h">岗位详情</span>
-    <button class="ghost mini" onclick="closeDrawer()">✕ 关闭</button>
+    <span class="drawer-h" data-i18n="drawer_title">岗位详情</span>
+    <button class="ghost mini" onclick="closeDrawer()" data-i18n="drawer_close">✕ 关闭</button>
   </div>
   <div class="drawer-body" id="drawerBody"></div>
 </aside>
 
 <div class="wizmask" id="wizard" style="display:none">
   <div class="wizard">
-    <h2>👋 第一次用？三步就能开始</h2>
-    <div class="wnote">这个工具会扫描全部英国工签雇主的官方招聘系统 + 聚合平台，
+    <h2 data-i18n="wiz_title">👋 第一次用？三步就能开始</h2>
+    <div class="wnote" data-i18n="wiz_note1">这个工具会扫描全部英国工签雇主的官方招聘系统 + 聚合平台，
       按你的简历打匹配分。先告诉它你要找什么：</div>
-    <div class="wrow"><label>目标岗位关键词</label>
-      <input type="text" id="wizKw" placeholder="如 machine learning, llm, ai engineer"></div>
-    <div class="wrow"><label>不想看的词</label>
-      <input type="text" id="wizEx" placeholder="如 sales, consultant, support（可留空）"></div>
-    <div class="wrow"><label>我的工作年限</label>
+    <div class="wrow"><label data-i18n="wiz_kw">目标岗位关键词</label>
+      <input type="text" id="wizKw" data-i18n-ph="wiz_kw_ph" placeholder="如 machine learning, llm, ai engineer"></div>
+    <div class="wrow"><label data-i18n="wiz_ex">不想看的词</label>
+      <input type="text" id="wizEx" data-i18n-ph="wiz_ex_ph" placeholder="如 sales, consultant, support（可留空）"></div>
+    <div class="wrow"><label data-i18n="wiz_years">我的工作年限</label>
       <input type="number" id="wizYears" min="0" max="30" value="1" style="max-width:90px">
-      <label style="min-width:0"><input type="checkbox" id="wizVisa" checked> 我需要签证担保（自动排雷「不担保」岗位）</label></div>
-    <div class="wnote">下一步：点「开始全量清查」逐家扫描工签雇主（第一次要跑几个小时，可最小化窗口；
+      <label style="min-width:0"><input type="checkbox" id="wizVisa" checked> <span data-i18n="wiz_visa">我需要签证担保（自动排雷「不担保」岗位）</span></label></div>
+    <div class="wnote" data-i18n-html="wiz_note2">下一步：点「开始全量清查」逐家扫描工签雇主（第一次要跑几个小时，可最小化窗口；
       之后日常只需点顶部 🔄）。扫描时记得<b>上传简历</b>，岗位会自动算 0–100 匹配分。</div>
     <div class="wbtns">
-      <button class="ghost" onclick="wizDone(false)">先随便看看</button>
-      <button onclick="wizDone(true)">💾 保存并开始全量清查</button>
+      <button class="ghost" onclick="wizDone(false)" data-i18n="wiz_skip">先随便看看</button>
+      <button onclick="wizDone(true)" data-i18n="wiz_start">💾 保存并开始全量清查</button>
     </div>
   </div>
 </div>
 
 <script>
+// ============ 国际化 i18n（中/英，用户可见文案；代码注释保留中文） ============
+// 词条字典：zh 值 = 原中文；en 值 = 英文。t(key,vars) 取当前语言，缺失回落中文再回落 key。
+const I18N = {
+  page_title:        { zh: 'AI Job Scout · 工签雇主 AI 岗位', en: 'AI Job Scout · Visa-sponsor AI jobs' },
+  tagline:           { zh: '英国工签雇主 · 岗位雷达', en: 'UK visa-sponsor employers · job radar' },
+  btn_scan_new:      { zh: '🔄 扫描新岗位', en: '🔄 Scan new jobs' },
+  btn_stop:          { zh: '停止', en: 'Stop' },
+  // 筛选 / 排序
+  sort_rank:         { zh: '推荐优先', en: 'Recommended' },
+  sort_rank_tip:     { zh: '综合推荐：方向对口 + 匹配分 + 签证确定性 + 置信度 + 新鲜度，按分层分区显示', en: 'Overall pick: role fit + match score + visa certainty + confidence + freshness, grouped by tier' },
+  sort_date:         { zh: '最新', en: 'Newest' },
+  sort_score:        { zh: '技能匹配', en: 'Skill match' },
+  layout_table:      { zh: '表格', en: 'Table' },
+  layout_tip:        { zh: '表格视图：一行一个岗位，方便批量比较', en: 'Table view: one row per job for quick comparison' },
+  region_all:        { zh: '所有地区', en: 'All regions' },
+  region_uk:         { zh: '英国', en: 'UK' },
+  region_europe:     { zh: '欧洲', en: 'Europe' },
+  region_china:      { zh: '中国', en: 'China' },
+  region_remote:     { zh: '远程', en: 'Remote' },
+  region_unknown:    { zh: '未知地点', en: 'Unknown location' },
+  tier_sel_tip:      { zh: '综合推荐分层：匹配分 + JD 置信度 + 签证/许可风险', en: 'Recommendation tiers: match score + JD confidence + visa/clearance risk' },
+  tier_all:          { zh: '全部', en: 'All' },
+  tier_strong_opt:   { zh: '推荐投（方向对口·高匹配·无风险）', en: 'Apply (on-target · high match · no risk)' },
+  tier_maybe_opt:    { zh: '谨慎投（匹配中等）', en: 'Maybe (medium match)' },
+  tier_lowconf_opt:  { zh: '需人工确认（没抓到 JD）', en: 'Needs review (no JD fetched)' },
+  tier_weak_opt:     { zh: '不建议投（方向/匹配弱）', en: 'Not advised (weak fit/match)' },
+  tier_risk_opt:     { zh: '有风险（不担保/许可）', en: 'Risky (no sponsorship/clearance)' },
+  tier_hidden_opt:   { zh: '已隐藏', en: 'Hidden' },
+  visa_sel_tip:      { zh: '签证确定性：公司在 sponsor 名单 ≠ 这个岗位一定担保，JD 明确写了才是确定的', en: 'Visa certainty: a company on the sponsor register ≠ this role sponsors; only explicit JD wording is certain' },
+  visa_all:          { zh: '签证不限', en: 'Any visa' },
+  visa_yes:          { zh: 'JD 明确担保', en: 'JD says sponsors' },
+  visa_register:     { zh: '名单内·JD 未说明', en: 'On register · JD silent' },
+  visa_uncertain:    { zh: '担保不确定', en: 'Sponsorship unclear' },
+  visa_no:           { zh: 'JD 明确不担保', en: 'JD says no sponsorship' },
+  level_all:         { zh: '所有级别', en: 'All levels' },
+  level_grad:        { zh: '实习/毕业生', en: 'Intern/Grad' },
+  level_junior:      { zh: '初级', en: 'Junior' },
+  level_mid:         { zh: '中级', en: 'Mid' },
+  level_senior:      { zh: '高级', en: 'Senior' },
+  level_mgmt:        { zh: '管理层', en: 'Management' },
+  csize_sel_tip:     { zh: '公司员工规模（大模型估）。需先点 ⋯ 菜单「识别公司规模」；模型不认识的会标为“规模未知”', en: 'Company headcount (LLM estimate). Run "Estimate company size" first; unknown ones are marked "Size unknown"' },
+  csize_all:         { zh: '所有规模', en: 'All sizes' },
+  csize_large:       { zh: '大型 (500+)', en: 'Large (500+)' },
+  csize_mid:         { zh: '中型 (50–500)', en: 'Mid (50–500)' },
+  csize_startup:     { zh: '初创 (<50)', en: 'Startup (<50)' },
+  csize_unknown:     { zh: '规模未知', en: 'Size unknown' },
+  years_sel_tip:     { zh: '按 JD 里的最低要求年限筛选（需已算匹配度才有数据）', en: 'Filter by min years required in the JD (needs match computed)' },
+  years_all:         { zh: '所有经验', en: 'Any experience' },
+  years_fit:         { zh: '我够格（≤我的年限）', en: 'I qualify (≤ my years)' },
+  years_none:        { zh: '未注明年限', en: 'Years not stated' },
+  years_y12:         { zh: '1–2 年', en: '1–2 yrs' },
+  years_y35:         { zh: '3–5 年', en: '3–5 yrs' },
+  years_y6:          { zh: '5 年以上', en: '5+ yrs' },
+  score_sel_tip:     { zh: '按简历匹配分过滤（需先上传简历算分；没算出分的岗位会被隐藏）', en: 'Filter by resume match score (upload a resume first; unscored jobs are hidden)' },
+  score_all:         { zh: '所有匹配分', en: 'Any score' },
+  score_40:          { zh: '≥ 40 分', en: '≥ 40' },
+  score_60:          { zh: '≥ 60 分', en: '≥ 60' },
+  score_80:          { zh: '≥ 80 分', en: '≥ 80' },
+  chip_new:          { zh: '新上架', en: 'New' },
+  chip_curated:      { zh: '精选公司', en: 'Curated' },
+  chip_titleonly:    { zh: '仅标题命中', en: 'Title-only' },
+  chip_titleonly_tip:{ zh: '只看标题直接命中关键词的岗位，隐藏仅靠 JD 正文召回的低置信度岗位', en: 'Only jobs whose title matches a keyword; hide low-confidence JD-body recalls' },
+  chip_derisk:       { zh: '排除签证风险', en: 'Exclude visa risk' },
+  chip_derisk_tip:   { zh: '隐藏 JD 明确声明不担保签证、或要求安全许可/英国国籍的岗位', en: 'Hide jobs that explicitly refuse sponsorship or require clearance/UK nationality' },
+  chip_unseen:       { zh: '未看过', en: 'Unseen' },
+  chip_unseen_tip:   { zh: '只看你还没展开/打开过的岗位（看过的自动记住）', en: 'Only jobs you have not opened/expanded yet (seen ones are remembered)' },
+  chip_ontarget:     { zh: '只看对口', en: 'On-target only' },
+  chip_ontarget_tip: { zh: '只看岗位方向对口的（目标/可接受），隐藏方向不对的（IT Support / Sales / QA 等——它们可能技能重合高，但不是你要的岗位）', en: 'Only on-target roles (target/acceptable); hide off-target ones (IT Support / Sales / QA — high skill overlap but not the role you want)' },
+  search_ph:         { zh: '搜索岗位 / 公司…', en: 'Search jobs / companies…' },
+  // 使用说明
+  howto_summary:     { zh: '📖 使用说明', en: '📖 How to use' },
+  howto_1:           { zh: '<b>扫描岗位</b>：点右上「扫描新岗位」抓取最新岗位', en: '<b>Scan jobs</b>: click "Scan new jobs" (top-right) to fetch the latest' },
+  howto_1_note:      { zh: '（第一次用，先去左侧「工具箱」点「首次建立岗位库」跑一遍，约几小时；之后日常只需扫描）', en: '(First time: open "Toolbox" on the left and run "Build the job library" once, ~a few hours; after that just scan)' },
+  howto_2:           { zh: '<b>上传简历</b>：自动给每个岗位算技能匹配分，并按「方向对口 + 签证 + 匹配」综合排序', en: '<b>Upload your resume</b>: auto-scores every job and ranks by role fit + visa + match' },
+  howto_3:           { zh: '<b>看今日推荐</b>：点岗位在右侧详情里看推荐理由、缺哪些技能，生成简历建议 / networking 草稿；想投的点收藏，去「投递清单」看板跟踪', en: "<b>Check Today's picks</b>: click a job to see why it's recommended and missing skills, generate resume tips / networking drafts; save ones you like and track them on the Applications board" },
+  // 求职目标设置
+  goal_title:        { zh: '🎯 求职目标设置', en: '🎯 Job-search settings' },
+  goal_sub:          { zh: '告诉工具你要找什么、你的背景——它据此给岗位打分、排序、排雷。改完点「保存设置」即时生效。', en: 'Tell the tool what you want and your background — it scores, ranks and flags jobs accordingly. Click "Save settings" to apply.' },
+  goal_kw:           { zh: '岗位关键词：', en: 'Job keywords:' },
+  goal_exkw:         { zh: '排除词：', en: 'Exclude words:' },
+  goal_exkw_ph:      { zh: '标题含这些词的岗位直接隐藏，逗号分隔，如 sales, consultant, intern', en: 'Hide jobs whose title contains these, comma-separated, e.g. sales, consultant, intern' },
+  goal_target:       { zh: '🎯 目标岗位：', en: '🎯 Target roles:' },
+  goal_target_tip:   { zh: '标题命中这些=🧭目标岗位，能进强推荐', en: 'Titles matching these = target roles, eligible for the top tier' },
+  goal_target_ph:    { zh: '留空=用默认，逗号分隔，如 machine learning engineer, llm engineer, nlp engineer', en: 'Blank = defaults, comma-separated, e.g. machine learning engineer, llm engineer, nlp engineer' },
+  goal_accept:       { zh: '🧭 可接受岗位：', en: '🧭 Acceptable roles:' },
+  goal_accept_tip:   { zh: '能接受的相邻岗位，也能进强推荐', en: 'Adjacent roles you would accept, also eligible for the top tier' },
+  goal_accept_ph:    { zh: '留空=用默认，如 applied scientist, research engineer, data scientist', en: 'Blank = defaults, e.g. applied scientist, research engineer, data scientist' },
+  goal_dir_note:     { zh: '方向不在以上两栏的岗位（如 IT Support / Sales / QA），即使技能分很高也不会被强推。改完点「保存设置」即时生效。', en: 'Roles outside the two boxes above (e.g. IT Support / Sales / QA) are never top-recommended even with a high skill score. Click "Save settings" to apply.' },
+  goal_auto:         { zh: '自动刷新间隔', en: 'Auto-refresh interval' },
+  goal_auto_unit:    { zh: '小时（0 = 关闭；程序开着才生效）', en: 'hours (0 = off; only while the app is running)' },
+  goal_years:        { zh: '我的工作年限', en: 'My years of experience' },
+  goal_years_unit:   { zh: '年（用于检测"要求 N 年经验"门槛）', en: 'yrs (used to flag "N years required" thresholds)' },
+  goal_save:         { zh: '保存设置', en: 'Save settings' },
+  goal_paste:        { zh: '粘贴简历：', en: 'Paste resume:' },
+  goal_paste_ph:     { zh: '也可以直接把简历全文粘贴到这里（PDF 上传识别不了时用）', en: 'Or paste your full resume text here (useful when PDF upload fails to parse)' },
+  goal_paste_save:   { zh: '保存简历文本', en: 'Save resume text' },
+  goal_foot:         { zh: '改完记得点「保存设置」。想扫描岗位、导出等操作，去左侧「工具箱」。', en: 'Remember to click "Save settings". For scanning, export, etc., use "Toolbox" on the left.' },
+  // 工具箱
+  tools_title:       { zh: '🧰 工具箱', en: '🧰 Toolbox' },
+  tools_sub:         { zh: '扫描岗位、补充来源、导出，都在这。日常只需第一张卡片「扫描新岗位」。', en: 'Scan, add sources and export — all here. Day-to-day you only need the first card, "Scan new jobs".' },
+  tools_lib_loading: { zh: '岗位库状态加载中…', en: 'Loading job-library status…' },
+  tools_sec_scan:    { zh: '扫描岗位', en: 'Scan jobs' },
+  tool_scan_new_t:   { zh: '🔄 扫描新岗位', en: '🔄 Scan new jobs' },
+  tool_scan_new_d:   { zh: '<b>日常就用这个。</b>从已经找到招聘系统的雇主里抓最新岗位，几分钟就好。', en: '<b>Your everyday button.</b> Fetch the latest jobs from employers whose ATS is already known — takes a few minutes.' },
+  tool_start_scan:   { zh: '开始扫描', en: 'Start scan' },
+  tool_build_t:      { zh: '🗂️ 首次建立岗位库', en: '🗂️ Build the job library' },
+  tool_build_d:      { zh: '第一次使用时跑一遍：把 12 万家工签雇主里有招聘系统的摸出来。约几小时，可随时停，<b>进度自动保存、续跑不重复</b>。之后就不用再点了。', en: 'Run once on first use: probe ~120k visa-sponsor employers for a hiring system. ~a few hours, stoppable anytime, <b>progress auto-saved and resumes without repeats</b>. No need to run it again after.' },
+  tool_run:          { zh: '运行', en: 'Run' },
+  tool_deep_t:       { zh: '🔍 查找遗漏公司', en: '🔍 Find missed companies' },
+  tool_deep_d:       { zh: '岗位库建好后偶尔跑：补查上次被限流、或用冷门招聘系统的公司。慢、产出少，可随时停。', en: 'Run occasionally after the library is built: re-check companies rate-limited last time or on niche ATSes. Slow, low yield, stoppable anytime.' },
+  tools_sec_src:     { zh: '补充岗位来源', en: 'Add job sources' },
+  tool_agg_t:        { zh: '🌐 补充招聘网站岗位', en: '🌐 Add jobs from job boards' },
+  tool_agg_d:        { zh: '从 Adzuna / Reed 等聚合平台补岗位，覆盖自动扫描抓不到的大厂（Google / Amazon 等自建招聘系统）。结果带「来源」徽章。', en: 'Pull jobs from aggregators like Adzuna / Reed to cover big employers the ATS scan misses (Google / Amazon etc. on in-house systems). Results carry a "source" badge.' },
+  tool_search:       { zh: '搜索', en: 'Search' },
+  tool_social_t:     { zh: '🗞 社媒招聘帖（Hacker News）', en: '🗞 Social hiring posts (Hacker News)' },
+  tool_social_d:     { zh: '抓 Hacker News 每月「Who is hiring」帖里的招聘信息，按你的关键词过滤后并入岗位流，带 <b>🗞 HN 招聘帖</b> 徽章。<b>免费、无需 key</b>，多为 AI / 远程岗，常写明 remote / 签证。', en: "Pull hiring posts from Hacker News's monthly \"Who is hiring\" thread, filter by your keywords and merge into the feed with a <b>🗞 HN post</b> badge. <b>Free, no key needed</b>; mostly AI / remote roles that often state remote / visa." },
+  tool_fetch:        { zh: '抓取', en: 'Fetch' },
+  tool_size_t:       { zh: '🏢 识别公司规模', en: '🏢 Estimate company size' },
+  tool_size_d:       { zh: '用 AI 给有岗位的公司估员工规模，之后可按「大型 / 中型 / 初创」筛选。只查没查过的，结果缓存。需配 AI key。', en: 'Use AI to estimate headcount for companies with jobs, so you can filter by Large / Mid / Startup. Only checks new ones; results cached. Needs an AI key.' },
+  tool_size_btn:     { zh: '识别', en: 'Estimate' },
+  tools_sec_export:  { zh: '导出', en: 'Export' },
+  tool_export_t:     { zh: '📥 导出 Excel', en: '📥 Export to Excel' },
+  tool_export_d:     { zh: '把当前岗位库导出成 Excel 表格，方便离线整理或分享。', en: 'Export the current job library to an Excel spreadsheet for offline review or sharing.' },
+  tool_download:     { zh: '下载', en: 'Download' },
+  // 抽屉 / 向导
+  drawer_title:      { zh: '岗位详情', en: 'Job details' },
+  drawer_close:      { zh: '✕ 关闭', en: '✕ Close' },
+  wiz_title:         { zh: '👋 第一次用？三步就能开始', en: '👋 First time? Three steps to start' },
+  wiz_note1:         { zh: '这个工具会扫描全部英国工签雇主的官方招聘系统 + 聚合平台，按你的简历打匹配分。先告诉它你要找什么：', en: 'This tool scans the ATS of every UK visa-sponsor employer plus aggregators, and scores jobs against your resume. First tell it what you want:' },
+  wiz_kw:            { zh: '目标岗位关键词', en: 'Target job keywords' },
+  wiz_kw_ph:         { zh: '如 machine learning, llm, ai engineer', en: 'e.g. machine learning, llm, ai engineer' },
+  wiz_ex:            { zh: '不想看的词', en: 'Words to exclude' },
+  wiz_ex_ph:         { zh: '如 sales, consultant, support（可留空）', en: 'e.g. sales, consultant, support (optional)' },
+  wiz_years:         { zh: '我的工作年限', en: 'My years of experience' },
+  wiz_visa:          { zh: '我需要签证担保（自动排雷「不担保」岗位）', en: 'I need visa sponsorship (auto-flag "no sponsorship" jobs)' },
+  wiz_note2:         { zh: '下一步：点「开始全量清查」逐家扫描工签雇主（第一次要跑几个小时，可最小化窗口；之后日常只需点顶部 🔄）。扫描时记得<b>上传简历</b>，岗位会自动算 0–100 匹配分。', en: 'Next: click "Save and build the library" to probe every sponsor employer (first run takes a few hours — you can minimise the window; after that just click 🔄 at the top). Remember to <b>upload your resume</b> so jobs get a 0–100 match score.' },
+  wiz_skip:          { zh: '先随便看看', en: 'Just look around' },
+  wiz_start:         { zh: '💾 保存并开始全量清查', en: '💾 Save and build the library' },
+  // 左侧导航
+  nav_today:         { zh: '今日推荐', en: "Today's picks" },
+  nav_feed:          { zh: '全部岗位', en: 'All jobs' },
+  nav_company:       { zh: '公司', en: 'Companies' },
+  nav_tracker:       { zh: '投递清单', en: 'Applications' },
+  nav_gaps:          { zh: '简历缺口', en: 'Resume gaps' },
+  nav_goal:          { zh: '求职目标设置', en: 'Settings' },
+  nav_tools:         { zh: '工具箱', en: 'Toolbox' },
+  // 简历卡片
+  resume_need_b:     { zh: '第一步：上传你的简历', en: 'Step 1: upload your resume' },
+  resume_need_rest:  { zh: '——每个岗位自动算出匹配度，并解锁定制简历建议', en: ' — every job gets a match score, and tailored resume tips unlock' },
+  resume_need_small: { zh: '支持 PDF / Word / TXT · 只保存在你自己电脑上', en: 'PDF / Word / TXT · stored only on your own computer' },
+  resume_upload_btn: { zh: '上传简历', en: 'Upload resume' },
+  resume_matching:   { zh: ' · ⏳ 正在计算匹配度 {done}/{total}', en: ' · ⏳ Scoring matches {done}/{total}' },
+  resume_skills_n:   { zh: '{n} 个技能', en: '{n} skills' },
+  resume_reupload:   { zh: '重新上传', en: 'Re-upload' },
+  resume_all_advice: { zh: '🎯 全平台简历建议', en: '🎯 Resume tips (all jobs)' },
+  resume_calc:       { zh: '🎯 计算匹配度', en: '🎯 Compute matches' },
+  // 全平台简历建议
+  sugg_loading:      { zh: '正在汇总全平台缺口…', en: 'Summarising gaps across all jobs…' },
+  sugg_nodata:       { zh: '还没有匹配数据。先点「🎯 计算匹配度」，算完再来。', en: 'No match data yet. Click "🎯 Compute matches" first, then come back.' },
+  sugg_gap_tip:      { zh: '缺失于 {jobs} 个岗位', en: 'missing in {jobs} jobs' },
+  sugg_gap_tip_near: { zh: '，其中 {near} 个中等匹配、最能因此提分', en: ', of which {near} are medium-match and would gain the most' },
+  sugg_gen_btn:      { zh: '✍️ 用 {label} 生成修改建议', en: '✍️ Generate tips with {label}' },
+  sugg_gen_dis:      { zh: '✍️ 生成修改建议（需配 ChatGPT/Claude key）', en: '✍️ Generate tips (needs ChatGPT/Claude key)' },
+  sugg_gen_dis_tip:  { zh: '在 data/api_keys.json 填 openai_api_key（ChatGPT）或 anthropic_api_key（Claude）后可用', en: 'Available after setting openai_api_key (ChatGPT) or anthropic_api_key (Claude) in data/api_keys.json' },
+  sugg_title:        { zh: '🎯 全平台简历提升建议', en: '🎯 Resume improvement tips (all jobs)' },
+  sugg_title_small:  { zh: '基于已匹配的 {n} 个岗位', en: 'based on {n} scored jobs' },
+  sugg_gaps_label:   { zh: '最该补的技能（按影响排序，🎯=中等匹配岗位数，补上最能提分）：', en: 'Skills to add first (by impact, 🎯 = medium-match jobs, biggest score gain):' },
+  sugg_free_label:   { zh: 'JD 高频、可能词表外（启发式，供参考）：', en: 'Frequent in JDs, possibly off-list (heuristic, for reference):' },
+  sugg_generating:   { zh: 'AI 正在生成建议（约需十几秒）…', en: 'AI is generating tips (about 10–20 s)…' },
+  // 扫描状态
+  scan_mode_known:   { zh: '刷新最新岗位', en: 'Refresh latest jobs' },
+  scan_mode_pending: { zh: '全量清查', en: 'Full sweep' },
+  scan_mode_curated: { zh: '精选扫描', en: 'Curated scan' },
+  scan_mode_all:     { zh: '全部扫描', en: 'Scan all' },
+  scan_mode_deep:    { zh: '深度补扫', en: 'Deep backfill' },
+  scan_mode_default: { zh: '扫描', en: 'Scan' },
+  scan_stopping_b:   { zh: '停止中…', en: 'Stopping…' },
+  eta_hours:         { zh: '剩约 {h} 小时', en: '~{h} h left' },
+  eta_mins:          { zh: '剩约 {m} 分钟', en: '~{m} min left' },
+  scan_txt_stopping: { zh: '⏹️ 正在停止{mode}…（等在飞的任务收尾，最多几秒；进度已保存）', en: '⏹️ Stopping {mode}… (letting in-flight tasks finish, a few seconds; progress saved)' },
+  scan_txt_paused:   { zh: '{mode} · ⏸️ 触发对方限流，冷却中，约 {min} 分钟后自动继续（已扫 {done}/{total}，进度已缓存）', en: '{mode} · ⏸️ Hit rate limit, cooling down, auto-resumes in ~{min} min (scanned {done}/{total}, progress cached)' },
+  scan_txt_running:  { zh: '{mode}中 {done}/{total} · 新发现岗位 {new} · {eta}（进度实时缓存，停止不丢）', en: '{mode} {done}/{total} · {new} new jobs · {eta} (progress cached live, safe to stop)' },
+  scan_txt_starting: { zh: '⏳ 正在启动{mode}…（在后台扫描英国工签雇主，新岗位会陆续出现，可继续浏览）', en: '⏳ Starting {mode}… (scanning UK sponsor employers in the background; new jobs appear gradually, keep browsing)' },
+  // 缩小范围筛选标签
+  tl_llm:            { zh: 'LLM 相关', en: 'LLM-related' },
+  tl_new:            { zh: '新上架', en: 'New' },
+  tl_long:           { zh: '上架较久', en: 'Long-listed' },
+  tl_curated:        { zh: '精选公司', en: 'Curated' },
+  tl_titleonly:      { zh: '仅标题命中', en: 'Title-only' },
+  tl_derisk:         { zh: '排除签证风险', en: 'Exclude visa risk' },
+  tl_unseen:         { zh: '未看过', en: 'Unseen' },
+  tl_ontarget:       { zh: '只看对口', en: 'On-target only' },
+  fl_region:         { zh: '地区：{v}', en: 'Region: {v}' },
+  fl_visa_yes:       { zh: '签证：JD 明确担保', en: 'Visa: JD says sponsors' },
+  fl_minscore:       { zh: '匹配分 ≥ {n}', en: 'Match ≥ {n}' },
+  fl_tier:           { zh: '分层：{v}', en: 'Tier: {v}' },
+  fl_level:          { zh: '级别：{v}', en: 'Level: {v}' },
+  fl_csize:          { zh: '规模：{v}', en: 'Size: {v}' },
+  fl_years:          { zh: '经验年限筛选', en: 'Years filter' },
+  fl_search:         { zh: '搜索：{q}', en: 'Search: {q}' },
+  // 岗位卡片 / 徽章
+  score_pending:     { zh: '待算', en: 'Pending' },
+  score_lbl_sim:     { zh: '技能相似', en: 'Skill sim.' },
+  score_lbl_match:   { zh: '技能匹配', en: 'Skill match' },
+  score_box_tip:     { zh: '这是简历技能重合度，不代表岗位方向对口', en: 'This is resume-skill overlap, not whether the role is on-target' },
+  score_mini:        { zh: '匹配 {n}%', en: 'Match {n}%' },
+  badge_dir_off:     { zh: '方向存疑', en: 'Off-target?' },
+  badge_dir_off_tip: { zh: '标题不像目标岗位（可能只是技能重合），已不计入推荐', en: "Title doesn't look on-target (may be skill overlap only); excluded from recommendations" },
+  badge_dir_accept:  { zh: '可接受', en: 'Acceptable' },
+  badge_dir_accept_tip:{ zh: '你能接受的相邻岗位方向', en: 'An adjacent role you would accept' },
+  badge_china:       { zh: '中国', en: 'China' },
+  badge_unknown_loc: { zh: '未知地点', en: 'Unknown location' },
+  badge_unknown_loc_tip:{ zh: '招聘页没写工作地点，投递前先到 JD 里确认', en: 'The listing has no location; check the JD before applying' },
+  badge_req_years:   { zh: '要求 {n}+ 年', en: 'Needs {n}+ yrs' },
+  badge_req_years_tip:{ zh: 'JD 要求年限高于你填写的', en: 'JD requires more years than you entered' },
+  badge_hn:          { zh: '🗞 HN 招聘帖', en: '🗞 HN post' },
+  badge_hn_visa:     { zh: ' · 提到签证', en: ' · mentions visa' },
+  badge_hn_tip:      { zh: '来自 Hacker News「Who is hiring」每月招聘帖，点标题看原帖/申请方式', en: 'From Hacker News\'s monthly "Who is hiring" thread; click the title for the original post / how to apply' },
+  badge_nonlist:     { zh: '非名单公司', en: 'Not on register' },
+  badge_nonlist_tip: { zh: '公司不在工签 sponsor 名单里，投前请自行确认能否担保', en: 'Company is not on the sponsor register; confirm sponsorship before applying' },
+  visa_b_yes:        { zh: '可担保', en: 'Sponsors' },
+  visa_b_register:   { zh: '名单内·待确认', en: 'On register · TBC' },
+  visa_b_uncertain:  { zh: '担保未知', en: 'Sponsorship?' },
+  visa_b_no:         { zh: '不担保', en: 'No sponsorship' },
+  visa_b_tip:        { zh: '签证确定性：公司在 sponsor 名单 ≠ 这个岗位一定担保，JD 明确写了才确定', en: 'Visa certainty: on the sponsor register ≠ this role sponsors; only explicit JD wording is certain' },
+  badge_target:      { zh: '目标岗位', en: 'Target role' },
+  badge_csize_tip:   { zh: '公司员工规模（大模型估）', en: 'Company headcount (LLM estimate)' },
+  badge_njobs:       { zh: '公司在招 {n}', en: '{n} open at company' },
+  badge_njobs_tip:   { zh: '该公司招聘页在招岗位总数', en: 'Total open roles on this company\'s careers page' },
+  badge_llm:         { zh: 'LLM 相关', en: 'LLM-related' },
+  badge_long:        { zh: '长期在招 {n} 天', en: 'Listed {n} days' },
+  badge_viajd:       { zh: '正文命中', en: 'JD-body hit' },
+  badge_viajd_tip:   { zh: '标题没写 AI，是 JD 正文命中才召回的', en: 'Title has no AI keyword; recalled via the JD body' },
+  badge_src_tip:     { zh: '来自聚合平台搜索', en: 'From an aggregator search' },
+  badge_sponsor:     { zh: '担保名单', en: 'On sponsor register' },
+  badge_sponsor_tip: { zh: '公司在官方工签 sponsor 名单里', en: 'Company is on the official sponsor register' },
+  days_today:        { zh: '今天发现', en: 'Found today' },
+  days_listed:       { zh: '上架 {n} 天', en: 'Listed {n}d' },
+  conf_high:         { zh: '高置信', en: 'High conf.' },
+  conf_high_tip:     { zh: '抓到完整 JD，技能/年限都解析过', en: 'Full JD fetched; skills/years parsed' },
+  conf_mid:          { zh: '中置信', en: 'Med conf.' },
+  conf_mid_tip:      { zh: 'JD 较短，分数仅供参考', en: 'Short JD; score is indicative only' },
+  conf_low:          { zh: '低置信', en: 'Low conf.' },
+  conf_low_tip:      { zh: '没抓到 JD，仅按标题估分', en: 'No JD fetched; scored from title only' },
+  // 推荐分层
+  tier_strong_l:     { zh: '推荐投', en: 'Apply' },
+  tier_strong_t:     { zh: '方向对口 · 匹配高 · 无签证/许可风险', en: 'On-target · high match · no visa/clearance risk' },
+  tier_maybe_l:      { zh: '谨慎投', en: 'Maybe' },
+  tier_maybe_t:      { zh: '方向对口但匹配中等，或信息略缺', en: 'On-target but medium match, or missing info' },
+  tier_lowconf_l:    { zh: '需人工确认', en: 'Needs review' },
+  tier_lowconf_t:    { zh: '没抓到完整 JD、仅按标题估分——打开原岗位确认地点/签证/要求', en: 'No full JD; scored from title — open the listing to check location/visa/requirements' },
+  tier_weak_l:       { zh: '不建议投', en: 'Not advised' },
+  tier_weak_t:       { zh: '技能重合低，或岗位方向不对口', en: 'Low skill overlap, or off-target role' },
+  tier_risk_l:       { zh: '有风险', en: 'Risky' },
+  tier_risk_t:       { zh: 'JD 明确不担保，或要求安全许可/英国国籍', en: 'JD refuses sponsorship, or requires clearance/UK nationality' },
+  // 为什么推荐
+  why_title_hit:     { zh: '标题命中 <b>{kw}</b>', en: 'Title matches <b>{kw}</b>' },
+  why_via_jd:        { zh: '标题没写关键词，是 <b>JD 正文</b>多次提及才召回的', en: 'No keyword in title; recalled from repeated mentions in the <b>JD body</b>' },
+  why_via_agg:       { zh: '来自聚合平台关键词搜索', en: 'From an aggregator keyword search' },
+  why_resume_overlap:{ zh: '简历重合 <b>{kw}</b>', en: 'Resume overlap <b>{kw}</b>' },
+  why_etc:           { zh: ' 等', en: ' etc.' },
+  why_risk:          { zh: '风险：{risks}', en: 'Risk: {risks}' },
+  why_label:         { zh: '为什么推荐：', en: 'Why recommended:' },
+  // 匹配详情
+  match_no_resume:   { zh: '还没上传简历。上传后展开岗位就能看到：你和这个岗位的<b>匹配细节</b>、缺哪些技能，并能一键生成<b>专属这个岗位</b>的简历修改建议。', en: "No resume yet. Upload one and expand a job to see your <b>match details</b>, missing skills, and generate <b>job-specific</b> resume tips in one click." },
+  match_upload:      { zh: '📄 上传简历', en: '📄 Upload resume' },
+  match_not_scored:  { zh: '这个岗位还没算匹配度（新抓到的岗位需要重算一次）。', en: 'This job is not scored yet (newly fetched jobs need one recompute).' },
+  match_calc_now:    { zh: '🎯 现在计算匹配度', en: '🎯 Compute matches now' },
+  match_covered:     { zh: '简历已覆盖：', en: 'Covered by resume:' },
+  match_must_miss:   { zh: '必需项缺失（优先补）：', en: 'Required, missing (add first):' },
+  match_nice_miss:   { zh: '加分项缺失：', en: 'Nice-to-have, missing:' },
+  match_gen_advice:  { zh: '✍️ 生成这个岗位的简历修改建议', en: '✍️ Generate resume tips for this job' },
+  match_gen_advice_dis:{ zh: '✍️ 生成简历修改建议（需先配 ChatGPT/Claude key）', en: '✍️ Generate resume tips (needs ChatGPT/Claude key)' },
+  match_gen_advice_dis_tip:{ zh: '在 data/api_keys.json 填 openai_api_key（ChatGPT）或 anthropic_api_key（Claude）后可用', en: 'Available after setting openai_api_key (ChatGPT) or anthropic_api_key (Claude) in data/api_keys.json' },
+  match_gen_outreach:{ zh: '💬 生成 networking 搭话草稿', en: '💬 Generate networking draft' },
+  match_copy_prompt: { zh: '📋 复制 Prompt（贴给别处的 AI 助手）', en: '📋 Copy prompt (for another AI assistant)' },
+  match_open_job:    { zh: '↗ 打开岗位/申请页', en: '↗ Open job / apply page' },
+  match_advice_busy: { zh: '⏳ 正在针对这个岗位生成简历修改建议（约需十几秒，别关页面）…', en: '⏳ Generating job-specific resume tips (about 10–20 s, keep the page open)…' },
+  match_outreach_busy:{ zh: '⏳ 正在生成个性化搭话草稿（LinkedIn 附言 / 私信 / 冷邮件）…', en: '⏳ Generating a personalised outreach draft (LinkedIn note / DM / cold email)…' },
+  outreach_head:     { zh: '💬 Networking 搭话草稿', en: '💬 Networking draft' },
+  outreach_head_note:{ zh: '（发送前自己读一遍、改成你的口气）', en: '(read it and adjust to your own voice before sending)' },
+  outreach_copy_all: { zh: '📋 复制全部', en: '📋 Copy all' },
+  net_li_people:     { zh: '👤 LinkedIn 找招聘官', en: '👤 Find recruiters on LinkedIn' },
+  net_hunter:        { zh: '📧 查邮箱', en: '📧 Find emails' },
+  // 找人脉 / 公司卡片
+  co_li_jobs:        { zh: '💼 LinkedIn 搜岗位', en: '💼 Search jobs on LinkedIn' },
+  co_careers:        { zh: '🏠 官方 Careers', en: '🏠 Official careers' },
+  co_board:          { zh: '招聘页 ↗', en: 'Careers page ↗' },
+  co_total_jobs:     { zh: '共 {n} 个在招岗位', en: '{n} open roles' },
+  co_has_ai:         { zh: '✅ {n} 个 AI 岗', en: '✅ {n} AI jobs' },
+  co_no_ai:          { zh: '🟡 暂无 AI 岗（可蹲守）', en: '🟡 No AI jobs yet (watch)' },
+  co_curated:        { zh: '⭐精选', en: '⭐ Curated' },
+  co_shown:          { zh: '已显示前 150 家 / 共 {n} 家', en: 'Showing first 150 / {n} companies' },
+  co_none:           { zh: '没有符合筛选的公司。', en: 'No companies match the filters.' },
+  co_badge_curated:  { zh: '精选', en: 'Curated' },
+  // 详情抽屉
+  drawer_gone:       { zh: '岗位信息已不在当前列表。', en: 'This job is no longer in the current list.' },
+  dir_target:        { zh: '目标岗位', en: 'Target role' },
+  dir_acceptable:    { zh: '可接受岗位', en: 'Acceptable role' },
+  dir_off:           { zh: '方向存疑', en: 'Off-target?' },
+  // 投递清单
+  st_saved:          { zh: '📌 待投', en: '📌 To apply' },
+  st_applied:        { zh: '📤 已投', en: '📤 Applied' },
+  st_interview:      { zh: '🎤 面试中', en: '🎤 Interviewing' },
+  st_offer:          { zh: '🎉 Offer', en: '🎉 Offer' },
+  st_rejected:       { zh: '❌ 已拒', en: '❌ Rejected' },
+  track_remove:      { zh: '🗑 移出清单', en: '🗑 Remove' },
+  star_on:           { zh: '★ 已收藏', en: '★ Saved' },
+  star_on_tip:       { zh: '已在投递清单（{status}）——点击移出', en: 'In your applications ({status}) — click to remove' },
+  star_off:          { zh: '☆ 收藏', en: '☆ Save' },
+  star_off_tip:      { zh: '加入投递清单', en: 'Add to applications' },
+  kanban_saved:      { zh: '待投', en: 'To apply' },
+  kanban_applied:    { zh: '已投', en: 'Applied' },
+  kanban_interview:  { zh: '面试中', en: 'Interviewing' },
+  kanban_done:       { zh: '结束 / Offer', en: 'Closed / Offer' },
+  kanban_dir_target: { zh: '目标岗位', en: 'Target' },
+  kanban_dir_accept: { zh: '可接受', en: 'Acceptable' },
+  kanban_dir_off:    { zh: '方向存疑', en: 'Off-target?' },
+  kanban_skill:      { zh: '技能 {n}%', en: 'Skill {n}%' },
+  kanban_gone:       { zh: '可能已下架', en: 'May be closed' },
+  tracker_empty:     { zh: '清单还是空的。在岗位列表里点 <b>☆ 收藏</b>，把想投的岗位加进来，<br>然后在这里按状态跟踪：待投 → 已投 → 面试中', en: 'Your list is empty. Click <b>☆ Save</b> on jobs you want, then track them here: To apply → Applied → Interviewing' },
+  tracker_go_pick:   { zh: '← 去挑岗位', en: '← Go pick jobs' },
+  tracker_hint:      { zh: '点卡片看详情、生成简历建议；用卡片上的状态下拉把它移到下一列。', en: 'Click a card for details and resume tips; use the status dropdown to move it to the next column.' },
+  // networking / prompt
+  outreach_err:      { zh: '**出错了：** {e}', en: '**Error:** {e}' },
+  outreach_empty:    { zh: '（无内容）', en: '(no content)' },
+  outreach_copied:   { zh: '草稿已复制！挑对应段落粘贴即可。', en: 'Draft copied! Paste the relevant section.' },
+  advice_empty:      { zh: '（无内容）', en: '(no content)' },
+  prompt_none:       { zh: '（无）', en: '(none)' },
+  prompt_body:       { zh: `请帮我针对下面这个岗位优化简历，让它更容易通过 ATS 筛选和打动招聘官。
+
+【目标岗位】{title} — {company}（{location}）
+【岗位链接】{url}
+【JD 要求的技能中我简历已覆盖】{hit}
+【JD 必需但我简历缺失（优先处理）】{must}
+【JD 加分项但我简历缺失】{nice}
+{flags}
+要求：
+1. 如果缺失的技能我实际具备，请告诉我该把它加到哪一段、怎么写最自然；
+2. 重写我简历中最相关的 2-3 条工作/项目经历，向这个岗位的要求靠拢，量化成果；
+3. 用词贴合 JD 原文关键词（利于 ATS），但不要堆砌；
+4. 最后给一段 3 句话的针对这家公司的开场白（cover letter 开头）。
+
+我的简历如下：
+{resume}`,
+                        en: `Please help me tailor my resume to the job below so it passes ATS screening and appeals to the recruiter.
+
+[Target role] {title} — {company} ({location})
+[Job link] {url}
+[JD skills my resume already covers] {hit}
+[JD required but missing from my resume (prioritise)] {must}
+[JD nice-to-have but missing from my resume] {nice}
+{flags}
+Requirements:
+1. For missing skills I actually have, tell me which section to add them to and how to phrase it naturally;
+2. Rewrite the 2-3 most relevant work/project bullets to align with this job, quantifying results;
+3. Mirror the JD's exact keywords (good for ATS) without keyword-stuffing;
+4. End with a 3-sentence opening tailored to this company (cover-letter intro).
+
+My resume:
+{resume}` },
+  prompt_flags:      { zh: '【注意事项】{flags}', en: '[Notes] {flags}' },
+  prompt_copied:     { zh: '优化 Prompt 已复制！粘贴给 AI 助手（ChatGPT / Claude 等）即可。', en: 'Prompt copied! Paste it into an AI assistant (ChatGPT / Claude, etc.).' },
+  prompt_copied2:    { zh: '优化 Prompt 已复制！', en: 'Prompt copied!' },
+  // 中国大厂目录
+  cn_title:          { zh: '🇨🇳 中国大厂 AI 岗位直达', en: '🇨🇳 China big-tech AI jobs (direct)' },
+  cn_note:           { zh: '国内大厂都用自研招聘系统，没有公开接口可自动抓取——以下是各家 AI/大模型岗位搜索页直达链接。它们的英国实体（TikTok 伦敦、华为英研所等）已在上方自动扫描范围内。', en: 'Chinese big-tech firms use in-house ATS with no public API to scrape — below are direct links to each one\'s AI/LLM job search page. Their UK entities (TikTok London, Huawei UK R&D, etc.) are already covered by the scan above.' },
+  // 新手引导 / 今日推荐
+  onboard_title:     { zh: '开始使用 · 三步', en: 'Get started · 3 steps' },
+  onboard_sub:       { zh: '帮你在英国找工签雇主里方向对口的岗位：去哪找、哪些先看、简历差在哪。', en: 'Helps you find on-target roles at UK sponsor employers: where to look, what to see first, and where your resume falls short.' },
+  onboard_1:         { zh: '<b>建立岗位库</b>：首次点下面「首次建立岗位库」跑一遍（约 1–2 小时，摸出有招聘系统的工签雇主）；之后日常只需「扫描岗位」。', en: '<b>Build the library</b>: click "Build the job library" below once (~1–2 h, finds sponsor employers with an ATS); after that just "Scan jobs".' },
+  onboard_2:         { zh: '<b>上传简历</b>：自动给每个岗位算技能匹配分。', en: '<b>Upload your resume</b>: auto-scores every job by skill match.' },
+  onboard_3:         { zh: '<b>看今日推荐</b>：按「方向对口 + 签证 + 匹配」综合排序，点岗位在右侧看详情、一键生成简历建议。', en: "<b>Check Today's picks</b>: ranked by role fit + visa + match; click a job for details and one-click resume tips." },
+  onboard_build:     { zh: '首次建立岗位库', en: 'Build the job library' },
+  onboard_scan:      { zh: '扫描岗位', en: 'Scan jobs' },
+  onboard_upload:    { zh: '上传简历', en: 'Upload resume' },
+  nudge_resume:      { zh: '还没上传简历——上传后才能算技能匹配、按匹配度排序。', en: 'No resume yet — upload one to score skill matches and rank by match.' },
+  today_title:       { zh: '今天该先看哪些岗位', en: 'What to look at first today' },
+  today_sub:         { zh: '按「方向对口 + 技能匹配 + 签证确定性」综合排序，方向不对的（IT Support 等）已自动沉底', en: 'Ranked by role fit + skill match + visa certainty; off-target roles (IT Support, etc.) sink to the bottom' },
+  today_adjust:      { zh: '调整求职目标', en: 'Adjust job goals' },
+  today_view_all:    { zh: '查看全部岗位 →', en: 'View all jobs →' },
+  today_view_tier:   { zh: '查看全部 {n} 个{label} →', en: 'View all {n} {label} →' },
+  // 空态 / 提示
+  empty_filtered_p:  { zh: '库里有 <b>{n}</b> 个岗位，但都被你当前的筛选挡住了。', en: 'The library has <b>{n}</b> jobs, but all are hidden by your current filters.' },
+  empty_filtered_p2: { zh: '库里有 <b>{n}</b> 个岗位，但没有一个同时满足你当前的筛选条件。', en: 'The library has <b>{n}</b> jobs, but none match all your current filters.' },
+  empty_cur_filters: { zh: '当前筛选：', en: 'Current filters:' },
+  empty_clear_all:   { zh: '✕ 清除所有筛选，显示全部岗位', en: '✕ Clear all filters, show every job' },
+  empty_no_jobs_p:   { zh: '还没抓到岗位。点下面的按钮开始扫描', en: 'No jobs yet. Click a button below to start scanning' },
+  empty_no_jobs_sub: { zh: '第一次使用：先去左侧「工具箱」点「首次建立岗位库」跑一遍，覆盖全部 12 万家工签雇主', en: 'First time: open "Toolbox" on the left and run "Build the job library" to cover all ~120k sponsor employers' },
+  empty_open_tools:  { zh: '🧰 打开工具箱', en: '🧰 Open Toolbox' },
+  feed_count:        { zh: '筛选后共 {n} 条', en: '{n} jobs after filters' },
+  feed_count_capped: { zh: '，已显示前 250 条', en: ', showing first 250' },
+  feed_hidden_empty: { zh: '还没有隐藏过岗位。在岗位行点 🚫 可以把不想再看到的岗位收进这里。', en: 'No hidden jobs yet. Click 🚫 on a job row to tuck away ones you don\'t want to see.' },
+  feed_china_hint:   { zh: '扫描到的中国岗位会显示在这里（TikTok、Airbnb 等公司的中国区岗位）；上方是大厂直达链接。', en: 'China-based jobs found by the scan show here (e.g. TikTok, Airbnb China roles); big-tech direct links are above.' },
+  feed_none_hint:    { zh: '没有符合当前筛选的岗位——试试放宽筛选，或点顶部 🔄 刷新最新岗位。', en: 'No jobs match the current filters — loosen them, or click 🔄 at the top to refresh.' },
+  feed_clear_n:      { zh: '✕ 清除筛选（{n}）· 共 {total} 个岗位', en: '✕ Clear filters ({n}) · {total} jobs total' },
+  feed_load_more:    { zh: '⬇ 加载更多（已取 {got} / 共 {total} 条）', en: '⬇ Load more (loaded {got} / {total})' },
+  // 表格视图表头
+  th_match:          { zh: '匹配', en: 'Match' },
+  th_job:            { zh: '岗位', en: 'Job' },
+  th_company:        { zh: '公司', en: 'Company' },
+  th_location:       { zh: '地点', en: 'Location' },
+  th_level:          { zh: '级别', en: 'Level' },
+  th_visa:           { zh: '签证', en: 'Visa' },
+  th_years:          { zh: '年限', en: 'Years' },
+  th_listed:         { zh: '上架', en: 'Listed' },
+  tbl_unknown:       { zh: '未知', en: 'Unknown' },
+  tbl_days:          { zh: '天', en: 'd' },
+  tbl_lowconf:       { zh: '仅按标题估分', en: 'Scored from title only' },
+  tbl_restore:       { zh: '恢复', en: 'Restore' },
+  tbl_hide_tip:      { zh: '隐藏这个岗位', en: 'Hide this job' },
+  // 岗位行操作
+  row_restore:       { zh: '↩ 恢复', en: '↩ Restore' },
+  row_restore_tip:   { zh: '从已隐藏中恢复', en: 'Restore from hidden' },
+  row_hide:          { zh: '隐藏', en: 'Hide' },
+  row_hide_tip:      { zh: '隐藏这个岗位（可在分层筛选「已隐藏」里找回）', en: 'Hide this job (find it again via the "Hidden" tier)' },
+  row_detail:        { zh: '详情 →', en: 'Details →' },
+  // alert / 交互
+  alert_resume_parsed:{ zh: '简历已解析：识别到 {n} 个技能关键词，正在自动计算所有岗位的匹配度…', en: 'Resume parsed: {n} skill keywords found; auto-scoring all jobs…' },
+  alert_text_short:  { zh: '内容太短', en: 'Text too short' },
+  alert_resume_saved:{ zh: '简历已保存：识别到 {n} 个技能关键词，正在计算匹配度…', en: 'Resume saved: {n} skill keywords found; scoring matches…' },
+  alert_scan_fail:   { zh: '启动扫描失败：{e}', en: 'Failed to start scan: {e}' },
+  alert_agg_started: { zh: '已开始搜索 Adzuna/Reed 聚合平台，稍等片刻在岗位流里看结果（📄 来源徽章）', en: 'Started searching Adzuna/Reed; results appear in the feed shortly (📄 source badge)' },
+  alert_size_started:{ zh: '已开始识别 {n} 家公司的规模（大模型估，结果缓存）。稍后规模徽章和筛选会自动出现。', en: 'Started estimating size for {n} companies (LLM, cached). Size badges and the filter will appear shortly.' },
+  alert_social_fail: { zh: '启动失败：{e}', en: 'Failed to start: {e}' },
+  alert_hn_fail:     { zh: '抓取 Hacker News 招聘帖失败：{e}\n（可稍后重试，通常是临时网络问题）', en: 'Failed to fetch Hacker News posts: {e}\n(try again later; usually a transient network issue)' },
+  alert_hn_done:     { zh: '已从 Hacker News「Who is hiring」招聘帖抓取 {total} 条，按你的关键词并入 {found} 个岗位（带 🗞 HN 招聘帖 徽章）。\n去「全部岗位」在搜索框输入 HackerNews 即可只看这些。', en: 'Pulled {total} entries from the Hacker News "Who is hiring" thread and merged {found} into the feed (🗞 HN post badge).\nIn "All jobs", type HackerNews in the search box to see just these.' },
+  social_fetching:   { zh: '抓取中…', en: 'Fetching…' },
+  // 按钮动态
+  btn_searching:     { zh: '搜索中…', en: 'Searching…' },
+  btn_agg_need_key:  { zh: '需先在 data/api_keys.json 配置 Adzuna/Reed 的免费 API key', en: 'Set the free Adzuna/Reed API keys in data/api_keys.json first' },
+  btn_size_running:  { zh: '识别中… {done}/{total}', en: 'Estimating… {done}/{total}' },
+  btn_size_need_key: { zh: '需先配置大模型 API key（data/api_keys.json 的 openai_api_key / anthropic_api_key）', en: 'Set an LLM API key first (openai_api_key / anthropic_api_key in data/api_keys.json)' },
+  ok_done:           { zh: '✓ 已完成', en: '✓ Done' },
+  // 岗位库状态行
+  lib_probed:        { zh: '已探测 {probed} 家，还剩 {pending} 家未探测', en: 'Probed {probed}, {pending} left to probe' },
+  lib_no_ats:        { zh: ' · 探测无 ATS {n} 家', en: ' · {n} with no ATS' },
+  lib_overrides:     { zh: ' · 手动修正 {n} 家', en: ' · {n} manual fixes' },
+  lib_jd_rate:       { zh: ' · JD 抓取成功率 {rate}（{ok}/{total}）', en: ' · JD fetch rate {rate} ({ok}/{total})' },
+  lib_agg:           { zh: ' · 聚合平台 {n} 个（其中担保名单 {sponsor} 个）', en: ' · {n} from aggregators ({sponsor} on register)' },
+  ex_suggest_label:  { zh: '📈 根据你隐藏的岗位，建议排除：', en: '📈 Based on jobs you hid, suggest excluding:' },
+  // 运行时渲染文案（工具箱状态 / 今日推荐 / 看板 / 列表 / 公司 / 提示）
+  lib_done:          { zh: '✓ 已完成', en: '✓ Done' },
+  lib_probed:        { zh: '已探测 {probed} 家，还剩 {pending} 家未探测', en: 'Probed {probed}, {pending} left' },
+  lib_no_ats:        { zh: ' · 探测无 ATS {n} 家', en: ' · no ATS {n}' },
+  lib_fixes:         { zh: ' · 手动修正 {n} 家', en: ' · manual fixes {n}' },
+  lib_jd_rate:       { zh: ' · JD 抓取成功率 {rate}（{ok}/{total}）', en: ' · JD fetch rate {rate} ({ok}/{total})' },
+  lib_agg:           { zh: ' · 聚合平台 {n} 个（其中担保名单 {s} 个）', en: ' · aggregator {n} (on register {s})' },
+  agg_searching:     { zh: '搜索中…', en: 'Searching…' },
+  agg_need_key:      { zh: '需先在 data/api_keys.json 配置 Adzuna/Reed 的免费 API key', en: 'Configure a free Adzuna/Reed API key in data/api_keys.json first' },
+  size_running:      { zh: '识别中… {done}/{total}', en: 'Estimating… {done}/{total}' },
+  size_need_key:     { zh: '需先配置大模型 API key（data/api_keys.json 的 openai_api_key / anthropic_api_key）', en: 'Configure an LLM API key first (openai_api_key / anthropic_api_key in data/api_keys.json)' },
+  badge_curated_s:   { zh: '精选', en: 'Curated' },
+  filt_blocked_p:    { zh: '库里有 <b>{n}</b> 个岗位，但都被你当前的筛选挡住了。', en: 'The library has <b>{n}</b> jobs, but your current filters hide them all.' },
+  filt_none_p:       { zh: '库里有 <b>{n}</b> 个岗位，但没有一个同时满足你当前的筛选条件。', en: 'The library has <b>{n}</b> jobs, but none match all of your current filters.' },
+  filt_current:      { zh: '当前筛选：', en: 'Active filters: ' },
+  filt_clear_all:    { zh: '✕ 清除所有筛选，显示全部岗位', en: '✕ Clear all filters, show every job' },
+  today_h2:          { zh: '今天该先看哪些岗位', en: 'What to look at first today' },
+  today_sub:         { zh: '按「方向对口 + 技能匹配 + 签证确定性」综合排序，方向不对的（IT Support 等）已自动沉底', en: 'Ranked by role fit + skill match + visa certainty; off-target roles (IT Support etc.) are pushed to the bottom' },
+  today_scan:        { zh: '扫描岗位', en: 'Scan jobs' },
+  today_adjust:      { zh: '调整求职目标', en: 'Adjust search settings' },
+  today_all:         { zh: '查看全部岗位 →', en: 'See all jobs →' },
+  today_view_tier:   { zh: '查看全部 {n} 个{label} →', en: 'See all {n} {label} →' },
+  track_empty_p:     { zh: '清单还是空的。在岗位列表里点 <b>☆ 收藏</b>，把想投的岗位加进来，<br>然后在这里按状态跟踪：待投 → 已投 → 面试中', en: 'Your list is empty. Click <b>☆ Save</b> on a job to add it,<br>then track it here by status: To apply → Applied → Interviewing' },
+  track_empty_go:    { zh: '← 去挑岗位', en: '← Go pick jobs' },
+  dir_target:        { zh: '目标岗位', en: 'Target role' },
+  dir_acceptable:    { zh: '可接受', en: 'Acceptable' },
+  dir_offtarget:     { zh: '方向存疑', en: 'Off-target?' },
+  kc_skill:          { zh: '技能 {n}%', en: 'Skill {n}%' },
+  kc_gone:           { zh: '可能已下架', en: 'May be gone' },
+  kb_saved:          { zh: '待投', en: 'To apply' },
+  kb_applied:        { zh: '已投', en: 'Applied' },
+  kb_interview:      { zh: '面试中', en: 'Interviewing' },
+  kb_done:           { zh: '结束 / Offer', en: 'Closed / Offer' },
+  kanban_hint:       { zh: '点卡片看详情、生成简历建议；用卡片上的状态下拉把它移到下一列。', en: 'Click a card for details and resume tips; use the status dropdown to move it to the next column.' },
+  feed_empty_p:      { zh: '还没抓到岗位。点下面的按钮开始扫描', en: 'No jobs yet. Click the button below to start scanning' },
+  feed_empty_note:   { zh: '第一次使用：先去左侧「工具箱」点「首次建立岗位库」跑一遍，覆盖全部 12 万家工签雇主', en: 'First time: open "Toolbox" on the left and run "Build the job library" once to cover all ~120k sponsor employers' },
+  feed_open_tools:   { zh: '🧰 打开工具箱', en: '🧰 Open Toolbox' },
+  th_match:          { zh: '匹配', en: 'Match' },
+  th_job:            { zh: '岗位', en: 'Job' },
+  th_company:        { zh: '公司', en: 'Company' },
+  th_loc:            { zh: '地点', en: 'Location' },
+  th_level:          { zh: '级别', en: 'Level' },
+  th_visa:           { zh: '签证', en: 'Visa' },
+  th_years:          { zh: '年限', en: 'Years' },
+  th_posted:         { zh: '上架', en: 'Posted' },
+  tbl_title_only:    { zh: '仅按标题估分', en: 'Scored by title only' },
+  tbl_visa_title:    { zh: '签证确定性', en: 'Visa certainty' },
+  loc_unknown:       { zh: '未知', en: 'Unknown' },
+  unit_day:          { zh: '天', en: 'd' },
+  btn_restore:       { zh: '恢复', en: 'Restore' },
+  hide_job_title:    { zh: '隐藏这个岗位', en: 'Hide this job' },
+  feed_count:        { zh: '筛选后共 {n} 条', en: '{n} jobs after filtering' },
+  feed_capped:       { zh: '，已显示前 250 条', en: ' (showing first 250)' },
+  feed_hidden_empty: { zh: '还没有隐藏过岗位。在岗位行点 🚫 可以把不想再看到的岗位收进这里。', en: 'No hidden jobs yet. Click 🚫 on a job row to tuck away ones you no longer want to see.' },
+  feed_china_hint:   { zh: '扫描到的中国岗位会显示在这里（TikTok、Airbnb 等公司的中国区岗位）；上方是大厂直达链接。', en: 'China-based jobs found in scanning show here (e.g. China roles at TikTok, Airbnb); big-tech quick links are above.' },
+  feed_none_hint:    { zh: '没有符合当前筛选的岗位——试试放宽筛选，或点顶部 🔄 刷新最新岗位。', en: 'No jobs match the current filters — try loosening them, or click 🔄 at the top to fetch the latest.' },
+  feed_clear_n:      { zh: '✕ 清除筛选（{n}）· 共 {total} 个岗位', en: '✕ Clear filters ({n}) · {total} jobs total' },
+  feed_load_more:    { zh: '⬇ 加载更多（已取 {got} / 共 {total} 条）', en: '⬇ Load more ({got} / {total})' },
+  co_has_ai:         { zh: '✅ {n} 个 AI 岗', en: '✅ {n} AI jobs' },
+  co_no_ai:          { zh: '🟡 暂无 AI 岗（可蹲守）', en: '🟡 No AI jobs yet (worth watching)' },
+  co_curated:        { zh: '⭐精选', en: '⭐Curated' },
+  co_board:          { zh: '招聘页 ↗', en: 'Careers page ↗' },
+  co_total_jobs:     { zh: '共 {n} 个在招岗位', en: '{n} open jobs' },
+  co_detail:         { zh: '详情 →', en: 'Details →' },
+  co_li_people:      { zh: '👤 LinkedIn 找招聘官', en: '👤 Find recruiters on LinkedIn' },
+  co_hunter:         { zh: '📧 查邮箱', en: '📧 Find emails' },
+  co_li_jobs:        { zh: '💼 LinkedIn 搜岗位', en: '💼 Search jobs on LinkedIn' },
+  co_careers:        { zh: '🏠 官方 Careers', en: '🏠 Official careers' },
+  co_capped:         { zh: '已显示前 150 家 / 共 {n} 家', en: 'Showing first 150 / {n} companies' },
+  co_none:           { zh: '没有符合筛选的公司。', en: 'No companies match the filters.' },
+  al_resume_parsed:  { zh: '简历已解析：识别到 {n} 个技能关键词，正在自动计算所有岗位的匹配度…', en: 'Resume parsed: {n} skill keywords found. Scoring every job now…' },
+  al_text_short:     { zh: '内容太短', en: 'Text too short' },
+  al_resume_saved:   { zh: '简历已保存：识别到 {n} 个技能关键词，正在计算匹配度…', en: 'Resume saved: {n} skill keywords found. Scoring matches now…' },
+  scan_mode_known:   { zh: '刷新最新岗位', en: 'refreshing latest jobs' },
+  scan_mode_pending: { zh: '全量清查', en: 'full sweep' },
+  scan_mode_curated: { zh: '精选扫描', en: 'curated scan' },
+  scan_mode_all:     { zh: '全部扫描', en: 'full scan' },
+  scan_mode_deep:    { zh: '深度补扫', en: 'deep top-up scan' },
+  scan_mode_def:     { zh: '扫描', en: 'scan' },
+  scan_starting:     { zh: '⏳ 正在启动{mode}…（在后台扫描英国工签雇主，新岗位会陆续出现，可继续浏览）', en: '⏳ Starting {mode}… (scanning UK sponsor employers in the background; new jobs appear gradually, keep browsing)' },
+  scan_start_fail:   { zh: '启动扫描失败：', en: 'Failed to start scan: ' },
+  al_agg_started:    { zh: '已开始搜索 Adzuna/Reed 聚合平台，稍等片刻在岗位流里看结果（📄 来源徽章）', en: 'Started searching Adzuna/Reed aggregators; results appear in the feed shortly (📄 source badge)' },
+  al_size_started:   { zh: '已开始识别 {n} 家公司的规模（大模型估，结果缓存）。稍后规模徽章和筛选会自动出现。', en: 'Started estimating size for {n} companies (LLM estimate, cached). Size badges and filters appear shortly.' },
+  fetching:          { zh: '抓取中…', en: 'Fetching…' },
+  al_start_fail:     { zh: '启动失败：', en: 'Failed to start: ' },
+  al_hn_fail:        { zh: '抓取 Hacker News 招聘帖失败：', en: 'Failed to fetch Hacker News hiring posts: ' },
+  al_hn_retry:       { zh: '\n（可稍后重试，通常是临时网络问题）', en: '\n(try again later — usually a temporary network issue)' },
+  al_hn_done:        { zh: '已从 Hacker News「Who is hiring」招聘帖抓取 {total} 条，按你的关键词并入 {found} 个岗位（带 🗞 HN 招聘帖 徽章）。\n去「全部岗位」在搜索框输入 HackerNews 即可只看这些。', en: 'Fetched {total} entries from the Hacker News "Who is hiring" thread and merged {found} matching your keywords (🗞 HN post badge).\nGo to "All jobs" and type HackerNews in the search box to see just these.' },
+  // 后端旗标 / 级别（后端保留中文供其筛选逻辑，前端仅展示时翻译）
+  flag_years:        { zh: '要求 {yrs}+ 年经验', en: 'Requires {yrs}+ yrs exp' },
+  flag_clearance:    { zh: '需安全许可/国籍要求', en: 'Clearance / nationality required' },
+  flag_no_sponsor:   { zh: 'JD 声明不担保签证', en: 'JD: no visa sponsorship' },
+  flag_yes_sponsor:  { zh: '明确提供签证担保', en: 'Offers visa sponsorship' },
+  flag_no_jd:        { zh: '未抓到 JD，仅按标题估分', en: 'No JD — title-only estimate' },
+  lvl_grad:          { zh: '实习/毕业生', en: 'Intern/Grad' },
+  lvl_junior:        { zh: '初级', en: 'Junior' },
+  lvl_mid:           { zh: '中级', en: 'Mid' },
+  lvl_senior:        { zh: '高级', en: 'Senior' },
+  lvl_staff:         { zh: 'Staff/Lead', en: 'Staff/Lead' },
+  lvl_mgmt:          { zh: '管理层', en: 'Management' },
+};
+let LANG = localStorage.getItem('lang') || 'en';
+function t(key, vars) {
+  const e = I18N[key];
+  let s = e ? (e[LANG] ?? e.zh) : key;
+  if (vars) for (const k in vars) s = s.split('{' + k + '}').join(vars[k]);
+  return s;
+}
+// 后端旗标文案：后端保留中文（其筛选逻辑靠中文子串匹配），前端仅在展示时翻译成当前语言
+function flagT(txt) {
+  if (LANG === 'zh' || !txt) return txt;
+  const m = txt.match(/^要求 (\d+)\+ 年经验$/);
+  if (m) return t('flag_years', { yrs: m[1] });
+  return ({
+    '需安全许可/国籍要求': t('flag_clearance'),
+    'JD 声明不担保签证':   t('flag_no_sponsor'),
+    '明确提供签证担保':     t('flag_yes_sponsor'),
+    '未抓到 JD，仅按标题估分': t('flag_no_jd'),
+  })[txt] || txt;
+}
+// 级别短标签：按级别代码取当前语言（后端 level_labels 为中文，仅作兜底）
+function levelLabel(code) {
+  const key = { grad: 'lvl_grad', junior: 'lvl_junior', mid: 'lvl_mid',
+                senior: 'lvl_senior', staff: 'lvl_staff', mgmt: 'lvl_mgmt' }[code];
+  return key ? t(key) : ((S.consts && S.consts.level_labels && S.consts.level_labels[code]) || code || '');
+}
+// 静态 HTML 文案：按 data-i18n / -html / -ph / -title 属性回填当前语言
+function applyStaticI18n() {
+  document.documentElement.lang = LANG;
+  document.querySelectorAll('[data-i18n]').forEach(el => el.textContent = t(el.dataset.i18n));
+  document.querySelectorAll('[data-i18n-html]').forEach(el => el.innerHTML = t(el.dataset.i18nHtml));
+  document.querySelectorAll('[data-i18n-ph]').forEach(el => el.placeholder = t(el.dataset.i18nPh));
+  document.querySelectorAll('[data-i18n-title]').forEach(el => el.title = t(el.dataset.i18nTitle));
+  const lb = document.getElementById('btnLang');
+  if (lb) lb.textContent = LANG === 'zh' ? 'EN' : '中';
+}
+function toggleLang() {
+  LANG = LANG === 'zh' ? 'en' : 'zh';
+  localStorage.setItem('lang', LANG);
+  rebuildI18nMaps();
+  applyStaticI18n();
+  renderNav();
+  refresh();
+}
+// 依赖语言的映射表：切换语言时重建（变量名不变，减少改动面）
+let ST_LABELS, T_LABELS, TIER_META, VISA_META, CONF_LABELS, NAV;
+function rebuildI18nMaps() {
+  ST_LABELS = { saved: t('st_saved'), applied: t('st_applied'), interview: t('st_interview'),
+                offer: t('st_offer'), rejected: t('st_rejected') };
+  T_LABELS = { llm: t('tl_llm'), new: t('tl_new'), long: t('tl_long'), curated: t('tl_curated'),
+               titleonly: t('tl_titleonly'), derisk: t('tl_derisk'), unseen: t('tl_unseen'), ontarget: t('tl_ontarget') };
+  TIER_META = {
+    strong:  [t('tier_strong_l'),  t('tier_strong_t')],
+    maybe:   [t('tier_maybe_l'),   t('tier_maybe_t')],
+    lowconf: [t('tier_lowconf_l'), t('tier_lowconf_t')],
+    weak:    [t('tier_weak_l'),    t('tier_weak_t')],
+    risk:    [t('tier_risk_l'),    t('tier_risk_t')],
+  };
+  VISA_META = { yes: [t('visa_b_yes'), 'fgood'], register: [t('visa_b_register'), 'lvl'],
+                uncertain: [t('visa_b_uncertain'), 'lvl'], no: [t('visa_b_no'), 'fwarn'] };
+  CONF_LABELS = { high: [t('conf_high'), t('conf_high_tip')],
+                  mid:  [t('conf_mid'),  t('conf_mid_tip')],
+                  low:  [t('conf_low'),  t('conf_low_tip')] };
+  NAV = [ ['today', t('nav_today')], ['feed', t('nav_feed'), 'feed'], ['company', t('nav_company'), 'co'],
+          ['tracker', t('nav_tracker'), 'track'], ['gaps', t('nav_gaps')], ['goal', t('nav_goal')], ['tools', t('nav_tools')] ];
+}
+rebuildI18nMaps();
+
 let S = { results: {}, feed: [], counts: {}, scan: {}, match: {}, resume: null,
           consts: { new_days: 3, long_days: 30, level_labels: {} } };
 let F = { view: 'today', region: 'all', level: 'all', csize: 'all', years: 'all',
@@ -731,9 +1341,6 @@ const jobAdvice = {};        // url -> 岗位专属简历建议(Markdown)
 const jobAdviceBusy = new Set();  // 正在为哪些 url 生成建议
 const jobOutreach = {};      // url -> networking 搭话草稿(Markdown)
 const outreachBusy = new Set();
-const ST_LABELS = { saved: '📌 待投', applied: '📤 已投', interview: '🎤 面试中',
-                    offer: '🎉 Offer', rejected: '❌ 已拒' };
-
 const CN_BIGTECH = [
   ['字节跳动', 'https://jobs.bytedance.com/experienced/position?keywords=%E5%A4%A7%E6%A8%A1%E5%9E%8B'],
   ['TikTok（海外）', 'https://careers.tiktok.com/position?keywords=machine%20learning'],
@@ -776,7 +1383,7 @@ async function refresh() {
     const ws = S.excl_suggest || [];
     sug.style.display = ws.length ? '' : 'none';
     sug.innerHTML = ws.length
-      ? `<span class="note">📈 根据你隐藏的岗位，建议排除：</span>`
+      ? `<span class="note">${t('ex_suggest_label')}</span>`
         + ws.map(w => `<button class="mini ghost" onclick="addExcl('${esc(w)}')">➕ ${esc(w)}</button>`).join('')
       : '';
   }
@@ -793,28 +1400,28 @@ async function refresh() {
       x.classList.toggle('on', x.dataset.v === F.sort));
   }
   const s1 = document.getElementById('step1ok'), s2 = document.getElementById('step2ok');
-  if (s1) s1.innerHTML = c.ai_jobs > 0 ? '<span class="ok">✓ 已完成</span>' : '';
-  if (s2) s2.innerHTML = S.resume ? '<span class="ok">✓ 已完成</span>' : '';
+  if (s1) s1.innerHTML = c.ai_jobs > 0 ? `<span class="ok">${t('lib_done')}</span>` : '';
+  if (s2) s2.innerHTML = S.resume ? `<span class="ok">${t('lib_done')}</span>` : '';
   const jdRate = c.jd_rate == null ? '—' : c.jd_rate + '%';
   document.getElementById('pendingNote').textContent =
-    `已探测 ${(c.probed ?? 0).toLocaleString()} 家，还剩 ${(c.pending ?? 0).toLocaleString()} 家未探测`
-    + ` · 探测无 ATS ${(c.slug_failed ?? 0).toLocaleString()} 家`
-    + (c.overrides ? ` · 手动修正 ${c.overrides} 家` : '')
-    + ` · JD 抓取成功率 ${jdRate}（${(c.jd_ok ?? 0).toLocaleString()}/${((c.jd_ok ?? 0) + (c.jd_fail ?? 0)).toLocaleString()}）`
-    + (c.agg_jobs ? ` · 聚合平台 ${c.agg_jobs} 个（其中担保名单 ${c.agg_sponsor ?? 0} 个）` : '');
+    t('lib_probed', { probed: (c.probed ?? 0).toLocaleString(), pending: (c.pending ?? 0).toLocaleString() })
+    + t('lib_no_ats', { n: (c.slug_failed ?? 0).toLocaleString() })
+    + (c.overrides ? t('lib_fixes', { n: c.overrides }) : '')
+    + t('lib_jd_rate', { rate: jdRate, ok: (c.jd_ok ?? 0).toLocaleString(), total: ((c.jd_ok ?? 0) + (c.jd_fail ?? 0)).toLocaleString() })
+    + (c.agg_jobs ? t('lib_agg', { n: c.agg_jobs, s: c.agg_sponsor ?? 0 }) : '');
   const btnAgg = document.getElementById('btnAgg');
   if (btnAgg) {
     const running = (S.agg || {}).running;
     btnAgg.disabled = running;
-    btnAgg.textContent = running ? '搜索中…' : '搜索';
-    if (!S.has_api_keys) btnAgg.title = '需先在 data/api_keys.json 配置 Adzuna/Reed 的免费 API key';
+    btnAgg.textContent = running ? t('agg_searching') : t('tool_search');
+    if (!S.has_api_keys) btnAgg.title = t('agg_need_key');
   }
   const btnSize = document.getElementById('btnSize');
   if (btnSize) {
     const sz = S.size || {};
     btnSize.disabled = !!sz.running;
-    btnSize.textContent = sz.running ? `识别中… ${sz.done||0}/${sz.total||0}` : '识别';
-    if (!S.has_llm) btnSize.title = '需先配置大模型 API key（data/api_keys.json 的 openai_api_key / anthropic_api_key）';
+    btnSize.textContent = sz.running ? t('size_running', { done: sz.done||0, total: sz.total||0 }) : t('tool_size_btn');
+    if (!S.has_llm) btnSize.title = t('size_need_key');
   }
   renderResume();
   updateTrackerTab();
@@ -830,45 +1437,45 @@ function renderResume() {
     el.className = 'resume need';
     el.innerHTML = `
       <span class="icon">📄</span>
-      <span class="info"><b>第一步：上传你的简历</b>——每个岗位自动算出匹配度，并解锁定制简历建议
-        <small>支持 PDF / Word / TXT · 只保存在你自己电脑上</small></span>
-      <span class="acts"><button onclick="document.getElementById('resumeFile').click()">上传简历</button></span>`;
+      <span class="info"><b>${t('resume_need_b')}</b>${t('resume_need_rest')}
+        <small>${t('resume_need_small')}</small></span>
+      <span class="acts"><button onclick="document.getElementById('resumeFile').click()">${t('resume_upload_btn')}</button></span>`;
     return;
   }
   el.className = 'resume';
   const scored = (S.feed || []).filter(j => j.score != null).length;
   let status = '';
-  if (m.running) status = ` · ⏳ 正在计算匹配度 ${m.done}/${m.total}`;
+  if (m.running) status = t('resume_matching', { done: m.done, total: m.total });
   el.innerHTML = `
     <span class="icon">📄</span>
-    <span class="info"><b>${esc(S.resume.name)}</b> ✓ ${S.resume.keywords.length} 个技能${status}</span>
+    <span class="info"><b>${esc(S.resume.name)}</b> ✓ ${t('resume_skills_n', { n: S.resume.keywords.length })}${status}</span>
     <span class="acts">
-      <button class="mini ghost" onclick="document.getElementById('resumeFile').click()">重新上传</button>
-      <button class="mini ghost" onclick="setView('gaps')" ${scored ? '' : 'disabled'}>🎯 全平台简历建议</button>
-      ${!scored && !m.running ? `<button class="mini" onclick="runMatch()">🎯 计算匹配度</button>` : ''}
+      <button class="mini ghost" onclick="document.getElementById('resumeFile').click()">${t('resume_reupload')}</button>
+      <button class="mini ghost" onclick="setView('gaps')" ${scored ? '' : 'disabled'}>${t('resume_all_advice')}</button>
+      ${!scored && !m.running ? `<button class="mini" onclick="runMatch()">${t('resume_calc')}</button>` : ''}
     </span>`;
   if (m.running && !pollTimer) pollTimer = setInterval(refresh, 2500);
 }
 
 async function loadSuggestions() {
   const box = document.getElementById('suggestBox');
-  box.innerHTML = `<div class="suggest"><div class="info">正在汇总全平台缺口…</div></div>`;
+  box.innerHTML = `<div class="suggest"><div class="info">${t('sugg_loading')}</div></div>`;
   const r = await fetch('/api/resume_suggestions');
   const d = await r.json();
   if (!d.ready || !(d.gaps || []).length) {
-    box.innerHTML = `<div class="suggest"><div class="info">还没有匹配数据。先点「🎯 计算匹配度」，算完再来。</div></div>`;
+    box.innerHTML = `<div class="suggest"><div class="info">${t('sugg_nodata')}</div></div>`;
     return;
   }
   const gaps = d.gaps.map(g =>
-    `<span class="kw miss" title="缺失于 ${g.jobs} 个岗位${g.near ? '，其中 ' + g.near + ' 个中等匹配、最能因此提分' : ''}">${esc(g.skill)} ·${g.jobs}${g.near ? '（🎯' + g.near + '）' : ''}</span>`).join('');
+    `<span class="kw miss" title="${t('sugg_gap_tip', { jobs: g.jobs })}${g.near ? t('sugg_gap_tip_near', { near: g.near }) : ''}">${esc(g.skill)} ·${g.jobs}${g.near ? '（🎯' + g.near + '）' : ''}</span>`).join('');
   const free = (d.freeform || []).map(f => `<span class="kw">${esc(f.term)}·${f.jobs}</span>`).join('');
   const genBtn = d.has_llm
-    ? `<button class="mini" onclick="genAdvice()">✍️ 用 ${esc(d.llm_label || 'AI')} 生成修改建议</button>`
-    : `<button class="mini" disabled title="在 data/api_keys.json 填 openai_api_key（ChatGPT）或 anthropic_api_key（Claude）后可用">✍️ 生成修改建议（需配 ChatGPT/Claude key）</button>`;
+    ? `<button class="mini" onclick="genAdvice()">${t('sugg_gen_btn', { label: esc(d.llm_label || 'AI') })}</button>`
+    : `<button class="mini" disabled title="${t('sugg_gen_dis_tip')}">${t('sugg_gen_dis')}</button>`;
   box.innerHTML = `<div class="suggest">
-    <div class="stitle">🎯 全平台简历提升建议 <small>基于已匹配的 ${d.n_scored} 个岗位</small></div>
-    <div class="mrow"><span class="mlabel">最该补的技能（按影响排序，🎯=中等匹配岗位数，补上最能提分）：</span>${gaps}</div>
-    ${free ? `<div class="mrow"><span class="mlabel">JD 高频、可能词表外（启发式，供参考）：</span>${free}</div>` : ''}
+    <div class="stitle">${t('sugg_title')} <small>${t('sugg_title_small', { n: d.n_scored })}</small></div>
+    <div class="mrow"><span class="mlabel">${t('sugg_gaps_label')}</span>${gaps}</div>
+    ${free ? `<div class="mrow"><span class="mlabel">${t('sugg_free_label')}</span>${free}</div>` : ''}
     <div class="mrow" style="margin-top:8px">${genBtn}</div>
     <div id="adviceOut"></div>
   </div>`;
@@ -876,7 +1483,7 @@ async function loadSuggestions() {
 
 async function genAdvice() {
   const out = document.getElementById('adviceOut');
-  out.innerHTML = `<div class="info" style="margin-top:8px">AI 正在生成建议（约需十几秒）…</div>`;
+  out.innerHTML = `<div class="info" style="margin-top:8px">${t('sugg_generating')}</div>`;
   const r = await fetch('/api/resume_suggestions/generate', { method: 'POST' });
   const d = await r.json();
   if (d.error) { out.innerHTML = `<div class="info" style="margin-top:8px;color:var(--red)">${esc(d.error)}</div>`; return; }
@@ -897,16 +1504,7 @@ function mdToHtml(md) {
   return html;
 }
 
-// 左侧导航：每一项都是主区里的真实页面（不再有"点这里、内容在别处冒出来"）
-const NAV = [
-  ['today', '今日推荐'],
-  ['feed', '全部岗位', 'feed'],
-  ['company', '公司', 'co'],
-  ['tracker', '投递清单', 'track'],
-  ['gaps', '简历缺口'],
-  ['goal', '求职目标设置'],
-  ['tools', '工具箱'],
-];
+// 左侧导航：每一项都是主区里的真实页面（NAV 由 rebuildI18nMaps() 按语言构建）
 const NAV_SEP = { gaps: true, goal: true };  // 分组分隔线
 function renderNav() {
   const c = S.counts || {};
@@ -950,18 +1548,18 @@ function renderScan() {
     const b = document.getElementById(id); if (b) b.disabled = running;
   });
   const btnStop = document.getElementById('btnStop');
-  if (btnStop) { btnStop.disabled = stopping; btnStop.textContent = stopping ? '停止中…' : '停止'; }
+  if (btnStop) { btnStop.disabled = stopping; btnStop.textContent = stopping ? t('scan_stopping_b') : t('btn_stop'); }
   bar.style.display = running ? 'block' : 'none';
   if (running) {
     document.getElementById('progBar').style.width = (sc.total ? 100*sc.done/sc.total : 0) + '%';
-    const eta = sc.eta_min != null ? (sc.eta_min > 90 ? `剩约 ${(sc.eta_min/60).toFixed(1)} 小时` : `剩约 ${sc.eta_min} 分钟`) : '';
-    const modeTxt = { known: '刷新最新岗位', pending: '全量清查', curated: '精选扫描', all: '全部扫描', deep: '深度补扫' }[sc.mode] || '扫描';
+    const eta = sc.eta_min != null ? (sc.eta_min > 90 ? t('eta_hours', { h: (sc.eta_min/60).toFixed(1) }) : t('eta_mins', { m: sc.eta_min })) : '';
+    const modeTxt = t('scan_mode_' + sc.mode) !== 'scan_mode_' + sc.mode ? t('scan_mode_' + sc.mode) : t('scan_mode_default');
     const pausedLeft = sc.paused_until ? Math.max(0, Math.round((sc.paused_until*1000 - Date.now())/60000)) : 0;
     document.getElementById('scanTxt').textContent = stopping
-      ? `⏹️ 正在停止${modeTxt}…（等在飞的任务收尾，最多几秒；进度已保存）`
+      ? t('scan_txt_stopping', { mode: modeTxt })
       : pausedLeft > 0
-      ? `${modeTxt} · ⏸️ 触发对方限流，冷却中，约 ${pausedLeft} 分钟后自动继续（已扫 ${sc.done.toLocaleString()}/${sc.total.toLocaleString()}，进度已缓存）`
-      : `${modeTxt}中 ${sc.done.toLocaleString()}/${sc.total.toLocaleString()} · 新发现岗位 ${sc.new_jobs} · ${eta}（进度实时缓存，停止不丢）`;
+      ? t('scan_txt_paused', { mode: modeTxt, min: pausedLeft, done: sc.done.toLocaleString(), total: sc.total.toLocaleString() })
+      : t('scan_txt_running', { mode: modeTxt, done: sc.done.toLocaleString(), total: sc.total.toLocaleString(), new: sc.new_jobs, eta });
     // 停止中加快轮询，让进度条尽快消失；否则用常规间隔
     const interval = stopping ? 800 : 2500;
     if (pollTimer && window._pollInterval !== interval) { clearInterval(pollTimer); pollTimer = null; }
@@ -985,22 +1583,21 @@ function toggleT(el) {
   render();
 }
 
-// 当前生效的"缩小范围"筛选，给空结果时提示用（不含排序/布局这类展示项）
-const T_LABELS = { llm: 'LLM 相关', new: '新上架', long: '上架较久', curated: '精选公司',
-                   titleonly: '仅标题命中', derisk: '排除签证风险', unseen: '未看过', ontarget: '只看对口' };
+// 当前生效的"缩小范围"筛选，给空结果时提示用（不含排序/布局这类展示项；T_LABELS 见 rebuildI18nMaps）
 function activeFilterLabels() {
   const L = [];
-  const rg = { uk: '英国', europe: '欧洲', china: '中国', remote: '远程', unknown: '地点未知' }[F.region];
-  if (rg) L.push('地区：' + rg);
-  if (F.visa === 'yes') L.push('签证：JD 明确担保');
-  if (F.minscore > 0) L.push('匹配分 ≥ ' + F.minscore);
-  if (F.tier !== 'all' && F.tier !== 'hidden') L.push('分层：' + (TIER_META[F.tier] ? TIER_META[F.tier][0] : F.tier));
-  if (F.level !== 'all') L.push('级别：' + ((S.consts && S.consts.level_labels[F.level]) || F.level));
-  if (F.csize !== 'all') L.push('规模：' + F.csize);
-  if (F.years !== 'all') L.push('经验年限筛选');
+  const rg = { uk: t('region_uk'), europe: t('region_europe'), china: t('region_china'),
+              remote: t('region_remote'), unknown: t('region_unknown') }[F.region];
+  if (rg) L.push(t('fl_region', { v: rg }));
+  if (F.visa === 'yes') L.push(t('fl_visa_yes'));
+  if (F.minscore > 0) L.push(t('fl_minscore', { n: F.minscore }));
+  if (F.tier !== 'all' && F.tier !== 'hidden') L.push(t('fl_tier', { v: TIER_META[F.tier] ? TIER_META[F.tier][0] : F.tier }));
+  if (F.level !== 'all') L.push(t('fl_level', { v: levelLabel(F.level) }));
+  if (F.csize !== 'all') L.push(t('fl_csize', { v: F.csize }));
+  if (F.years !== 'all') L.push(t('fl_years'));
   for (const k in T) if (T[k] && T_LABELS[k]) L.push(T_LABELS[k]);
   const q = (document.getElementById('search') || {}).value;
-  if (q) L.push('搜索：' + q);
+  if (q) L.push(t('fl_search', { q }));
   return L;
 }
 // 一键清除所有缩小范围的筛选（排序/布局保留），把卡在空列表的状态解开
@@ -1062,15 +1659,8 @@ function passJob(j, q) {
   }
   return true;
 }
-// 推荐分层分区（🔥 推荐优先视图用）
+// 推荐分层分区（🔥 推荐优先视图用；TIER_META 见 rebuildI18nMaps）
 const TIER_SEQ = ['strong', 'maybe', 'lowconf', 'weak', 'risk'];
-const TIER_META = {
-  strong:  ['推荐投',      '方向对口 · 匹配高 · 无签证/许可风险'],
-  maybe:   ['谨慎投',      '方向对口但匹配中等，或信息略缺'],
-  lowconf: ['需人工确认',  '没抓到完整 JD、仅按标题估分——打开原岗位确认地点/签证/要求'],
-  weak:    ['不建议投',    '技能重合低，或岗位方向不对口'],
-  risk:    ['有风险',      'JD 明确不担保，或要求安全许可/英国国籍'],
-};
 const TIER_CLASS = { strong: 'th-strong', maybe: 'th-maybe', lowconf: 'th-lowconf',
                      weak: 'th-weak', risk: 'th-risk' };
 // 单个岗位卡片（分区视图与平铺视图共用）
@@ -1084,93 +1674,88 @@ function jobCard(j, inHidden) {
             ${jobBadges(j)}
           </div>
           <div class="l2">
-            <span class="co">${esc(j.company)}${j.curated ? '<span class="badge lvl" style="margin-left:6px">精选</span>' : ''}</span>
+            <span class="co">${esc(j.company)}${j.curated ? `<span class="badge lvl" style="margin-left:6px">${t('badge_curated_s')}</span>` : ''}</span>
             <span class="dot">·</span>
             <span>${esc(j.location)}</span>
             ${daysTxt(j) ? `<span class="dot">·</span><span class="num">${daysTxt(j)}</span>` : ''}
             <span style="margin-left:auto"></span>
             ${inHidden
-              ? `<button class="starbtn" title="从已隐藏中恢复" onclick="hideJob('${esc(j.url)}', false)">↩ 恢复</button>`
-              : `${starBtn(j)}<button class="starbtn" title="隐藏这个岗位（可在分层筛选「已隐藏」里找回）" onclick="hideJob('${esc(j.url)}', true)">隐藏</button>`}
-            <span class="expander" style="margin-left:0">详情 →</span>
+              ? `<button class="starbtn" title="${t('row_restore_tip')}" onclick="hideJob('${esc(j.url)}', false)">${t('row_restore')}</button>`
+              : `${starBtn(j)}<button class="starbtn" title="${t('row_hide_tip')}" onclick="hideJob('${esc(j.url)}', true)">${t('row_hide')}</button>`}
+            <span class="expander" style="margin-left:0">${t('row_detail')}</span>
           </div>
         </div>
       </div>`;
 }
 // 匹配度色块：岗位行左侧，一眼可见
 function scoreBlock(j) {
-  if (j.score == null) return `<div class="scorebox none">–<small>待算</small></div>`;
+  if (j.score == null) return `<div class="scorebox none">–<small>${t('score_pending')}</small></div>`;
   const cls = j.score >= 60 ? 'hi' : j.score >= 35 ? 'md' : 'lo';
-  const lbl = j.title_match === 'off_target' ? '技能相似' : '技能匹配';
-  return `<div class="scorebox ${cls}" title="这是简历技能重合度，不代表岗位方向对口">${j.score}<small>${lbl}</small></div>`;
+  const lbl = j.title_match === 'off_target' ? t('score_lbl_sim') : t('score_lbl_match');
+  return `<div class="scorebox ${cls}" title="${t('score_box_tip')}">${j.score}<small>${lbl}</small></div>`;
 }
 function scoreMini(j) {
   if (j.score == null) return '';
   const cls = j.score >= 60 ? 'hi' : j.score >= 35 ? 'md' : 'lo';
-  return `<span class="badge score ${cls}">匹配 ${j.score}%</span>`;
+  return `<span class="badge score ${cls}">${t('score_mini', { n: j.score })}</span>`;
 }
 // 行内只放最关键的徽章（级别 / 地区 / NEW / LLM / ⚠️警告），次要信息移到展开详情里
 function jobBadges(j) {
   const d = jobDays(j);
   let h = '';
   // 只留决策关键：方向 · 签证 · 风险 · 地区 · NEW（级别/规模/LLM 移到详情抽屉）
-  if (j.title_match === 'off_target') h += `<span class="badge fwarn" title="标题不像目标岗位（可能只是技能重合），已不计入推荐">方向存疑</span>`;
-  else if (j.title_match === 'acceptable') h += `<span class="badge lvl" title="你能接受的相邻岗位方向">可接受</span>`;
+  if (j.title_match === 'off_target') h += `<span class="badge fwarn" title="${t('badge_dir_off_tip')}">${t('badge_dir_off')}</span>`;
+  else if (j.title_match === 'acceptable') h += `<span class="badge lvl" title="${t('badge_dir_accept_tip')}">${t('badge_dir_accept')}</span>`;
   h += visaBadge(j);
   if (j.region === 'europe') h += `<span class="badge eu">${esc(j.country || 'Europe')}</span>`;
-  if (j.region === 'china') h += `<span class="badge cn">中国</span>`;
-  if (j.region === 'unknown') h += `<span class="badge lvl" title="招聘页没写工作地点，投递前先到 JD 里确认">未知地点</span>`;
+  if (j.region === 'china') h += `<span class="badge cn">${t('badge_china')}</span>`;
+  if (j.region === 'unknown') h += `<span class="badge lvl" title="${t('badge_unknown_loc_tip')}">${t('badge_unknown_loc')}</span>`;
   const _mine = S.exp_years ?? 99;
-  if (j.req_years && j.req_years > _mine) h += `<span class="badge fwarn" title="JD 要求年限高于你填写的">要求 ${j.req_years}+ 年</span>`;
+  if (j.req_years && j.req_years > _mine) h += `<span class="badge fwarn" title="${t('badge_req_years_tip')}">${t('badge_req_years', { n: j.req_years })}</span>`;
   if (d != null && d <= S.consts.new_days) h += `<span class="badge new">NEW</span>`;
   if (j.source === 'HackerNews')
-    h += `<span class="badge hn" title="来自 Hacker News「Who is hiring」每月招聘帖，点标题看原帖/申请方式">🗞 HN 招聘帖${j.mentions_visa ? ' · 提到签证' : ''}</span>`;
+    h += `<span class="badge hn" title="${t('badge_hn_tip')}">${t('badge_hn')}${j.mentions_visa ? t('badge_hn_visa') : ''}</span>`;
   if (j.via === 'agg' && !j.sponsor && j.source !== 'HackerNews')
-    h += `<span class="badge fwarn" title="公司不在工签 sponsor 名单里，投前请自行确认能否担保">非名单公司</span>`;
+    h += `<span class="badge fwarn" title="${t('badge_nonlist_tip')}">${t('badge_nonlist')}</span>`;
   (j.flags || []).filter(f => f.lv !== 'good' && !/年经验/.test(f.t)).forEach(f => {
-    h += `<span class="badge fwarn">${esc(f.t)}</span>`;
+    h += `<span class="badge fwarn">${esc(flagT(f.t))}</span>`;
   });
   return h;
 }
-// 签证徽章：公司在名单 ≠ 这个岗位一定担保
-const VISA_META = { yes: ['可担保', 'fgood'], register: ['名单内·待确认', 'lvl'],
-                    uncertain: ['担保未知', 'lvl'], no: ['不担保', 'fwarn'] };
+// 签证徽章：公司在名单 ≠ 这个岗位一定担保（VISA_META 见 rebuildI18nMaps）
 function visaBadge(j) {
   const m = VISA_META[j.visa];
-  return m ? `<span class="badge ${m[1]}" title="签证确定性：公司在 sponsor 名单 ≠ 这个岗位一定担保，JD 明确写了才确定">${m[0]}</span>` : '';
+  return m ? `<span class="badge ${m[1]}" title="${t('visa_b_tip')}">${m[0]}</span>` : '';
 }
 // 次要徽章：展开详情时才显示
 function extraBadges(j) {
   const d = jobDays(j);
   let h = '';
-  if (j.level) h += `<span class="badge lvl">${esc(S.consts.level_labels[j.level] || j.level)}</span>`;
-  if (j.title_match === 'target') h += `<span class="badge fgood">目标岗位</span>`;
-  if (j.csize && j.csize !== 'unknown') h += `<span class="badge lvl" title="公司员工规模（大模型估）">${esc((S.consts.size_labels || {})[j.csize] || j.csize)}</span>`;
-  if (j.njobs) h += `<span class="badge lvl" title="该公司招聘页在招岗位总数">公司在招 ${j.njobs}</span>`;
-  if (j.llm) h += `<span class="badge llm">LLM 相关</span>`;
-  if (d != null && d >= S.consts.long_days) h += `<span class="badge long">长期在招 ${d} 天</span>`;
-  if (j.via === 'jd') h += `<span class="badge viajd" title="标题没写 AI，是 JD 正文命中才召回的">正文命中</span>`;
-  if (j.source) h += `<span class="badge src" title="来自聚合平台搜索">${esc(j.source)}</span>`;
-  if (j.via === 'agg' && j.sponsor) h += `<span class="badge fgood" title="公司在官方工签 sponsor 名单里">担保名单</span>`;
+  if (j.level) h += `<span class="badge lvl">${esc(levelLabel(j.level))}</span>`;
+  if (j.title_match === 'target') h += `<span class="badge fgood">${t('badge_target')}</span>`;
+  if (j.csize && j.csize !== 'unknown') h += `<span class="badge lvl" title="${t('badge_csize_tip')}">${esc((S.consts.size_labels || {})[j.csize] || j.csize)}</span>`;
+  if (j.njobs) h += `<span class="badge lvl" title="${t('badge_njobs_tip')}">${t('badge_njobs', { n: j.njobs })}</span>`;
+  if (j.llm) h += `<span class="badge llm">${t('badge_llm')}</span>`;
+  if (d != null && d >= S.consts.long_days) h += `<span class="badge long">${t('badge_long', { n: d })}</span>`;
+  if (j.via === 'jd') h += `<span class="badge viajd" title="${t('badge_viajd_tip')}">${t('badge_viajd')}</span>`;
+  if (j.source) h += `<span class="badge src" title="${t('badge_src_tip')}">${esc(j.source)}</span>`;
+  if (j.via === 'agg' && j.sponsor) h += `<span class="badge fgood" title="${t('badge_sponsor_tip')}">${t('badge_sponsor')}</span>`;
   (j.flags || []).filter(f => f.lv === 'good').forEach(f => {
-    h += `<span class="badge fgood">${esc(f.t)}</span>`;
+    h += `<span class="badge fgood">${esc(flagT(f.t))}</span>`;
   });
   return h;
 }
 function daysTxt(j) {
   const d = jobDays(j);
   if (d == null) return '';
-  return d === 0 ? '今天发现' : `上架 ${d} 天`;
+  return d === 0 ? t('days_today') : t('days_listed', { n: d });
 }
 function toggleMatch(url) {
   expanded.has(url) ? expanded.delete(url) : expanded.add(url);
   markSeen(url);
   render();
 }
-// 匹配分置信度：分数一样时先信"高"（抓到完整 JD 算的）
-const CONF_LABELS = { high: ['高置信', '抓到完整 JD，技能/年限都解析过'],
-                      mid:  ['中置信', 'JD 较短，分数仅供参考'],
-                      low:  ['低置信', '没抓到 JD，仅按标题估分'] };
+// 匹配分置信度：分数一样时先信"高"（CONF_LABELS 见 rebuildI18nMaps）
 function confBadge(j) {
   if (!j.conf || j.score == null) return '';
   const [l, tip] = CONF_LABELS[j.conf] || ['', ''];
@@ -1179,32 +1764,31 @@ function confBadge(j) {
 }
 // 为什么推荐这个岗位：标题命中了哪些关键词 + 简历重合 + 风险，一眼看懂
 function whyBlock(j) {
-  const t = (j.title || '').toLowerCase();
+  const tl = (j.title || '').toLowerCase();
   const thits = (S.keywords || []).filter(k =>
-    new RegExp('\\b' + k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(t));
+    new RegExp('\\b' + k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(tl));
   const parts = [];
-  if (thits.length) parts.push(`标题命中 <b>${esc(thits.join('、'))}</b>`);
-  else if (j.via === 'jd') parts.push('标题没写关键词，是 <b>JD 正文</b>多次提及才召回的');
-  else if (j.via === 'agg') parts.push('来自聚合平台关键词搜索');
-  if ((j.hit || []).length) parts.push(`简历重合 <b>${esc(j.hit.slice(0, 6).join('、'))}</b>${j.hit.length > 6 ? ' 等' : ''}`);
-  const risks = (j.flags || []).filter(f => f.lv === 'warn').map(f => f.t);
-  if (risks.length) parts.push(`<span style="color:var(--warn,#b98900)">风险：${esc(risks.join('；'))}</span>`);
+  if (thits.length) parts.push(t('why_title_hit', { kw: esc(thits.join('、')) }));
+  else if (j.via === 'jd') parts.push(t('why_via_jd'));
+  else if (j.via === 'agg') parts.push(t('why_via_agg'));
+  if ((j.hit || []).length) parts.push(t('why_resume_overlap', { kw: esc(j.hit.slice(0, 6).join('、')) }) + (j.hit.length > 6 ? t('why_etc') : ''));
+  const risks = (j.flags || []).filter(f => f.lv === 'warn').map(f => flagT(f.t));
+  if (risks.length) parts.push(`<span style="color:var(--warn,#b98900)">${t('why_risk', { risks: esc(risks.join('；')) })}</span>`);
   if (!parts.length) return '';
-  return `<div class="mrow"><span class="mlabel">为什么推荐：</span><span>${parts.join('　·　')}</span></div>`;
+  return `<div class="mrow"><span class="mlabel">${t('why_label')}</span><span>${parts.join('　·　')}</span></div>`;
 }
 function matchDetail(j) { return expanded.has(j.url) ? matchBody(j) : ''; }
 function matchBody(j) {
   if (!S.resume) {
     return `<div class="matchbox">
-      <div class="mrow">还没上传简历。上传后展开岗位就能看到：你和这个岗位的<b>匹配细节</b>、缺哪些技能，
-      并能一键生成<b>专属这个岗位</b>的简历修改建议。</div>
-      <button class="mini" onclick="document.getElementById('resumeFile').click()">📄 上传简历</button>
+      <div class="mrow">${t('match_no_resume')}</div>
+      <button class="mini" onclick="document.getElementById('resumeFile').click()">${t('match_upload')}</button>
     </div>`;
   }
   if (j.score == null) {
     return `<div class="matchbox">
-      <div class="mrow">这个岗位还没算匹配度（新抓到的岗位需要重算一次）。</div>
-      <button class="mini" onclick="runMatch()">🎯 现在计算匹配度</button>
+      <div class="mrow">${t('match_not_scored')}</div>
+      <button class="mini" onclick="runMatch()">${t('match_calc_now')}</button>
     </div>`;
   }
   const hits = (j.hit || []).map(k => `<span class="kw hit">✓ ${esc(k)}</span>`).join('');
@@ -1215,26 +1799,26 @@ function matchBody(j) {
   <div class="matchbox">
     ${whyBlock(j)}
     ${extras ? `<div class="mrow">${extras}</div>` : ''}
-    ${hits ? `<div class="mrow"><span class="mlabel">简历已覆盖：</span>${hits}</div>` : ''}
-    ${mmiss ? `<div class="mrow"><span class="mlabel">必需项缺失（优先补）：</span>${mmiss}</div>` : ''}
-    ${nmiss ? `<div class="mrow"><span class="mlabel">加分项缺失：</span>${nmiss}</div>` : ''}
+    ${hits ? `<div class="mrow"><span class="mlabel">${t('match_covered')}</span>${hits}</div>` : ''}
+    ${mmiss ? `<div class="mrow"><span class="mlabel">${t('match_must_miss')}</span>${mmiss}</div>` : ''}
+    ${nmiss ? `<div class="mrow"><span class="mlabel">${t('match_nice_miss')}</span>${nmiss}</div>` : ''}
     <div class="mrow" style="margin-top:8px">
       ${S.has_llm
-        ? `<button onclick="genJobAdvice('${esc(j.url)}')" ${jobAdviceBusy.has(j.url) ? 'disabled' : ''}>✍️ 生成这个岗位的简历修改建议</button>`
-        : `<button disabled title="在 data/api_keys.json 填 openai_api_key（ChatGPT）或 anthropic_api_key（Claude）后可用">✍️ 生成简历修改建议（需先配 ChatGPT/Claude key）</button>`}
+        ? `<button onclick="genJobAdvice('${esc(j.url)}')" ${jobAdviceBusy.has(j.url) ? 'disabled' : ''}>${t('match_gen_advice')}</button>`
+        : `<button disabled title="${t('match_gen_advice_dis_tip')}">${t('match_gen_advice_dis')}</button>`}
       ${S.has_llm
-        ? `<button class="ghost" onclick="genOutreach('${esc(j.url)}')" ${outreachBusy.has(j.url) ? 'disabled' : ''}>💬 生成 networking 搭话草稿</button>` : ''}
-      <button class="mini ghost" onclick="copyPrompt('${esc(j.url)}')">📋 复制 Prompt（贴给别处的 AI 助手）</button>
-      <a class="btn ghost mini" style="padding:5px 14px;font-size:12.5px;border-radius:9px" href="${esc(j.url)}" target="_blank">↗ 打开岗位/申请页</a>
+        ? `<button class="ghost" onclick="genOutreach('${esc(j.url)}')" ${outreachBusy.has(j.url) ? 'disabled' : ''}>${t('match_gen_outreach')}</button>` : ''}
+      <button class="mini ghost" onclick="copyPrompt('${esc(j.url)}')">${t('match_copy_prompt')}</button>
+      <a class="btn ghost mini" style="padding:5px 14px;font-size:12.5px;border-radius:9px" href="${esc(j.url)}" target="_blank">${t('match_open_job')}</a>
       ${netLinks(j)}
     </div>
     ${jobAdviceBusy.has(j.url)
-      ? `<div class="info" style="margin-top:8px">⏳ 正在针对这个岗位生成简历修改建议（约需十几秒，别关页面）…</div>`
+      ? `<div class="info" style="margin-top:8px">${t('match_advice_busy')}</div>`
       : (jobAdvice[j.url] ? `<div class="advice">${mdToHtml(jobAdvice[j.url])}</div>` : '')}
     ${outreachBusy.has(j.url)
-      ? `<div class="info" style="margin-top:8px">⏳ 正在生成个性化搭话草稿（LinkedIn 附言 / 私信 / 冷邮件）…</div>`
-      : (jobOutreach[j.url] ? `<div class="advice"><b>💬 Networking 搭话草稿</b>（发送前自己读一遍、改成你的口气）
-          <button class="mini ghost" style="margin-left:8px" onclick="copyOutreach('${esc(j.url)}')">📋 复制全部</button>
+      ? `<div class="info" style="margin-top:8px">${t('match_outreach_busy')}</div>`
+      : (jobOutreach[j.url] ? `<div class="advice"><b>${t('outreach_head')}</b>${t('outreach_head_note')}
+          <button class="mini ghost" style="margin-left:8px" onclick="copyOutreach('${esc(j.url)}')">${t('outreach_copy_all')}</button>
           ${mdToHtml(jobOutreach[j.url])}</div>` : '')}
   </div>`;
 }
@@ -1243,8 +1827,8 @@ function netLinks(j) {
   const r = (S.results || {})[j.company];
   const L = r && r.links;
   if (!L) return '';
-  return `<a class="btn ghost mini" style="padding:5px 14px;font-size:12.5px;border-radius:9px" href="${esc(L.li_people)}" target="_blank">👤 LinkedIn 找招聘官</a>
-    <a class="btn ghost mini" style="padding:5px 14px;font-size:12.5px;border-radius:9px" href="${esc(L.hunter)}" target="_blank">📧 查邮箱</a>`;
+  return `<a class="btn ghost mini" style="padding:5px 14px;font-size:12.5px;border-radius:9px" href="${esc(L.li_people)}" target="_blank">${t('net_li_people')}</a>
+    <a class="btn ghost mini" style="padding:5px 14px;font-size:12.5px;border-radius:9px" href="${esc(L.hunter)}" target="_blank">${t('net_hunter')}</a>`;
 }
 // 点击岗位行任意空白处 → 右侧详情抽屉；点链接、按钮、下拉框不触发
 function rowClick(ev, url) {
@@ -1256,9 +1840,9 @@ function rowClick(ev, url) {
 let drawerUrl = null;
 function jobByUrl(url) {
   return (S.feed || []).find(x => x.url === url)
-      || (() => { const t = (S.tracker || {})[url];
-                  return t ? { url, title: t.title || url, company: t.company || '',
-                               location: t.location || '' } : null; })();
+      || (() => { const tr = (S.tracker || {})[url];
+                  return tr ? { url, title: tr.title || url, company: tr.company || '',
+                               location: tr.location || '' } : null; })();
 }
 function openDrawer(url) {
   drawerUrl = url;
@@ -1278,18 +1862,18 @@ function renderDrawer() {
   if (!drawerUrl) return;
   const j = jobByUrl(drawerUrl);
   const body = document.getElementById('drawerBody');
-  if (!j) { body.innerHTML = '<div class="mrow">岗位信息已不在当前列表。</div>'; return; }
-  const dirLabel = { target: '目标岗位', acceptable: '可接受岗位', off_target: '方向存疑' }[j.title_match] || '';
+  if (!j) { body.innerHTML = `<div class="mrow">${t('drawer_gone')}</div>`; return; }
+  const dirLabel = { target: t('dir_target'), acceptable: t('dir_acceptable'), off_target: t('dir_off') }[j.title_match] || '';
   const dirCls = j.title_match === 'target' ? 'fgood' : j.title_match === 'off_target' ? 'fwarn' : 'lvl';
   const tierLabel = (TIER_META[j.tier] || [''])[0];
   body.innerHTML = `
     <div class="drawer-title"><a href="${esc(j.url)}" target="_blank">${esc(j.title)}</a></div>
-    <div class="drawer-sub">${esc(j.company)} · ${esc(j.location || (j.region === 'unknown' ? '未知地点' : ''))}
+    <div class="drawer-sub">${esc(j.company)} · ${esc(j.location || (j.region === 'unknown' ? t('badge_unknown_loc') : ''))}
       ${daysTxt(j) ? ' · ' + daysTxt(j) : ''}</div>
     <div class="drawer-chips">
       ${tierLabel ? `<span class="badge ${dirCls}">${tierLabel}</span>` : ''}
       ${dirLabel ? `<span class="badge ${dirCls}">${dirLabel}</span>` : ''}
-      ${j.score != null ? `<span class="badge lvl">${j.title_match === 'off_target' ? '技能相似' : '技能匹配'} ${j.score}%</span>` : ''}
+      ${j.score != null ? `<span class="badge lvl">${j.title_match === 'off_target' ? t('score_lbl_sim') : t('score_lbl_match')} ${j.score}%</span>` : ''}
       ${confBadge(j)}
     </div>
     ${matchBody(j)}`;
@@ -1335,18 +1919,18 @@ function updateTrackerTab() {
   if (el) el.textContent = n || '';
 }
 function starBtn(j) {
-  const t = (S.tracker || {})[j.url];
-  return t
-    ? `<button class="starbtn on" title="已在投递清单（${ST_LABELS[t.status] || t.status}）——点击移出" onclick="trackJob('${esc(j.url)}', 'remove')">★ 已收藏</button>`
-    : `<button class="starbtn" title="加入投递清单" onclick="trackJob('${esc(j.url)}', 'saved')">☆ 收藏</button>`;
+  const tr = (S.tracker || {})[j.url];
+  return tr
+    ? `<button class="starbtn on" title="${t('star_on_tip', { status: ST_LABELS[tr.status] || tr.status })}" onclick="trackJob('${esc(j.url)}', 'remove')">${t('star_on')}</button>`
+    : `<button class="starbtn" title="${t('star_off_tip')}" onclick="trackJob('${esc(j.url)}', 'saved')">${t('star_off')}</button>`;
 }
 function statusSel(j) {
-  const t = (S.tracker || {})[j.url];
-  if (!t) return '';
+  const tr = (S.tracker || {})[j.url];
+  if (!tr) return '';
   const opts = Object.entries(ST_LABELS).map(([v, l]) =>
-    `<option value="${v}" ${t.status === v ? 'selected' : ''}>${l}</option>`).join('');
-  return `<select class="stsel st_${esc(t.status)}" onchange="trackJob('${esc(j.url)}', this.value)">
-    ${opts}<option value="remove">🗑 移出清单</option></select>`;
+    `<option value="${v}" ${tr.status === v ? 'selected' : ''}>${l}</option>`).join('');
+  return `<select class="stsel st_${esc(tr.status)}" onchange="trackJob('${esc(j.url)}', this.value)">
+    ${opts}<option value="remove">${t('track_remove')}</option></select>`;
 }
 
 // ---------------- networking 搭话草稿 ----------------
@@ -1356,9 +1940,9 @@ async function genOutreach(url) {
     const r = await fetch('/api/outreach', { method: 'POST',
       headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
     const d = await r.json();
-    jobOutreach[url] = d.error ? `**出错了：** ${d.error}` : (d.draft || '（无内容）');
+    jobOutreach[url] = d.error ? t('outreach_err', { e: d.error }) : (d.draft || t('outreach_empty'));
   } catch (e) {
-    jobOutreach[url] = `**出错了：** ${e}`;
+    jobOutreach[url] = t('outreach_err', { e });
   } finally {
     outreachBusy.delete(url); render();
   }
@@ -1366,7 +1950,7 @@ async function genOutreach(url) {
 async function copyOutreach(url) {
   const md = jobOutreach[url];
   if (!md) return;
-  try { await navigator.clipboard.writeText(md); alert('草稿已复制！挑对应段落粘贴即可。'); }
+  try { await navigator.clipboard.writeText(md); alert(t('outreach_copied')); }
   catch (e) { prompt_fallback(md); }
 }
 async function genJobAdvice(url) {
@@ -1375,9 +1959,9 @@ async function genJobAdvice(url) {
     const r = await fetch('/api/job_advice', { method: 'POST',
       headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
     const d = await r.json();
-    jobAdvice[url] = d.error ? `**出错了：** ${d.error}` : (d.advice || '（无内容）');
+    jobAdvice[url] = d.error ? t('outreach_err', { e: d.error }) : (d.advice || t('advice_empty'));
   } catch (e) {
-    jobAdvice[url] = `**出错了：** ${e}`;
+    jobAdvice[url] = t('outreach_err', { e });
   } finally {
     jobAdviceBusy.delete(url); render();
   }
@@ -1385,27 +1969,18 @@ async function genJobAdvice(url) {
 async function copyPrompt(url) {
   const j = (S.feed || []).find(x => x.url === url);
   if (!j) return;
-  const flagsTxt = (j.flags || []).map(f => f.t).join('；');
-  const prompt = `请帮我针对下面这个岗位优化简历，让它更容易通过 ATS 筛选和打动招聘官。
-
-【目标岗位】${j.title} — ${j.company}（${j.location}）
-【岗位链接】${j.url}
-【JD 要求的技能中我简历已覆盖】${(j.hit || []).join(', ') || '（无）'}
-【JD 必需但我简历缺失（优先处理）】${(j.must_miss || []).join(', ') || '（无）'}
-【JD 加分项但我简历缺失】${(j.nice_miss || []).join(', ') || '（无）'}
-${flagsTxt ? `【注意事项】${flagsTxt}` : ''}
-
-要求：
-1. 如果缺失的技能我实际具备，请告诉我该把它加到哪一段、怎么写最自然；
-2. 重写我简历中最相关的 2-3 条工作/项目经历，向这个岗位的要求靠拢，量化成果；
-3. 用词贴合 JD 原文关键词（利于 ATS），但不要堆砌；
-4. 最后给一段 3 句话的针对这家公司的开场白（cover letter 开头）。
-
-我的简历如下：
-${(S.resume && S.resume.text) || ''}`;
+  const flagsTxt = (j.flags || []).map(f => flagT(f.t)).join(LANG === 'zh' ? '；' : '; ');
+  const none = t('prompt_none');
+  const prompt = t('prompt_body', {
+    title: j.title, company: j.company, location: j.location, url: j.url,
+    hit: (j.hit || []).join(', ') || none,
+    must: (j.must_miss || []).join(', ') || none,
+    nice: (j.nice_miss || []).join(', ') || none,
+    flags: flagsTxt ? t('prompt_flags', { flags: flagsTxt }) + '\n' : '',
+    resume: (S.resume && S.resume.text) || '' });
   try {
     await navigator.clipboard.writeText(prompt);
-    alert('优化 Prompt 已复制！粘贴给 AI 助手（ChatGPT / Claude 等）即可。');
+    alert(t('prompt_copied'));
   } catch (e) {
     prompt_fallback(prompt);
   }
@@ -1414,15 +1989,14 @@ function prompt_fallback(text) {
   const ta = document.createElement('textarea');
   ta.value = text; document.body.appendChild(ta); ta.select();
   document.execCommand('copy'); ta.remove();
-  alert('优化 Prompt 已复制！');
+  alert(t('prompt_copied2'));
 }
 
 function cnDirectory() {
   return `
   <div class="cnbox">
-    <h3>🇨🇳 中国大厂 AI 岗位直达</h3>
-    <div class="note">国内大厂都用自研招聘系统，没有公开接口可自动抓取——以下是各家 AI/大模型岗位搜索页直达链接。
-    它们的英国实体（TikTok 伦敦、华为英研所等）已在上方自动扫描范围内。</div>
+    <h3>${t('cn_title')}</h3>
+    <div class="note">${t('cn_note')}</div>
     <div class="cngrid">
       ${CN_BIGTECH.map(([n, u]) => `<a href="${u}" target="_blank">${n} ↗</a>`).join('')}
     </div>
@@ -1432,23 +2006,23 @@ function cnDirectory() {
 // 新手 3 步开始卡（今日推荐没数据时显示）
 function onboardCard() {
   return `<div class="today-summary">
-    <h2>开始使用 · 三步</h2>
-    <div class="sub">帮你在英国找工签雇主里方向对口的岗位：去哪找、哪些先看、简历差在哪。</div>
+    <h2>${t('onboard_title')}</h2>
+    <div class="sub">${t('onboard_sub')}</div>
     <ol class="onboard">
-      <li><b>建立岗位库</b>：首次点下面「首次建立岗位库」跑一遍（约 1–2 小时，摸出有招聘系统的工签雇主）；之后日常只需「扫描岗位」。</li>
-      <li><b>上传简历</b>：自动给每个岗位算技能匹配分。</li>
-      <li><b>看今日推荐</b>：按「方向对口 + 签证 + 匹配」综合排序，点岗位在右侧看详情、一键生成简历建议。</li>
+      <li>${t('onboard_1')}</li>
+      <li>${t('onboard_2')}</li>
+      <li>${t('onboard_3')}</li>
     </ol>
     <div class="today-acts">
-      <button onclick="scan('pending')">首次建立岗位库</button>
-      <button class="ghost" onclick="scan('known')">扫描岗位</button>
-      <button class="ghost" onclick="document.getElementById('resumeFile').click()">上传简历</button>
+      <button onclick="scan('pending')">${t('onboard_build')}</button>
+      <button class="ghost" onclick="scan('known')">${t('onboard_scan')}</button>
+      <button class="ghost" onclick="document.getElementById('resumeFile').click()">${t('onboard_upload')}</button>
     </div></div>`;
 }
 function resumeNudge() {
   return `<div class="today-summary nudge">
-    <div class="sub">还没上传简历——上传后才能算技能匹配、按匹配度排序。
-      <button class="mini" style="margin-left:8px" onclick="document.getElementById('resumeFile').click()">上传简历</button></div>
+    <div class="sub">${t('nudge_resume')}
+      <button class="mini" style="margin-left:8px" onclick="document.getElementById('resumeFile').click()">${t('resume_upload_btn')}</button></div>
   </div>`;
 }
 
@@ -1471,9 +2045,9 @@ function render() {
       const labels = activeFilterLabels();
       if ((S.feed || []).length && labels.length) {
         list.innerHTML = `<div class="empty"><div class="big">🔍</div>
-          <p>库里有 <b>${((S.counts || {}).ai_jobs || 0).toLocaleString()}</b> 个岗位，但都被你当前的筛选挡住了。</p>
-          <div class="emptyfilters">当前筛选：${labels.map(l => `<span class="ftag">${esc(l)}</span>`).join('')}</div>
-          <button onclick="resetFilters()">✕ 清除所有筛选，显示全部岗位</button></div>`;
+          <p>${t('filt_blocked_p', { n: ((S.counts || {}).ai_jobs || 0).toLocaleString() })}</p>
+          <div class="emptyfilters">${t('filt_current')}${labels.map(l => `<span class="ftag">${esc(l)}</span>`).join('')}</div>
+          <button onclick="resetFilters()">${t('filt_clear_all')}</button></div>`;
         return;
       }
       list.innerHTML = onboardCard();
@@ -1486,23 +2060,23 @@ function render() {
       .filter(t => cnt[t] > 0)   // 零值卡片不渲染：有风险/需人工确认为 0 时隐藏，真出现时才跳出来，避免"0 0"稀释信号
       .map(t => `<div class="tile"><div class="n"><span class="tdot ${TIER_CLASS[t]}"></span>${cnt[t]}</div><div class="l">${TIER_META[t][0]}</div></div>`).join('');
     let html = (S.resume ? '' : resumeNudge()) + `<div class="today-summary">
-      <h2>今天该先看哪些岗位</h2>
-      <div class="sub">按「方向对口 + 技能匹配 + 签证确定性」综合排序，方向不对的（IT Support 等）已自动沉底</div>
+      <h2>${t('today_h2')}</h2>
+      <div class="sub">${t('today_sub')}</div>
       <div class="today-tiles">${tiles}</div>
       <div class="today-acts">
-        <button onclick="scan('known')">扫描岗位</button>
-        <button class="ghost" onclick="setView('goal')">调整求职目标</button>
-        <button class="ghost" onclick="setView('feed')">查看全部岗位 →</button>
+        <button onclick="scan('known')">${t('today_scan')}</button>
+        <button class="ghost" onclick="setView('goal')">${t('today_adjust')}</button>
+        <button class="ghost" onclick="setView('feed')">${t('today_all')}</button>
       </div></div>`;
-    for (const [t, meta] of [['strong', TIER_META.strong], ['maybe', TIER_META.maybe],
+    for (const [tk, meta] of [['strong', TIER_META.strong], ['maybe', TIER_META.maybe],
                              ['lowconf', TIER_META.lowconf], ['risk', TIER_META.risk]]) {
-      const grp = feed.filter(j => j.tier === t).sort(byRank);
+      const grp = feed.filter(j => j.tier === tk).sort(byRank);
       if (!grp.length) continue;
       const shown = grp.slice(0, 6);
-      html += `<div class="tierhead"><span class="tdot ${TIER_CLASS[t]}"></span><b>${meta[0]}</b><span class="tiercount">${grp.length}</span><small>${meta[1]}</small></div>`
+      html += `<div class="tierhead"><span class="tdot ${TIER_CLASS[tk]}"></span><b>${meta[0]}</b><span class="tiercount">${grp.length}</span><small>${meta[1]}</small></div>`
             + shown.map(j => jobCard(j, false)).join('')
             + (grp.length > shown.length
-               ? `<div style="margin:4px 4px 10px"><button class="mini ghost" onclick="F.tier='${t}';document.getElementById('fTier').value='${t}';saveF();setView('feed')">查看全部 ${grp.length} 个${meta[0]} →</button></div>`
+               ? `<div style="margin:4px 4px 10px"><button class="mini ghost" onclick="F.tier='${tk}';document.getElementById('fTier').value='${tk}';saveF();setView('feed')">${t('today_view_tier', { n: grp.length, label: meta[0] })}</button></div>`
                : '');
     }
     list.innerHTML = html;
@@ -1520,8 +2094,8 @@ function render() {
     });
     if (!entries.length) {
       list.innerHTML = `<div class="empty"><div class="big">📌</div>
-        <p>清单还是空的。在岗位列表里点 <b>☆ 收藏</b>，把想投的岗位加进来，<br>然后在这里按状态跟踪：待投 → 已投 → 面试中</p>
-        <button class="ghost" onclick="setView('feed')">← 去挑岗位</button></div>`;
+        <p>${t('track_empty_p')}</p>
+        <button class="ghost" onclick="setView('feed')">${t('track_empty_go')}</button></div>`;
       hint.innerHTML = '';
       return;
     }
@@ -1531,33 +2105,33 @@ function render() {
       (bucket[(s === 'offer' || s === 'rejected') ? 'done' : s] || bucket.saved).push(j);
     });
     const kcard = j => {
-      const dir = { target: '目标岗位', acceptable: '可接受', off_target: '方向存疑' }[j.title_match] || '';
+      const dir = { target: t('dir_target'), acceptable: t('dir_acceptable'), off_target: t('dir_offtarget') }[j.title_match] || '';
       const dcls = j.title_match === 'target' ? 'fgood' : j.title_match === 'off_target' ? 'fwarn' : 'lvl';
       return `<div class="kcard ${drawerUrl === j.url ? 'on' : ''}" onclick="rowClick(event, '${esc(j.url)}')">
         <div class="kc-title"><a href="${esc(j.url)}" target="_blank">${esc(j.title)}</a></div>
         <div class="kc-sub">${esc(j.company)}</div>
         <div class="kc-badges">${dir ? `<span class="badge ${dcls}">${dir}</span>` : ''}
-          ${j.score != null ? `<span class="badge lvl">技能 ${j.score}%</span>` : ''}
-          ${j.gone ? '<span class="badge fwarn">可能已下架</span>' : ''}</div>
+          ${j.score != null ? `<span class="badge lvl">${t('kc_skill', { n: j.score })}</span>` : ''}
+          ${j.gone ? `<span class="badge fwarn">${t('kc_gone')}</span>` : ''}</div>
         <div class="kc-foot">${statusSel(j)}</div>
       </div>`;
     };
-    const cols = [['saved', '待投'], ['applied', '已投'], ['interview', '面试中'], ['done', '结束 / Offer']];
+    const cols = [['saved', t('kb_saved')], ['applied', t('kb_applied')], ['interview', t('kb_interview')], ['done', t('kb_done')]];
     list.innerHTML = `<div class="kanban">${cols.map(([k, label]) => `
       <div class="kcol"><div class="kcol-head">${label}<span class="tiercount">${bucket[k].length}</span></div>
         ${bucket[k].map(kcard).join('') || '<div class="kempty">—</div>'}
       </div>`).join('')}</div>`;
-    hint.innerHTML = '点卡片看详情、生成简历建议；用卡片上的状态下拉把它移到下一列。';
+    hint.innerHTML = t('kanban_hint');
     return;
   }
 
   if (F.view === 'feed') {
     if (!(S.feed || []).length) {
       list.innerHTML = cnBox + `<div class="empty"><div class="big">🛰️</div>
-        <p>还没抓到岗位。点下面的按钮开始扫描<br>
-        <span style="font-size:12.5px;color:var(--faint)">第一次使用：先去左侧「工具箱」点「首次建立岗位库」跑一遍，覆盖全部 12 万家工签雇主</span></p>
-        <button onclick="scan('known')">🔄 扫描新岗位</button>
-        <button class="ghost" onclick="setView('tools')">🧰 打开工具箱</button></div>`;
+        <p>${t('feed_empty_p')}<br>
+        <span style="font-size:12.5px;color:var(--faint)">${t('feed_empty_note')}</span></p>
+        <button onclick="scan('known')">${t('btn_scan_new')}</button>
+        <button class="ghost" onclick="setView('tools')">${t('feed_open_tools')}</button></div>`;
       hint.innerHTML = '';
       return;
     }
@@ -1573,9 +2147,9 @@ function render() {
       const labels = activeFilterLabels();
       if (labels.length) {
         list.innerHTML = `<div class="empty"><div class="big">🔍</div>
-          <p>库里有 <b>${((S.counts || {}).ai_jobs || 0).toLocaleString()}</b> 个岗位，但没有一个同时满足你当前的筛选条件。</p>
-          <div class="emptyfilters">当前筛选：${labels.map(l => `<span class="ftag">${esc(l)}</span>`).join('')}</div>
-          <button onclick="resetFilters()">✕ 清除所有筛选，显示全部岗位</button></div>`;
+          <p>${t('filt_none_p', { n: ((S.counts || {}).ai_jobs || 0).toLocaleString() })}</p>
+          <div class="emptyfilters">${t('filt_current')}${labels.map(l => `<span class="ftag">${esc(l)}</span>`).join('')}</div>
+          <button onclick="resetFilters()">${t('filt_clear_all')}</button></div>`;
         hint.innerHTML = '';
         return;
       }
@@ -1585,20 +2159,20 @@ function render() {
       // 表格视图：一行一个岗位，方便批量比较
       const VISA_ICON = { yes: '✅', register: '🟡', uncertain: '❓', no: '🚫' };
       list.innerHTML = cnBox + `<div class="tblwrap"><table class="jobtable">
-        <tr><th>匹配</th><th>岗位</th><th>公司</th><th>地点</th><th>级别</th><th>签证</th><th>年限</th><th>上架</th><th></th></tr>
+        <tr><th>${t('th_match')}</th><th>${t('th_job')}</th><th>${t('th_company')}</th><th>${t('th_loc')}</th><th>${t('th_level')}</th><th>${t('th_visa')}</th><th>${t('th_years')}</th><th>${t('th_posted')}</th><th></th></tr>
         ${items.slice(0, 500).map(j => `
         <tr>
-          <td class="num">${j.score != null ? j.score + '%' + (j.conf === 'low' ? '<small title="仅按标题估分">❔</small>' : '') : '–'}</td>
+          <td class="num">${j.score != null ? j.score + '%' + (j.conf === 'low' ? `<small title="${t('tbl_title_only')}">❔</small>` : '') : '–'}</td>
           <td><a href="${esc(j.url)}" target="_blank" onclick="markSeen('${esc(j.url)}')">${esc(j.title)}</a>${j.llm ? ' ⭐' : ''}</td>
           <td>${esc(j.company)}</td>
-          <td>${esc(j.location || (j.region === 'unknown' ? '未知' : ''))}</td>
-          <td>${esc(S.consts.level_labels[j.level] || '')}</td>
-          <td title="签证确定性">${VISA_ICON[j.visa] || ''}</td>
+          <td>${esc(j.location || (j.region === 'unknown' ? t('loc_unknown') : ''))}</td>
+          <td>${esc(levelLabel(j.level))}</td>
+          <td title="${t('tbl_visa_title')}">${VISA_ICON[j.visa] || ''}</td>
           <td class="num">${j.req_years ? j.req_years + '+' : ''}</td>
-          <td class="num">${jobDays(j) ?? ''}${jobDays(j) != null ? '天' : ''}</td>
+          <td class="num">${jobDays(j) ?? ''}${jobDays(j) != null ? t('unit_day') : ''}</td>
           <td>${inHidden
-            ? `<button class="mini ghost" onclick="hideJob('${esc(j.url)}', false)">恢复</button>`
-            : `${starBtn(j)}<button class="starbtn" title="隐藏这个岗位" onclick="hideJob('${esc(j.url)}', true)">🚫</button>`}</td>
+            ? `<button class="mini ghost" onclick="hideJob('${esc(j.url)}', false)">${t('btn_restore')}</button>`
+            : `${starBtn(j)}<button class="starbtn" title="${t('hide_job_title')}" onclick="hideJob('${esc(j.url)}', true)">🚫</button>`}</td>
         </tr>`).join('')}
       </table></div>`;
     } else if (F.sort === 'rank' && !inHidden && F.tier === 'all') {
@@ -1619,13 +2193,13 @@ function render() {
     const canMore = (S.feed || []).length >= FEED_LIMIT && total > (S.feed || []).length;
     const nFilters = activeFilterLabels().length;
     hint.innerHTML = (items.length
-      ? (`筛选后共 ${items.length} 条${items.length > 250 && F.layout !== 'table' ? '，已显示前 250 条' : ''}　`)
-      : (inHidden ? '还没有隐藏过岗位。在岗位行点 🚫 可以把不想再看到的岗位收进这里。'
-         : F.region === 'china' ? '扫描到的中国岗位会显示在这里（TikTok、Airbnb 等公司的中国区岗位）；上方是大厂直达链接。'
-         : '没有符合当前筛选的岗位——试试放宽筛选，或点顶部 🔄 刷新最新岗位。'))
+      ? (t('feed_count', { n: items.length }) + (items.length > 250 && F.layout !== 'table' ? t('feed_capped') : '') + '　')
+      : (inHidden ? t('feed_hidden_empty')
+         : F.region === 'china' ? t('feed_china_hint')
+         : t('feed_none_hint')))
       // 只要有筛选生效，就常驻一个一键清除入口——避免"筛太窄看不到岗位又不知怎么复原"
-      + (nFilters ? `<button class="mini ghost" onclick="resetFilters()">✕ 清除筛选（${nFilters}）· 共 ${total.toLocaleString()} 个岗位</button>` : '')
-      + (canMore ? `<button class="mini ghost" onclick="loadMore()">⬇ 加载更多（已取 ${(S.feed || []).length} / 共 ${total} 条）</button>` : '');
+      + (nFilters ? `<button class="mini ghost" onclick="resetFilters()">${t('feed_clear_n', { n: nFilters, total: total.toLocaleString() })}</button>` : '')
+      + (canMore ? `<button class="mini ghost" onclick="loadMore()">${t('feed_load_more', { got: (S.feed || []).length, total })}</button>` : '');
     return;
   }
 
@@ -1654,27 +2228,27 @@ function render() {
         ${scoreMini(j)}
         ${jobBadges(j)}
         <span class="loc">${esc(j.location)} ${daysTxt(j)}</span>
-        <span class="expander">详情 →</span>
+        <span class="expander">${t('row_detail')}</span>
       </div>`).join('');
-    const stTxt = st === 'has_ai' ? `✅ ${r.fjobs.length} 个 AI 岗` : '🟡 暂无 AI 岗（可蹲守）';
+    const stTxt = st === 'has_ai' ? t('co_has_ai', { n: r.fjobs.length }) : t('co_no_ai');
     return `
     <div class="card ${st}">
       <h3>${esc(r.name)}</h3>
-      ${r.curated ? '<span class="badge cur">⭐精选</span>' : ''}
+      ${r.curated ? `<span class="badge cur">${t('co_curated')}</span>` : ''}
       <span class="badge ${st === 'has_ai' ? 'st_has_ai' : 'st_board_no_ai'}">${stTxt}</span>
-      <div class="meta">${esc(r.ats || '')} · <a href="${esc(r.board_url)}" target="_blank">招聘页 ↗</a> · 共 ${r.total_jobs} 个在招岗位 · ${esc(r.scanned_at || '')}</div>
+      <div class="meta">${esc(r.ats || '')} · <a href="${esc(r.board_url)}" target="_blank">${t('co_board')}</a> · ${t('co_total_jobs', { n: r.total_jobs })} · ${esc(r.scanned_at || '')}</div>
       ${jobsHtml ? `<div class="cjobs">${jobsHtml}</div>` : ''}
       <div class="quick">
-        <a href="${esc(L.li_people)}" target="_blank">👤 LinkedIn 找招聘官</a>
-        <a href="${esc(L.hunter)}" target="_blank">📧 查邮箱</a>
-        <a href="${esc(L.li_jobs_kw)}" target="_blank">💼 LinkedIn 搜岗位</a>
-        <a href="${esc(L.careers_google)}" target="_blank">🏠 官方 Careers</a>
+        <a href="${esc(L.li_people)}" target="_blank">${t('co_li_people')}</a>
+        <a href="${esc(L.hunter)}" target="_blank">${t('co_hunter')}</a>
+        <a href="${esc(L.li_jobs_kw)}" target="_blank">${t('co_li_jobs')}</a>
+        <a href="${esc(L.careers_google)}" target="_blank">${t('co_careers')}</a>
       </div>
     </div>`;
   }).join('');
   hint.innerHTML = items.length
-    ? (items.length > 150 ? `已显示前 150 家 / 共 ${items.length} 家` : '')
-    : '没有符合筛选的公司。';
+    ? (items.length > 150 ? t('co_capped', { n: items.length }) : '')
+    : t('co_none');
 }
 
 async function uploadResume() {
@@ -1685,18 +2259,18 @@ async function uploadResume() {
   const r = await fetch('/api/resume', { method: 'POST', body: fd });
   const d = await r.json();
   if (d.error) { alert(d.error); return; }
-  alert(`简历已解析：识别到 ${d.keywords.length} 个技能关键词，正在自动计算所有岗位的匹配度…`);
+  alert(t('al_resume_parsed', { n: d.keywords.length }));
   refresh();
 }
 async function pasteResume() {
   const text = document.getElementById('resumeText').value.trim();
-  if (text.length < 100) { alert('内容太短'); return; }
+  if (text.length < 100) { alert(t('al_text_short')); return; }
   const r = await fetch('/api/resume', { method: 'POST',
     headers: {'Content-Type':'application/json'}, body: JSON.stringify({ text }) });
   const d = await r.json();
   if (d.error) { alert(d.error); return; }
   document.getElementById('resumeText').value = '';
-  alert(`简历已保存：识别到 ${d.keywords.length} 个技能关键词，正在计算匹配度…`);
+  alert(t('al_resume_saved', { n: d.keywords.length }));
   refresh();
 }
 async function runMatch() {
@@ -1709,9 +2283,9 @@ async function runMatch() {
 async function scan(mode) {
   // 立刻给反馈：即使扫描要几十秒，用户点下去也能马上看到"已开始"，不会以为没反应
   const bar = document.getElementById('scanbar');
-  const modeTxt = { known: '刷新最新岗位', pending: '全量清查', curated: '精选扫描', all: '全部扫描', deep: '深度补扫' }[mode] || '扫描';
+  const modeTxt = { known: t('scan_mode_known'), pending: t('scan_mode_pending'), curated: t('scan_mode_curated'), all: t('scan_mode_all'), deep: t('scan_mode_deep') }[mode] || t('scan_mode_def');
   bar.style.display = 'block';
-  document.getElementById('scanTxt').textContent = `⏳ 正在启动${modeTxt}…（在后台扫描英国工签雇主，新岗位会陆续出现，可继续浏览）`;
+  document.getElementById('scanTxt').textContent = t('scan_starting', { mode: modeTxt });
   document.getElementById('progBar').style.width = '0%';
   window.scrollTo({ top: 0, behavior: 'smooth' });
   document.getElementById('btnRefresh').disabled = true;
@@ -1724,7 +2298,7 @@ async function scan(mode) {
   } catch (e) {
     bar.style.display = 'none';
     document.getElementById('btnRefresh').disabled = false;
-    alert('启动扫描失败：' + (e && e.message || e));
+    alert(t('scan_start_fail') + (e && e.message || e));
     return;
   }
   refresh();   // 拉最新状态，进度条与轮询由 renderScan 接管
@@ -1741,25 +2315,25 @@ async function runAgg() {
   const r = await fetch('/api/aggregators', { method: 'POST' });
   const d = await r.json();
   if (d.error) { alert(d.error); return; }
-  alert('已开始搜索 Adzuna/Reed 聚合平台，稍等片刻在岗位流里看结果（📄 来源徽章）');
+  alert(t('al_agg_started'));
   refresh();
 }
 async function runSize() {
   const r = await fetch('/api/company_size', { method: 'POST' });
   const d = await r.json();
   if (d.error) { alert(d.error); return; }
-  alert(`已开始识别 ${d.total} 家公司的规模（大模型估，结果缓存）。稍后规模徽章和筛选会自动出现。`);
+  alert(t('al_size_started', { n: d.total }));
   refresh();
 }
 async function runSocial() {
   const btn = document.getElementById('btnSocial');
-  const reset = () => { btn.disabled = false; btn.textContent = '抓取'; };
-  btn.disabled = true; btn.textContent = '抓取中…';
+  const reset = () => { btn.disabled = false; btn.textContent = t('tool_fetch'); };
+  btn.disabled = true; btn.textContent = t('fetching');
   try {
     const r = await fetch('/api/social', { method: 'POST' });
     const d = await r.json();
     if (d.error) { alert(d.error); reset(); return; }
-  } catch (e) { alert('启动失败：' + (e && e.message || e)); reset(); return; }
+  } catch (e) { alert(t('al_start_fail') + (e && e.message || e)); reset(); return; }
   // HN 抓取一般几秒完成；轮询到结束，期间刷新让新岗位陆续并入
   const t0 = Date.now();
   const poll = setInterval(async () => {
@@ -1767,10 +2341,8 @@ async function runSocial() {
     const s = S.social || {};
     if (!s.running || Date.now() - t0 > 90000) {
       clearInterval(poll); reset();
-      if (s.err) { alert('抓取 Hacker News 招聘帖失败：' + s.err + '\n（可稍后重试，通常是临时网络问题）'); return; }
-      alert(`已从 Hacker News「Who is hiring」招聘帖抓取 ${s.total || 0} 条，`
-        + `按你的关键词并入 ${s.found || 0} 个岗位（带 🗞 HN 招聘帖 徽章）。\n`
-        + `去「全部岗位」在搜索框输入 HackerNews 即可只看这些。`);
+      if (s.err) { alert(t('al_hn_fail') + s.err + t('al_hn_retry')); return; }
+      alert(t('al_hn_done', { total: s.total || 0, found: s.found || 0 }));
     }
   }, 2500);
 }
@@ -1817,6 +2389,7 @@ async function wizDone(start) {
 }
 
 restoreF();
+applyStaticI18n();
 refresh();
 </script>
 </body>

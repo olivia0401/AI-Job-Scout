@@ -2840,8 +2840,8 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", "5050"))
     # 默认只绑本机（安全）；容器/服务器里设 HOST=0.0.0.0 才能对外访问。
     host = os.environ.get("HOST", "127.0.0.1")
-    print(f"\n  AI Job Scout 已启动:  http://127.0.0.1:{port}")
-    print("  这个窗口是网站的服务器——用的时候别关，可以最小化。\n")
+    print(f"\n  AI Job Scout running:  http://127.0.0.1:{port}")
+    print("  This window is the website's server — keep it open while you use the tool (you can minimize it).\n")
     if FROZEN:  # exe 双击启动时自动打开浏览器
         threading.Timer(1.5, lambda: webbrowser.open(f"http://127.0.0.1:{port}")).start()
     try:
