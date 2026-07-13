@@ -157,8 +157,15 @@ TIMEOUT = (2, 5)
 # 线程内顺序跑以复用 keep-alive 连接，所以可以放到 32。限流最狠的 Workable 已移出热路径
 # （见 WORKABLE_PROBES），不会再被高并发打成 429。
 SCAN_WORKERS = 32
-WORKABLE_CONC = 4        # Workable 全局并发上限：命中最多但限流最狠，单独节流以免自招 429
+# Workable 全局并发上限：命中最多但限流最狠。它是 deep 补扫的吞吐闸门（每家 find_ats 都要先
+# 过这道信号量）——4 太保守把 32 线程压成近似单线程。提到 12：3× 吞吐；配合单探测 429 退避
+# 自节流（见 probe_workable）+ 已废除整体 5 分钟冷却，实测更快。若频繁 429 可调回小一点。
+WORKABLE_CONC = 12
 SWEEP_SLUGS = 2          # 全量 sweep 每家公司试几个 slug 候选（命中基本落在前 2 个）
+# 深度补扫专用：无限流的 Recruitee/Personio 纯 DNS/IO 等待，可放更高并发把 Workable 排队的
+# 空档填满；且补扫求快，每家只试 1 个 slug（省一半探测）。
+DEEP_WORKERS = 48
+DEEP_SLUGS = 1
 LONG_RUNNING_DAYS = 30   # 岗位在线 ≥30 天算“长期在招”
 NEW_DAYS = 3             # 首次发现 ≤3 天算“新岗位”
 
@@ -486,12 +493,11 @@ class RateLimited(Exception):
 _stop_event = threading.Event()
 
 
-# 近期限流(429/503)次数监控——run_scan 据此判断是否"命中 cap"并自动冷却
+# 近期限流(429/503)次数监控——仅作可观测性用（_recent_rl 可供诊断/后续接指标）。
+# 注：全源提速后已废除「命中 cap 就整体冷却 5 分钟」的逻辑，429 改由单探测退避自节流。
 _rl_lock = threading.Lock()
 _rl_hits = []          # 最近的 429/503 时间戳
 RL_WINDOW = 120        # 统计窗口（秒）
-RL_CAP = 40            # 窗口内 ≥ 此次数视为命中限流上限 → 暂停冷却
-RL_COOLDOWN = 300      # 冷却 5 分钟后自动继续
 
 
 def _note_rate_limit():
@@ -716,7 +722,7 @@ FAST_PROBES = [
     ("SmartRecruiters", probe_smartrecruiters),
 ]
 # Workable：命中最多(273家)但限流最狠，放进全量热路径会整片 429 把 sweep 拖到跑不完。
-# 移到「深度补扫」(mode=deep) 里，用 _WORKABLE_SEM 节流慢速跑，不拖垮主扫描。
+# 移到「深度补扫」(mode=deep) 里，用 _WORKABLE_SEM 节流跑，不拖垮主扫描。
 WORKABLE_PROBES = [("Workable", probe_workable)]
 # 慢探测：Recruitee/Personio 用「每公司独立子域名」，对不存在的公司要付一次注定
 # 失败的 DNS+握手（实测各 ~3.7s），而命中极少（Recruitee 8、Personio 0）。同样放深度补扫。
@@ -1041,35 +1047,27 @@ def run_scan(names, mode):
     uk_only = state["uk_only"]
     curated = _curated_names()
     today = date.today().isoformat()
-    # 深度补扫：对已判 none 的公司再跑限流/慢探测(Workable+Recruitee+Personio)，须绕过 none 缓存
+    # 深度补扫：对已判 none 的公司再跑限流/慢探测(Workable+Recruitee+Personio)，须绕过 none 缓存。
+    # 全源提速：保留 Workable（覆盖不减），靠更高 Workable 并发 + 更多线程 + 单 slug 提速，
+    # 429 交给 probe_workable 的单探测退避自节流（整体 5 分钟冷却已废除，见主循环）。
     if mode == "deep":
-        probes, force = DEEP_PROBES, True
+        probes, force, max_slugs, workers = DEEP_PROBES, True, DEEP_SLUGS, DEEP_WORKERS
     elif mode == "curated":       # 精选清单小，连 Workable 一起扫
-        probes, force = CORE_PROBES, False
+        probes, force, max_slugs, workers = CORE_PROBES, False, SWEEP_SLUGS, SCAN_WORKERS
     else:                         # pending / all / known：只跑健康快探测
-        probes, force = PROBES, False
+        probes, force, max_slugs, workers = PROBES, False, SWEEP_SLUGS, SCAN_WORKERS
     state["scan"] = {"running": True, "done": 0, "total": len(names), "mode": mode,
                      "started_ts": time.time(), "stop": False, "new_jobs": 0,
                      "paused_until": 0}
     _stop_event.clear()
     processed = 0
 
-    def _cooldown_pause():
-        """命中限流上限：暂停冷却，到点自动继续（进度已缓存，不丢）。stop 可提前打断。"""
-        until = time.time() + RL_COOLDOWN
-        state["scan"]["paused_until"] = until
-        with _rl_lock:
-            _rl_hits.clear()
-        while time.time() < until and not state["scan"]["stop"]:
-            time.sleep(2)
-        state["scan"]["paused_until"] = 0
-
     try:
-        with ThreadPoolExecutor(max_workers=SCAN_WORKERS) as pool:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
             it = iter(names)
             futures = {}
             # 缓冲只比并发略多——按「停止」时要抛弃的在飞任务少，停得快
-            buf = SCAN_WORKERS * 2
+            buf = workers * 2
 
             def submit_more():
                 while len(futures) < buf:
@@ -1078,7 +1076,7 @@ def run_scan(names, mode):
                     except StopIteration:
                         return
                     futures[pool.submit(scan_company, n, keywords, uk_only,
-                                        probes, SWEEP_SLUGS, force)] = n
+                                        probes, max_slugs, force)] = n
 
             submit_more()
             while futures:
@@ -1103,11 +1101,8 @@ def run_scan(names, mode):
                 if state["scan"]["stop"]:
                     pool.shutdown(wait=False, cancel_futures=True)  # 取消还在排队的，秒停
                     break
-                if _recent_rl() >= RL_CAP:        # 命中限流上限 → 冷却，到点自动续
-                    _cooldown_pause()
-                    if state["scan"]["stop"]:
-                        pool.shutdown(wait=False, cancel_futures=True)
-                        break
+                # 全源提速：不再因近期 429 触发整体 5 分钟冷却——429 由 probe_workable 的单探测
+                # 退避(1.5/3/6s，4 次)就地自节流，只拖住踩雷的那几条探测，不冻结整片扫描。
                 submit_more()
     finally:
         state["scan"]["running"] = False
