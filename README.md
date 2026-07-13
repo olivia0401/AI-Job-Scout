@@ -199,9 +199,33 @@ Beyond "cross-platform" tips, you can get tailored advice for **one specific job
 
 ---
 
+# 👥 Host it for a group (multi-user)
+
+By default the tool is **single-user and local** (no login). If you want to host it on a server so **friends can each register and use their own copy**, it also runs multi-user:
+
+- **Multi-user mode** turns on automatically when the app is exposed (`HOST=0.0.0.0`, e.g. in Docker) or when you set `APP_MULTIUSER=1`. It then **requires login**, with a proper login/register page (passwords are salted+hashed in `data/users.json`, never stored in plain text).
+- **Each account is fully isolated**: its own resume, its own scans, its own matched jobs, applications board, hidden list — people can't see each other's data. Only the underlying **company directory and probe caches are shared** (so the ~120k-company list isn't duplicated per person).
+- **Self-serve registration** is **off by default** (only existing accounts can log in). Set `REGISTRATION_OPEN=1` to let anyone with the URL create an account.
+- **All AI calls run on the host's API key.** Because of that, each account has **per-day caps** — `LLM_DAILY_CAP` (default 100) and `SCAN_DAILY_CAP` (default 10) — to prevent runaway spend. The owner account (the `APP_USER` you set) is exempt.
+
+Environment variables (e.g. in a `.env` / Docker):
+
+| Var | Purpose |
+|---|---|
+| `APP_MULTIUSER=1` | Force multi-user mode (auto-on when `HOST=0.0.0.0`) |
+| `APP_USER` / `APP_PASSWORD` | Seed the owner account (cap-exempt) |
+| `REGISTRATION_OPEN=1` | Allow public self-serve registration (default off) |
+| `LLM_DAILY_CAP` / `SCAN_DAILY_CAP` | Per-user daily limits (default 100 / 10) |
+
+> ⚠️ Open registration + shared API key means strangers who find the URL can sign up and spend against your key (within the caps). Only set `REGISTRATION_OPEN=1` when you're comfortable with that, and keep the caps sensible.
+
+---
+
 # 🔒 Privacy
 
-All data (the company list, your resume, the jobs fetched) lives **only on your own computer** in the `data/` folder and is never uploaded to any server. `data/` is git-ignored and won't be synced to GitHub.
+Running it **locally** (the default): all data (the company list, your resume, the jobs fetched) lives **only on your own computer** in the `data/` folder and is never uploaded to any server. `data/` is git-ignored and won't be synced to GitHub.
+
+Running it **hosted (multi-user)**: each account's data lives on **your server** under `data/users/<account>/`, isolated per account. It's still never sent to any third party — but as the host, you are responsible for that server.
 
 ---
 
@@ -225,7 +249,7 @@ To validate accuracy, prepare 30–50 "resume + JD + human label" rows in `eval/
 Workday (large enterprises/banks, needs manual host/site config, see `data/slug_overrides.json`); and the Adzuna / Reed / Jooble / JSearch(RapidAPI) aggregators (need free keys; JSearch covers LinkedIn/Indeed/Glassdoor via Google for Jobs).
 
 **For developers**: dependencies in `requirements.txt`; automated tests `pytest tests/`; evaluation scripts in `eval/`.
-Data files live in `data/`: `companies.json` (the list), `ats_cache.json` (probe cache = full-sweep progress),
-`state.json` (jobs / first-seen dates / match scores), `slug_overrides.json` (manual overrides), `api_keys.json` (all keys).
+Data files live in `data/`: `companies.json` (the shared list), `ats_cache.json` (probe cache = full-sweep progress),
+`slug_overrides.json` (manual overrides), `api_keys.json` (all keys). Per-user state (jobs / first-seen dates / match scores / resume) lives in `state.json` for local single-user, or under `data/users/<account>/state.json` when hosted multi-user; accounts are in `data/users.json` (hashed).
 
 </details>
