@@ -4,23 +4,26 @@
 用法:  python app.py  然后浏览器打开 http://127.0.0.1:5050
 """
 import csv as csvmod
+import hashlib
 import hmac
 import json
 from collections import Counter, deque
 import os
 import re
+import secrets
 import sys
 import threading
 import time
 import webbrowser
 import xml.etree.ElementTree as ET
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from io import BytesIO
 from urllib.parse import quote_plus
 
 import requests
-from flask import Flask, Response, g, jsonify, render_template, request, send_file
+from flask import (Flask, Response, g, jsonify, redirect, render_template,
+                   request, send_file, session, url_for)
 
 FROZEN = getattr(sys, "frozen", False)  # PyInstaller 打包后的 exe 模式
 if FROZEN:
@@ -174,6 +177,17 @@ app = Flask(__name__, template_folder=os.path.join(RES_DIR, "templates"))
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 app.jinja_env.auto_reload = True
 
+# 会话密钥：持久化到 data/，重启后已登录用户不会掉线
+_SECRET_FILE = os.path.join(DATA_DIR, "secret.key")
+if os.path.exists(_SECRET_FILE):
+    with open(_SECRET_FILE, encoding="utf-8") as _f:
+        app.secret_key = _f.read().strip()
+else:
+    app.secret_key = secrets.token_hex(32)
+    with open(_SECRET_FILE, "w", encoding="utf-8") as _f:
+        _f.write(app.secret_key)
+app.permanent_session_lifetime = timedelta(days=30)
+
 # ---- 可观测性：RED 指标（Rate / Errors / Duration）--------------------------
 # 记录最近请求的耗时与状态码，暴露两个端点：
 #   /stats   —— 人可读 JSON：p50/p95/p99、错误率、吞吐、uptime（可截图当证据）
@@ -265,26 +279,159 @@ def metrics():
 
 
 # ---- 可选登录保护（部署到公网时用）----------------------------------------
-# 设了环境变量 APP_USER + APP_PASSWORD，就对所有请求要求 HTTP Basic 登录。
-# 本地不设这两个变量 → 行为完全不变，不需要登录。
-# ⚠️ 这个工具会展示你的简历全文、消耗你的 API key——放到公网前务必设置密码。
-APP_USER = os.environ.get("APP_USER", "")
-APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
+# ---------------------------------------------------------------- 多用户登录 / 注册
+# 多用户模式：设了环境变量 APP_MULTIUSER=1，或 HOST=0.0.0.0（对外暴露）时自动开启。
+#   → 需要登录；任何人可在 /register 自助注册；密码加盐哈希(pbkdf2)存 data/users.json。
+# 本地默认（HOST=127.0.0.1、未设 APP_MULTIUSER）→ 单机免登录，行为跟以前完全一样。
+# ⚠️ 开放注册 + 共用你的 API key：务必配合每人每日用量上限（阶段 3），否则会被刷爆。
+USERS_FILE = os.path.join(DATA_DIR, "users.json")
+LOCAL_USER = "local"   # 本地免登录时的默认用户名
+MULTIUSER = bool(os.environ.get("APP_MULTIUSER")) or os.environ.get("HOST") == "0.0.0.0"
+# 开放自助注册。默认关：陌生人无法注册（否则会看到你的数据、烧你的 API key）。
+# 等每人独立数据(阶段B)+用量上限(阶段C)做完，再设 REGISTRATION_OPEN=1 开放。
+REG_OPEN = bool(os.environ.get("REGISTRATION_OPEN"))
+_USERNAME_RE = re.compile(r"^[A-Za-z0-9_.\-]{2,32}$")
+_OPEN_PATHS = {"/login", "/register", "/logout", "/healthz"}  # 免登录路径
+users = {}  # 用户名 -> {"salt","hash","created"}；明文密码从不落盘
+_users_lock = threading.Lock()
+
+
+def _hash_pw(password, salt=None):
+    if salt is None:
+        salt = secrets.token_hex(16)
+    dk = hashlib.pbkdf2_hmac("sha256", (password or "").encode("utf-8"),
+                             bytes.fromhex(salt), 200_000)
+    return salt, dk.hex()
+
+
+def _verify_pw(password, salt, expected_hex):
+    try:
+        _, got = _hash_pw(password, salt)
+    except Exception:
+        return False
+    return hmac.compare_digest(got, expected_hex)
+
+
+def _norm_user_record(v):
+    """规整成 {'salt','hash','created'}。兼容明文（老 users.json / 环境变量）→ 载入即哈希。"""
+    if isinstance(v, dict) and v.get("salt") and v.get("hash"):
+        return {"salt": v["salt"], "hash": v["hash"], "created": v.get("created", 0)}
+    if isinstance(v, str) and v:   # 明文密码
+        salt, h = _hash_pw(v)
+        return {"salt": salt, "hash": h, "created": 0}
+    return None
+
+
+def load_users():
+    """从 users.json + 老环境变量载入账号表。data/ 已被 gitignore，凭据不会进仓库。"""
+    global users
+    loaded = {}
+    if os.path.exists(USERS_FILE):
+        try:
+            with open(USERS_FILE, encoding="utf-8") as f:
+                raw = json.load(f)
+            for k, v in raw.items():
+                rec = _norm_user_record(v)
+                if k and rec:
+                    loaded[str(k)] = rec
+        except Exception:
+            loaded = {}
+    env_u = os.environ.get("APP_USER", "")
+    env_p = os.environ.get("APP_PASSWORD", "")
+    if env_u and env_p and env_u not in loaded:   # 兼容老的单账号环境变量
+        salt, h = _hash_pw(env_p)
+        loaded[env_u] = {"salt": salt, "hash": h, "created": 0}
+    users = loaded
+
+
+def save_users():
+    with _users_lock:
+        payload = json.dumps(users, ensure_ascii=False, indent=2)
+    _atomic_write(USERS_FILE, payload)
+
+
+def create_user(name, password):
+    """新建账号，返回 (ok, 错误信息)。用户名校验 + 密码长度 + 去重。"""
+    name = (name or "").strip()
+    if not _USERNAME_RE.match(name):
+        return False, "Username must be 2–32 characters: letters, digits, or _ . -"
+    if len((password or "")) < 6:
+        return False, "Password must be at least 6 characters"
+    with _users_lock:
+        if name in users:
+            return False, "That username is already taken"
+        salt, h = _hash_pw(password)
+        users[name] = {"salt": salt, "hash": h, "created": int(time.time())}
+    save_users()
+    return True, ""
 
 
 @app.before_request
 def _require_login():
-    if not APP_PASSWORD:
-        return  # 未配置密码 → 不启用登录（本地单机使用）
-    if request.path == "/healthz":
-        return  # 健康检查不需要登录（云平台负载均衡用）
-    auth = request.authorization
-    ok = (auth is not None
-          and hmac.compare_digest(auth.username or "", APP_USER)
-          and hmac.compare_digest(auth.password or "", APP_PASSWORD))
-    if not ok:
-        return Response("需要登录", 401,
-                        {"WWW-Authenticate": 'Basic realm="AI Job Scout"'})
+    if not MULTIUSER:
+        g.user = LOCAL_USER   # 本地单机模式，不登录
+        return
+    p = request.path
+    if p in _OPEN_PATHS or p.startswith("/static/"):
+        return
+    user = session.get("user")
+    if user and user in users:
+        g.user = user
+        return
+    # 未登录：页面导航跳登录页，前端 fetch 拿到 401（避免把登录 HTML 当 JSON 解析）
+    if request.method == "GET" and "text/html" in request.headers.get("Accept", ""):
+        return redirect(url_for("login_page", next=p))
+    return jsonify({"error": "not logged in"}), 401
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login_page():
+    if not MULTIUSER:
+        return redirect("/")
+    error = ""
+    nxt = request.values.get("next") or "/"
+    if not nxt.startswith("/"):
+        nxt = "/"
+    if request.method == "POST":
+        name = (request.form.get("username") or "").strip()
+        rec = users.get(name)
+        if rec and _verify_pw(request.form.get("password") or "",
+                              rec["salt"], rec["hash"]):
+            session.permanent = True
+            session["user"] = name
+            return redirect(nxt)
+        error = "Incorrect username or password"
+    return render_template("login.html", mode="login", error=error,
+                           next=nxt, reg_open=REG_OPEN)
+
+
+@app.route("/register", methods=["GET", "POST"])
+def register_page():
+    if not MULTIUSER:
+        return redirect("/")
+    if not REG_OPEN:
+        return redirect(url_for("login_page"))  # 注册未开放 → 回登录页
+    error = ""
+    if request.method == "POST":
+        name = (request.form.get("username") or "").strip()
+        pw = request.form.get("password") or ""
+        if pw != (request.form.get("password2") or ""):
+            error = "The two passwords don't match"
+        else:
+            ok, msg = create_user(name, pw)
+            if ok:
+                session.permanent = True
+                session["user"] = name
+                return redirect("/")
+            error = msg
+    return render_template("login.html", mode="register", error=error,
+                           next="/", reg_open=REG_OPEN)
+
+
+@app.route("/logout")
+def logout_page():
+    session.pop("user", None)
+    return redirect(url_for("login_page"))
 
 # ---------------------------------------------------------------- state
 _lock = threading.Lock()
@@ -2832,6 +2979,7 @@ def api_export():
 
 
 if __name__ == "__main__":
+    load_users()  # 载入多账号表（data/users.json + 兼容老环境变量）
     load_all()
     seed_builtin_companies()  # 预置大厂/AI 雇主（curated），首次启动即可扫到
     if state["companies"] and not os.path.exists(COMPANIES_FILE):

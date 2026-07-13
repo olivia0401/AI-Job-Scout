@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% if mode == 'register' %}Sign up{% else %}Sign in{% endif %} — AI Job Scout</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #ffffff; --border: #d8dbe0; --line: #e9ebee;
+    --text: #1a1d22; --text2: #464b53; --muted: #767b84; --faint: #9aa0a8;
+    --accent: #2f5fda; --accent-deep: #234aa6; --accent-soft: #eef2fc;
+    --red: #b23124; --red-soft: #f9e9e7;
+    --shadow-lift: 0 4px 16px rgba(20,25,35,.10);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: "Inter", -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    font-size: 14px; line-height: 1.6; -webkit-font-smoothing: antialiased;
+    min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px;
+  }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+    box-shadow: var(--shadow-lift); padding: 34px 32px; width: 100%; max-width: 372px;
+  }
+  h1 { font-size: 22px; margin: 0 0 4px; font-weight: 700; letter-spacing: -.4px; }
+  .sub { color: var(--faint); font-size: 13px; margin-bottom: 22px; }
+  label { display: block; font-size: 12.5px; color: var(--text2); font-weight: 550; margin: 14px 0 6px; }
+  input {
+    width: 100%; padding: 10px 13px; font-size: 14px; font-family: inherit;
+    border: 1px solid var(--border); border-radius: 10px; background: #fff; color: var(--text);
+    transition: border-color .15s, box-shadow .15s;
+  }
+  input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  button {
+    width: 100%; margin-top: 22px; background: var(--accent); color: #fff; border: none;
+    border-radius: 11px; padding: 11px 20px; font-size: 14.5px; font-weight: 600;
+    cursor: pointer; font-family: inherit; box-shadow: 0 1px 3px rgba(79,99,245,.35); transition: filter .15s;
+  }
+  button:hover { filter: brightness(1.05); }
+  .err {
+    background: var(--red-soft); color: var(--red); border: 1px solid #f0cfca;
+    border-radius: 9px; padding: 9px 12px; font-size: 13px; margin-bottom: 18px;
+  }
+  .alt { text-align: center; margin-top: 18px; font-size: 13px; color: var(--muted); }
+  .alt a { color: var(--accent); text-decoration: none; font-weight: 550; }
+  .alt a:hover { text-decoration: underline; }
+  .hint { color: var(--faint); font-size: 11.5px; margin-top: 5px; }
+</style>
+</head>
+<body>
+  <form class="card" method="POST"
+        action="{% if mode == 'register' %}/register{% else %}/login{% endif %}">
+    <h1>AI Job Scout</h1>
+    <div class="sub">{% if mode == 'register' %}Create your account{% else %}Sign in to your account{% endif %}</div>
+
+    {% if error %}<div class="err">{{ error }}</div>{% endif %}
+    <input type="hidden" name="next" value="{{ next }}">
+
+    <label for="username">Username</label>
+    <input id="username" name="username" autocomplete="username" autofocus
+           spellcheck="false" required>
+
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" required
+           autocomplete="{% if mode == 'register' %}new-password{% else %}current-password{% endif %}">
+    {% if mode == 'register' %}
+      <div class="hint">At least 6 characters.</div>
+      <label for="password2">Confirm password</label>
+      <input id="password2" name="password2" type="password" autocomplete="new-password" required>
+    {% endif %}
+
+    <button type="submit">{% if mode == 'register' %}Sign up{% else %}Sign in{% endif %}</button>
+
+    {% if mode == 'register' %}
+    <div class="alt">Already have an account? <a href="/login">Sign in</a></div>
+    {% elif reg_open %}
+    <div class="alt">No account yet? <a href="/register">Create one</a></div>
+    {% endif %}
+  </form>
+</body>
+</html>
