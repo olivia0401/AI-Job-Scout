@@ -6,8 +6,10 @@
        又是 == "none"，导致每次都从头重扫十几万家。现在改成写 "none_deep"，
        深度补扫只挑 "none"（还没深度探过的）→ 停掉后能真正接着跑。
 """
+import json
 import os
 import sys
+import threading
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import app  # noqa: E402
@@ -71,3 +73,50 @@ def test_stopped_probe_is_not_marked_none():
         assert "Halted Ltd" not in app.ats_cache
     finally:
         app._stop_event.clear()
+
+
+# ------------------------------------------------ 落盘不能被并发写打死（"闪退"）
+
+def test_save_ats_cache_survives_concurrent_writes(tmp_path, monkeypatch):
+    """复现线上事故：扫描线程边写 ats_cache，save_ats_cache 边序列化 →
+    RuntimeError: dictionary changed size during iteration，把扫描线程打死。
+    现在落盘先在锁内快照，必须扛得住并发写。"""
+    monkeypatch.setattr(app, "ATS_CACHE_FILE", str(tmp_path / "ats_cache.json"))
+    app.ats_cache.update({f"seed{i}": "none" for i in range(3000)})
+
+    errors, stop = [], threading.Event()
+
+    def writer():                      # 模拟 32 个扫描线程持续写入
+        i = 0
+        while not stop.is_set():
+            app._ats_set(f"live{i}", "none")
+            i += 1
+
+    threads = [threading.Thread(target=writer, daemon=True) for _ in range(4)]
+    for t in threads:
+        t.start()
+    try:
+        for _ in range(25):
+            try:
+                app.save_ats_cache()
+            except Exception as e:     # noqa: BLE001 —— 任何异常都算回归
+                errors.append(repr(e))
+    finally:
+        stop.set()
+        for t in threads:
+            t.join(timeout=2)
+
+    assert not errors, f"并发写时落盘崩了: {errors[:2]}"
+
+
+def test_save_ats_cache_is_atomic(tmp_path, monkeypatch):
+    """原子写：落盘后文件必须是完整可解析的 JSON（旧版 open(...,'w') 崩在半路
+    会留下被截断的文件，load_all 静默当空 → 12 万家全量重扫）。"""
+    dest = tmp_path / "ats_cache.json"
+    monkeypatch.setattr(app, "ATS_CACHE_FILE", str(dest))
+    app.ats_cache.update({"Acme": {"ats": "Greenhouse", "slug": "acme"},
+                          "Beta": "none_deep"})
+    app.save_ats_cache()
+    loaded = json.loads(dest.read_text(encoding="utf-8"))
+    assert loaded["Acme"] == {"ats": "Greenhouse", "slug": "acme"}
+    assert loaded["Beta"] == "none_deep"

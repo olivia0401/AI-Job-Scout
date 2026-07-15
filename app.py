@@ -591,6 +591,19 @@ def _spawn(fn, *args):
 #       | "none_deep" ：深度补扫也探过、确认没有（深度补扫不再重复扫 → 停了能续跑）
 ats_cache = {}
 _NO_ATS = ("none", "none_deep")   # 两者都表示"没有招聘页"
+# 保护 ats_cache：扫描时 32~48 个工作线程在并发写它，落盘要先在锁内快照，
+# 否则 json.dump 边遍历边被改 → RuntimeError 打死扫描线程（表现为"闪退"）。
+_ats_lock = threading.Lock()
+
+
+def _ats_set(name, value):
+    with _ats_lock:
+        ats_cache[name] = value
+
+
+def _ats_pop(name):
+    with _ats_lock:
+        ats_cache.pop(name, None)
 company_sizes = {}  # company name -> {"band": startup|mid|large|unknown, "note": str}
 api_keys = {}   # {"adzuna_app_id","adzuna_app_key","reed_api_key"}
 slug_overrides = {}  # name.lower() -> {"ats","slug"}：手动修正 slug 猜错的重点公司
@@ -751,8 +764,19 @@ def save_state():
 
 
 def save_ats_cache():
-    with open(ATS_CACHE_FILE, "w", encoding="utf-8") as f:
-        json.dump(ats_cache, f, ensure_ascii=False)
+    """锁内快照 → 锁外序列化 → 原子写。调用方不得持 _ats_lock。
+
+    修的两个真实事故：
+    ① 过去直接 json.dump(ats_cache, f)：32 个扫描线程边写、序列化边遍历 →
+       RuntimeError: dictionary changed size during iteration，把 run_scan 线程
+       当场打死（界面上就是扫描"闪退"）。
+    ② 过去用 open(...,"w") 直写：文件先被清空，一旦崩在半路，整份探测缓存就被
+       写坏；load_all() 解析失败会静默当成空 → 12 万家全量重扫。改原子写后，
+       写坏的只会是临时文件，原文件始终完整。
+    """
+    with _ats_lock:
+        snap = dict(ats_cache)      # 锁内只做快照（C 层拷贝，很快）
+    _atomic_write(ATS_CACHE_FILE, json.dumps(snap, ensure_ascii=False))
 
 
 # ---------------------------------------------------------------- slug 生成
@@ -1156,19 +1180,19 @@ def find_ats(name, probes=PROBES, max_slugs=SWEEP_SLUGS, force=False):
                 res = None
             if res:
                 if res["jobs"]:
-                    ats_cache[name] = {"ats": ats_name, "slug": slug}
+                    _ats_set(name, {"ats": ats_name, "slug": slug})
                     return (ats_name, slug, res)
                 if fallback is None:
                     fallback = (ats_name, slug, res)
         if _stop_event.is_set():
             break
     if fallback:
-        ats_cache[name] = {"ats": fallback[0], "slug": fallback[1]}
+        _ats_set(name, {"ats": fallback[0], "slug": fallback[1]})
         return fallback
     if not rate_limited:  # 限流/中途停止时不写缓存，下次续跑会重新探测这家
         # 深度补扫(force=True)也没找到 → 记 none_deep，下次深度补扫直接跳过它。
         # 这样「扫一半停掉、明天接着跑」不会从头再来（普通探测仍记 none，留给深度补扫再试）。
-        ats_cache[name] = "none_deep" if force else "none"
+        _ats_set(name, "none_deep" if force else "none")
     return None
 
 
@@ -3055,7 +3079,7 @@ def api_slug_override():
     site = (data.get("site") or "").strip()
     if not slug and not (host and site):
         slug_overrides.pop(key, None)
-        ats_cache.pop(name, None)          # 清掉旧缓存，下次重新探测
+        _ats_pop(name)                     # 清掉旧缓存，下次重新探测
     else:
         if ats not in OVERRIDE_ATS:
             return jsonify({"error": f"ats 需为 {sorted(OVERRIDE_ATS)} 之一"}), 400
@@ -3067,7 +3091,7 @@ def api_slug_override():
             if not slug:
                 return jsonify({"error": f"{ats} 需要 slug"}), 400
             slug_overrides[key] = {"ats": ats, "slug": slug}
-        ats_cache.pop(name, None)          # 让下次扫描按 override 走
+        _ats_pop(name)                     # 让下次扫描按 override 走
     save_slug_overrides()
     save_ats_cache()
     return jsonify({"ok": True, "overrides": len(slug_overrides)})
