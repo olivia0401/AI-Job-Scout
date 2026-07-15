@@ -164,12 +164,17 @@ SCAN_WORKERS = 32
 # Workable 全局并发上限：命中最多但限流最狠。它是 deep 补扫的吞吐闸门（每家 find_ats 都要先
 # 过这道信号量）——4 太保守把 32 线程压成近似单线程。提到 12：3× 吞吐；配合单探测 429 退避
 # 自节流（见 probe_workable）+ 已废除整体 5 分钟冷却，实测更快。若频繁 429 可调回小一点。
-WORKABLE_CONC = 12
+# 可用环境变量调：看扫描进度条上的 429 数字——429 少就往上调，429 多就往下调。
+WORKABLE_CONC = int(os.environ.get("WORKABLE_CONC", "12"))
 SWEEP_SLUGS = 2          # 全量 sweep 每家公司试几个 slug 候选（命中基本落在前 2 个）
 # 深度补扫专用：无限流的 Recruitee/Personio 纯 DNS/IO 等待，可放更高并发把 Workable 排队的
 # 空档填满；且补扫求快，每家只试 1 个 slug（省一半探测）。
-DEEP_WORKERS = 48
+DEEP_WORKERS = int(os.environ.get("DEEP_WORKERS", "48"))
 DEEP_SLUGS = 1
+# 深度补扫默认只跑 Workable。实测每家不存在的公司：Workable 0.26s(历史命中 426 家)、
+# Recruitee 0.43s(17 家)、Personio 0.96s(12 家)——冷门那两个吃掉 84% 的时间，只换来
+# 0.02% 的命中。默认关掉它们 → 每家 1.65s 降到 0.26s。要连冷门源一起扫：设 DEEP_NICHE=1。
+DEEP_NICHE = bool(os.environ.get("DEEP_NICHE"))
 LONG_RUNNING_DAYS = 30   # 岗位在线 ≥30 天算“长期在招”
 NEW_DAYS = 3             # 首次发现 ≤3 天算“新岗位”
 
@@ -1041,7 +1046,9 @@ EXTRA_PROBES = [
 ]
 PROBES = FAST_PROBES                             # 默认 hot path（pending/all/known）
 CORE_PROBES = FAST_PROBES + WORKABLE_PROBES      # 精选小清单：连 Workable 一起扫（量小不怕限流）
-DEEP_PROBES = WORKABLE_PROBES + EXTRA_PROBES     # 深度补扫：Workable + Recruitee + Personio
+# 深度补扫：默认只跑 Workable（快约 6 倍，且拿到深度补扫 93% 的产出）。
+# 设 DEEP_NICHE=1 才把 Recruitee/Personio 这两个冷门源加回来（慢很多，多找万分之二）。
+DEEP_PROBES = WORKABLE_PROBES + (EXTRA_PROBES if DEEP_NICHE else [])
 ALL_PROBES = CORE_PROBES + EXTRA_PROBES
 PROBE_FN = dict(ALL_PROBES)       # 缓存命中/手动 override 反查仍需认得全部 ATS
 # Workday 不参与按公司名猜 slug（需要 host+site），只能手动 override
@@ -2939,6 +2946,8 @@ def api_state():
         if scan["running"] and scan["done"]:
             rate = scan["done"] / max(time.time() - scan["started_ts"], 1)
             scan["eta_min"] = round((scan["total"] - scan["done"]) / max(rate, 0.01) / 60)
+            scan["rate"] = round(rate, 1)   # 家/秒——调 WORKABLE_CONC 时看它有没有变快
+            scan["rl"] = _recent_rl()       # 最近 2 分钟被限流(429/503)次数——调参的刹车灯
         try:
             limit = max(50, min(int(request.args.get("limit", 400)), 5000))
         except ValueError:

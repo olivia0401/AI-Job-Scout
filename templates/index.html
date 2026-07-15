@@ -1580,6 +1580,11 @@ function renderScan() {
       : pausedLeft > 0
       ? t('scan_txt_paused', { mode: modeTxt, min: pausedLeft, done: sc.done.toLocaleString(), total: sc.total.toLocaleString() })
       : t('scan_txt_running', { mode: modeTxt, done: sc.done.toLocaleString(), total: sc.total.toLocaleString(), new: sc.new_jobs, eta });
+    // 调参仪表盘：家/秒 + 最近 2 分钟被限流次数。429 一直涨 = WORKABLE_CONC 调太高了，往回调。
+    if (!stopping && sc.rate != null) {
+      document.getElementById('scanTxt').textContent +=
+        `  ·  ${sc.rate}/s` + (sc.rl ? `  ·  429×${sc.rl}` : '');
+    }
     // 停止中加快轮询，让进度条尽快消失；否则用常规间隔
     const interval = stopping ? 800 : 2500;
     if (pollTimer && window._pollInterval !== interval) { clearInterval(pollTimer); pollTimer = null; }
