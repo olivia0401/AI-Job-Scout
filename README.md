@@ -1,120 +1,172 @@
 # AI Job Scout — UK visa-sponsor job radar
 
-**In one line:** it automatically visits the official hiring systems of companies that **hold a UK Skilled Worker sponsor licence**, pulls the jobs they are currently advertising, sorts them by freshness, and — once you upload your resume — scores each job for fit and suggests improvements.
+**In one line:** it visits the official hiring systems of companies that **hold a UK Skilled Worker sponsor licence**, pulls the jobs they're advertising right now, and — once you add your resume — scores every job for fit and tells you what's missing.
 
-> By default it looks for **AI / Machine Learning** roles, but **change a few keywords and it finds any industry** (nursing, accounting, marketing, engineering… see below).
-> The big advantage: every company here is **licensed to sponsor a UK Skilled Worker visa**, which is far more efficient than applying blindly across the whole web.
-> (Note: holding a licence ≠ every role will definitely sponsor you — always confirm from the JD or in the interview.)
+> **Why this beats searching the whole web:** every company it looks at is **licensed to sponsor a UK Skilled Worker visa**. You're not filtering thousands of jobs that will never sponsor you.
+> (A licence ≠ every role will definitely sponsor — always confirm in the JD or interview.)
 
-> **You don't need to be technical.** Just follow the steps below and click along. If you get stuck on any step, **copy the whole error message** on screen, open any **AI assistant** (ChatGPT, Claude, Gemini, etc.), paste it and ask "what do I do?" — it will walk you through it. That's your universal help button.
+> **Not looking for AI jobs?** It ships tuned for AI/ML roles, but it's **industry-agnostic** — change a few keywords and it finds nursing, accounting, marketing, engineering… ([see below](#not-looking-for-ai-jobs-switch-to-your-industry)).
+
+> **You don't need to be technical.** Follow the steps and click along. If any step throws an error, **copy the whole error message**, paste it into any AI assistant (ChatGPT, Claude, Gemini…) and ask "what do I do?" — that's your universal help button.
 
 ---
 
-# 🚀 First-time setup: three steps to run
+## Two ways to run it
 
-You only install once. After that, opening it takes just the last small step (see "Opening it later").
+| | **On your own computer** | **Hosted for a group** |
+|---|---|---|
+| Who it's for | Just you | You + friends, each with their own account |
+| Login | None | Login required; optional self-serve signup |
+| Data | All local, one user | Per-account and isolated, on your server |
+| Setup | Install Python, run one command | Docker Compose |
+| Cost | Free | A small cloud VM + your own API keys |
 
-## 🪟 Windows
+Start with the local install — the hosted setup is the [same app with a few env vars](#host-it-for-a-group-multi-user).
 
-### Step 1: Install Python (once)
+---
+
+# Run it on your own computer
+
+You install once. After that, starting it is one step.
+
+## Windows
+
+### Step 1 — Install Python (once)
 1. Open https://www.python.org/downloads/
-2. Click the big yellow **"Download Python 3.x"** button, then double-click the downloaded file.
-3. ⚠️ **The most important step**: at the **bottom** of the installer window there's a checkbox **"Add python.exe to PATH"** — **make sure it's ticked**, then click **Install Now**.
-   (If you forget to tick it, you'll later see "not recognized as an internal or external command" — just reinstall and tick the box.)
-4. Click Close when done.
+2. Click the big yellow **Download Python 3.x** button, then run the downloaded file.
+3. ⚠️ **The step everyone misses**: at the **bottom** of the installer there's a checkbox **"Add python.exe to PATH"** — **tick it**, then click **Install Now**.
+   (Skip it and you'll later see "not recognized as an internal or external command" — just reinstall and tick the box.)
+4. Click Close.
 
-### Step 2: Download this tool (once)
-1. On this project's GitHub page, click the green **"Code"** button → **"Download ZIP"**.
-2. Find the zip in your Downloads folder, **right-click → "Extract All"**, and extract it to your **Desktop** so it's easy to find.
+### Step 2 — Download this tool (once)
+1. On this project's GitHub page: green **Code** button → **Download ZIP**.
+2. Find the zip in Downloads, **right-click → Extract All**, extract it to your **Desktop**.
 3. You'll get a folder called `AI-Job-Scout`.
 
-### Step 3: Launch
+### Step 3 — Start it
 1. Open the `AI-Job-Scout` folder.
-2. Click the **address bar at the top** of the window (the one showing the folder path), clear it, type **`cmd`**, and press Enter.
-   → A **black window** (the command line) pops up. Don't worry — it's just where you type commands.
-3. In the black window, **paste this line**, press Enter, and wait for it to finish (a minute or two the first time):
+2. Click the **address bar** at the top of the window, clear it, type **`cmd`**, press Enter.
+   → A black window (the command line) opens. That's just where you type commands.
+3. Paste this and press Enter (takes a minute or two the first time):
    ```
    pip install -r requirements.txt
    ```
-4. When that's done, **paste this line** and press Enter:
+4. Then paste this and press Enter:
    ```
    python app.py
    ```
-5. When you see something like `AI Job Scout running: http://127.0.0.1:5050`, it worked.
-6. Open your browser, type **http://127.0.0.1:5050** and press Enter → the tool's interface appears 🎉
+5. When you see `AI Job Scout running: http://127.0.0.1:5050`, it worked.
+6. Open your browser at **http://127.0.0.1:5050** 🎉
 
-> **Don't close that black window** — closing it stops the tool. Just leave it open while you use the tool.
+> **Don't close the black window** — it *is* the server. Leave it open (minimising is fine) while you use the tool.
 
-## 🍎 macOS
+## macOS
 
-1. **Install Python**: go to https://www.python.org/downloads/, download the macOS version, double-click the `.pkg` and click through the installer.
-2. **Download the tool**: on GitHub, **Code → Download ZIP**, double-click to unzip it to your Desktop, giving you the `AI-Job-Scout` folder.
-3. **Open Terminal**: in Finder, **right-click** the `AI-Job-Scout` folder → "Services" → "**New Terminal at Folder**".
-4. In Terminal, run these in order (use `pip3`/`python3` instead of `pip`/`python`):
+1. **Install Python**: https://www.python.org/downloads/ → download the macOS version → run the `.pkg`.
+2. **Download the tool**: GitHub → **Code → Download ZIP** → unzip to your Desktop.
+3. **Open Terminal**: in Finder, right-click the `AI-Job-Scout` folder → Services → **New Terminal at Folder**.
+4. Run these in order (`pip3`/`python3`, not `pip`/`python`):
    ```
    pip3 install -r requirements.txt
    python3 app.py
    ```
-5. Open **http://127.0.0.1:5050** in your browser. Don't close the Terminal window.
+5. Open **http://127.0.0.1:5050**. Leave Terminal open.
 
----
+## Opening it later (no reinstall)
 
-# 🔁 Opening it later (no reinstall)
+**Windows: double-click `Start-Job-Scout.bat`** — it starts the server and opens your browser. Leave the black window open; close it to stop.
 
-**Easiest on Windows: double-click `Start-Job-Scout.bat` in the folder** —
-it starts the server and opens your browser automatically, no typing needed. The black window that pops up is the website's server; leave it open while you use the tool (you can minimize it), and close it when you want to stop.
-
-Manual method (macOS / if the .bat won't open):
-
-1. Open the `AI-Job-Scout` folder → type `cmd` in the address bar and press Enter (macOS: right-click → open Terminal at folder).
+Manual (macOS, or if the .bat won't run):
+1. Open the folder → type `cmd` in the address bar (macOS: right-click → New Terminal at Folder).
 2. Run **`python app.py`** (macOS: `python3 app.py`).
-3. Open **http://127.0.0.1:5050** in your browser.
+3. Open **http://127.0.0.1:5050**.
 
-**To stop it**: just close that black window / Terminal.
+**To stop it:** close that window.
 
----
+## Stuck? Find your case
 
-# 🆘 Stuck? Find your case (99% of issues are here)
-
-| What you see on screen | What it means / what to do |
+| What you see | What to do |
 |---|---|
-| `python is not recognized...` / `command not found` | You forgot to tick **Add to PATH** when installing Python. Reinstall Python and tick the box, or restart your computer and retry. On macOS use `python3`. |
-| `pip is not recognized...` | Same as above. You can also use `python -m pip install -r requirements.txt` (macOS: `python3 -m pip …`). |
-| `Address already in use` / port in use | The tool is already running in another black window. Close the extra windows, or just use the one already open. |
-| Browser says "can't reach / connection refused" | Make sure the black window is still open and shows "running"; the address must be **exactly** `http://127.0.0.1:5050`. |
-| Uploading a PDF resume fails | Your PDF may be a **scanned image**. Save a **text-based PDF** from Word, or just **paste** your resume text in directly. |
-| Any other error you don't understand | **Copy the whole thing**, paste it into any **AI assistant** (ChatGPT / Claude / Gemini) and ask how to fix it. Really — this is the easiest route. |
+| `python is not recognized` / `command not found` | You didn't tick **Add to PATH**. Reinstall Python with the box ticked, or restart your computer. On macOS use `python3`. |
+| `pip is not recognized` | Same fix. Or use `python -m pip install -r requirements.txt` (macOS: `python3 -m pip …`). |
+| `Address already in use` | It's already running in another window. Use that one, or close the extras. |
+| Browser says "can't reach / connection refused" | The black window must still be open and say "running". The address must be exactly `http://127.0.0.1:5050`. |
+| Uploading a PDF resume fails | Your PDF is probably a **scan (an image)**. Export a text PDF from Word, or paste the text instead (Settings → Paste resume). |
+| Anything else | **Copy the whole error**, paste it into ChatGPT / Claude / Gemini, ask how to fix it. Genuinely the fastest route. |
 
 ---
 
-# 📖 After install, how to use it (in this order)
+# How to use it (in this order)
 
-### ① First give it a list of licensed sponsor companies
-- On gov.uk, search **"register of licensed sponsors workers"** and download the official CSV (updated weekly, ~120k companies).
-- Back in the tool, expand **"⚙️ Advanced"** and enter the CSV **file path** to import it.
-- You can also drop in your own company list (Excel / CSV / paste directly); those get marked **⭐Curated**.
+### 1. Import the company list
+- Download the official sponsor list: search gov.uk for **"register of licensed sponsors workers"** and grab the CSV (updated weekly, ~120k companies).
+- In the tool: **Toolbox → Import company list → Choose file**, pick that CSV.
+  It automatically keeps only the **Skilled Worker** rows and records each company's town.
+- Got your own target list instead? The same button takes an **Excel or CSV** of company names — those get tagged **Curated**.
+- Re-importing is safe: duplicates are merged, not doubled.
 
-### ② Scan for jobs
-- **🔄 Scan new jobs**: your everyday button — a few minutes, fetches new jobs from known companies.
-- **🌊 Full sweep**: **run once the first time** (~10+ hours, stoppable anytime and resumes automatically next time) to probe every company. You won't need to run it again after that.
+> A set of well-known employers is [built in](#built-in-employers-no-setup-needed), so you can try the tool before importing anything.
 
-### ③ Upload your resume
-- Drop in a **PDF / Word / txt** resume; the tool automatically computes a **match score** for every job and lists which skills you're missing.
+### 2. Build the job library
+- **Toolbox → Build the job library → Run**. This probes every company for a public hiring system. It takes a few hours the first time — **it's the only slow step, and you only do it once**.
+- **You can stop it whenever you want.** Progress is saved continuously, and the next run **picks up where it left off** instead of starting over.
+- Afterwards, your everyday button is **Toolbox → Scan new jobs** (a few minutes) — it refreshes jobs from the companies already known to have a hiring system.
+- **Toolbox → Find missed companies** is an occasional top-up: it re-checks companies where nothing was found the first time. Also stoppable and resumable.
 
-### ④ Review / pick jobs / get advice
-- The left of each job row is the **match-score block** (green = high, amber = medium); after scoring, jobs sort by match by default.
-- **Click any job row to expand it**: see which skills you're missing → generate that job's **✍️ resume-improvement tips** and
-  **💬 networking outreach drafts** in one click (LinkedIn application notes / follow-up DMs / cold emails, generated personally, ready to copy).
-- Save ones you like with **☆ Save** → manage them in the top **📌 Applications** board: change status (To apply → Applied → Interviewing → Offer/Rejected), open the application page, find recruiters, look up emails. The actual applying stays manual — every application uses a tailored resume, which beats any "auto-spam" tool (which also risks getting your account banned).
-- Click **📥 Export** to save as Excel; click **🎯 Resume tips** on the resume card to see "the skills most worth adding across all jobs".
+### 3. Add your resume
+- On the resume card, click **Upload resume** (PDF / Word / TXT). It scores **every job** for fit and lists the skills you're missing.
+- If a PDF won't parse (scans don't), go to **Settings → Paste resume** and paste the text.
+
+### 4. Review, shortlist, get advice
+- Each job row starts with its **match score** (green = strong, amber = medium). After scoring, jobs sort by match by default.
+- **Click a job row** to open its details: see exactly which skills you're missing, then generate **resume tips for that job** and **networking outreach drafts** (LinkedIn note / follow-up DM / cold email) — needs an [LLM key](#resume-tips).
+- **Save** the ones you like → manage them under **Applications**: move each through *To apply → Applied → Interviewing → Offer/Rejected*, open the posting, find recruiters, look up emails.
+  Applying stays manual on purpose — a tailored resume beats any auto-spam tool (which also risks getting your accounts banned).
+- **Resume gaps** shows the skills most worth adding across *all* your matched jobs.
+- **Toolbox → Export to Excel** to take it all with you.
 
 ---
 
-# 🔁 Not looking for AI jobs? Switch to your industry
+# Host it for a group (multi-user)
 
-At heart this tool "scans company hiring systems for jobs whose title or body contains **your chosen keywords**" — **it's industry-agnostic**. Expand **"⚙️ Advanced → Job keywords"**, change them to your terms, save, and re-scan. Examples:
+The same app runs as a small multi-user site, so friends can each sign up and get **their own private workspace**.
 
-| Industry | Keywords to use |
+- **Each account is fully isolated**: its own resume, its own scans and matched jobs, its own Applications board and hidden list. Nobody sees anyone else's data.
+- **Shared underneath**: the company directory and the "which hiring system does this company use" cache. That's deliberate — it means the slow discovery work is done once for everyone instead of ~120k companies per person.
+- **All AI calls run on the host's API key**, so every account has **per-day caps**.
+
+```bash
+cp api_keys.example.json data/api_keys.json   # fill in your keys
+docker compose up -d --build
+```
+
+Multi-user mode switches on automatically when the app is exposed (`HOST=0.0.0.0`, which the Docker image sets) or when you set `APP_MULTIUSER=1`. Put a reverse proxy with HTTPS in front of it.
+
+### Configuration (environment variables)
+
+| Variable | Default | What it does |
+|---|---|---|
+| `HOST` / `PORT` | `127.0.0.1` / `5050` | Bind address. Docker uses `0.0.0.0:8080`. |
+| `APP_MULTIUSER` | off | Force multi-user mode (auto-on when `HOST=0.0.0.0`). |
+| `APP_USER` / `APP_PASSWORD` | — | Seeds the owner account. The owner is **exempt from the caps**. |
+| `REGISTRATION_OPEN` | **off** | Allow public self-serve signup. Off = only existing accounts can log in. |
+| `LLM_DAILY_CAP` | `100` | Max AI calls per account per day. |
+| `SCAN_DAILY_CAP` | `10` | Max scans per account per day. |
+| `WORKABLE_CONC` | `12` | Concurrency for Workable probes — the throughput gate of *Find missed companies*. Raise it if you see no rate-limiting; lower it if you do. |
+| `DEEP_WORKERS` | `48` | Worker threads for *Find missed companies*. |
+| `DEEP_NICHE` | off | Also probe Recruitee/Personio during *Find missed companies*. Far slower for a very small extra yield — off by default. |
+
+> ⚠️ **`REGISTRATION_OPEN=1` on a public URL means anyone who finds it can create an account and spend against your API key** (within the per-day caps, but there's no cap on how many people sign up). Only turn it on if you're comfortable with that, keep the caps low, and don't publish the URL.
+
+Passwords are stored salted and hashed (pbkdf2) in `data/users.json` — never in plain text.
+
+---
+
+# Not looking for AI jobs? Switch to your industry
+
+At heart this tool "scans company hiring systems for jobs whose title or body matches **your keywords**" — the AI focus is just the default keyword set. Go to **Settings → Job keywords**, replace them, save, and re-scan.
+
+| Industry | Keywords to try |
 |---|---|
 | Nursing / healthcare | nurse, healthcare assistant, clinical, care worker |
 | Accounting / finance | accountant, financial analyst, audit, tax, bookkeeper |
@@ -123,133 +175,116 @@ At heart this tool "scans company hiring systems for jobs whose title or body co
 | Education | teacher, lecturer, teaching assistant |
 | Supply chain | supply chain, logistics, procurement, warehouse |
 
-> Not sure which keywords? Ask any **AI assistant**: "I'm looking for UK visa-sponsor jobs in the XX industry, suggest a set of keywords."
+> Not sure which keywords? Ask any AI assistant: "I'm looking for UK visa-sponsor jobs in the XX industry, suggest a set of keywords."
 
 ---
 
-# 🤖 Want to change something? Let an AI assistant help (no coding needed)
+# Platforms it can't scrape — and how to cover them
 
-You don't need to learn programming. Use any **AI coding assistant**, or just send the project folder to ChatGPT / Claude etc., and describe what you want in **plain English**, for example:
+This tool only reads the **public endpoints of companies' own hiring systems**. These are blind spots you'll search yourself:
 
-- "Change the job keywords to nurse / healthcare related ones."
-- "I only want to see London jobs, hide all other regions."
-- "Weight the match score more toward years of experience."
-- "Add a feature to sort by salary."
-- "It errored on startup, here's the error: (paste) — fix it for me."
-
-You just describe the **result you want**; the AI edits the code and explains it. Tip: ask it to run `pytest tests/` afterward to confirm nothing broke.
-
----
-
-# 🌐 Platforms it can't scrape — search / apply on these yourself
-
-The tool only reads the public endpoints of companies' **official hiring systems**. The platforms below are **blind spots** you'll need to search yourself:
-
-| Platform | Notes |
+| Platform | Why / what to do |
 |---|---|
-| **LinkedIn** | Scraping is prohibited; search it yourself (the tool gives a one-click "LinkedIn recruiter search" link per company). |
-| **Indeed** | The biggest aggregator; search it yourself. |
-| **Glassdoor** | Search it yourself. |
-| **Totaljobs / CV-Library / Reed website** | Major UK-native sites worth browsing yourself. |
-| **In-house systems** (Google, Amazon, big banks, etc.) | Not detectable; use the "Google search" link on the company card to check manually. |
+| **LinkedIn** | Scraping is prohibited. Each company card gives you a one-click LinkedIn recruiter search. |
+| **Indeed / Glassdoor** | Search them yourself. |
+| **Totaljobs / CV-Library / Reed website** | Major UK-native sites worth browsing directly. |
+| **In-house systems** (Google, Amazon, Meta, Microsoft, big banks) | No public API to read. Use the Google-search link on the company card. |
 
-> Every company card includes one-click links for **LinkedIn recruiter search / Hunter email lookup / Google job search**, to help you cover these platforms manually and find HR contacts along the way (the tool won't crawl contacts for you — it just gives you the search entry points).
+Every company card includes one-click **LinkedIn recruiter search / Hunter email lookup / Google job search** links, so you can cover these manually and find contacts along the way. (The tool won't crawl contacts for you — it just hands you the search entry points.)
 
-**Want broader, faster coverage?** (optional, free sign-up) Copy `api_keys.example.json` to `data/api_keys.json` and fill in the free keys for the **four aggregator sources** below (the more you add, the broader the coverage), then click **🌐 Add jobs from job boards** on the page to sweep relevant UK jobs in seconds and automatically flag which companies are on the sponsor register:
+**Want broader coverage automatically?** (optional, free tiers) Copy `api_keys.example.json` to `data/api_keys.json`, fill in any of these, then use **Toolbox → Add jobs from job boards**:
 
 | Source | Sign-up | What it adds |
 |---|---|---|
-| **Adzuna** | https://developer.adzuna.com/ | UK-wide job aggregation (~1000 calls/month) |
+| **Adzuna** | https://developer.adzuna.com/ | UK-wide aggregation (~1000 calls/month) |
 | **Reed** | https://www.reed.co.uk/developers | One of the largest UK-native job sites |
-| **Jooble** | https://jooble.org/api/about | Aggregates many UK job sites; broad top-up |
-| **JSearch (RapidAPI)** | https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch | ⭐Pulls **Google for Jobs**, covering **LinkedIn / Indeed / Glassdoor / ZipRecruiter** — exactly the "blind spots" table above. Fill in `rapidapi_key` (free tier ~200 calls/month). |
+| **Jooble** | https://jooble.org/api/about | Aggregates many UK sites; broad top-up |
+| **JSearch (RapidAPI)** | https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch | ⭐ Pulls **Google for Jobs**, which covers **LinkedIn / Indeed / Glassdoor / ZipRecruiter** — exactly the blind spots above. Free tier ~200 calls/month. |
 
-> **To cover the LinkedIn/Indeed blind spots, configure `rapidapi_key` (JSearch)** — it's the only source that can pull those big aggregators' jobs in automatically.
-> Cover the rest manually via the "LinkedIn recruiter search / Google search" links on each company card.
-> Bottom line: **no free official API connects directly to the full LinkedIn/Indeed feed**; JSearch via Google for Jobs is the most practical approximation.
+> To dent the LinkedIn/Indeed blind spot, `rapidapi_key` (JSearch) is the one that matters — it's the only source that reaches those aggregators. No free official API connects directly to the full LinkedIn/Indeed feed; Google for Jobs is the practical approximation.
+> There's also **Toolbox → Social hiring posts (Hacker News)** for "Who is hiring" threads.
 
 ---
 
-# 🏢 Built-in big-tech / AI employers (no configuration)
+# Built-in employers (no setup needed)
 
-The tool **ships with a set of well-known employers** pre-loaded; they're added to your list and scanned on first launch, so you don't have to add them manually:
+A set of well-known employers ships pre-loaded and gets scanned on first launch:
 
-- **AI/ML standouts** (mostly on Greenhouse/Lever/Ashby, auto-detected): Anthropic, OpenAI, Cohere, Hugging Face, DeepMind, Databricks, Palantir, Wayve, Faculty, Quantexa, Synthesia, Stability AI, ElevenLabs, Speechmatics, Graphcore, Monzo, Wise, Revolut, and more.
-- **Workday large enterprises** (in-house/Workday systems, direct addresses built in): NVIDIA, Salesforce, Adobe, Dell, Mastercard, Capital One, Autodesk, AstraZeneca, Sanofi, and more.
+- **AI/ML names** (mostly Greenhouse/Lever/Ashby, auto-detected): Anthropic, OpenAI, Cohere, Hugging Face, DeepMind, Databricks, Palantir, Wayve, Faculty, Quantexa, Synthesia, Stability AI, ElevenLabs, Speechmatics, Graphcore, Monzo, Wise, Revolut, and more.
+- **Large enterprises on Workday** (addresses built in): NVIDIA, Salesforce, Adobe, Dell, Mastercard, Capital One, Autodesk, AstraZeneca, Sanofi, and more.
 
-> ⚠️ Workday addresses are **best-effort** presets: if one can't be fetched (the company changed its address), it **doesn't affect other companies** — the tool just skips it.
-> To fix one: use "manual override" on its company card to enter the new `host`/`site` (saved to `data/slug_overrides.json`, overriding the built-in).
+> Workday addresses are **best-effort** presets. If one breaks (the company moved), it's skipped and **no other company is affected**.
 >
-> ❗ **Google / Amazon / Meta / Microsoft / JPMorgan** and others use **in-house hiring systems (not Workday)** with no public API to fetch — these can only be checked manually via the "Google search / LinkedIn search" links on the company card. That's a hard limit no tool gets around.
+> ❗ **Google / Amazon / Meta / Microsoft / JPMorgan** and similar run **in-house systems with no public API** — no tool can read those. Use the Google/LinkedIn search links on the company card.
 
 ---
 
-# ✍️ Cross-platform resume tips
+# Resume tips
 
-After you upload a resume and scoring finishes, click **🎯 Resume tips** on the resume card: the tool aggregates **all matched jobs** and tells you, ranked by impact, "the skills most worth adding" — e.g. `research·83 (🎯27)` means this skill is missing from 83 jobs, 27 of which are medium-match (where adding it gains the most). It also uses **corpus mining** to list phrasings that appear frequently in JDs but your skill list might miss.
+Once your resume is in and scoring has finished, **Resume gaps** aggregates **all matched jobs** and ranks the skills most worth adding — e.g. `research·83 (27)` means it's missing from 83 jobs, 27 of them medium-match (where adding it gains the most). It also mines JD phrasings your skill list might miss.
 
-Want **prose suggestions** generated right inside the tool: add an LLM key to `data/api_keys.json` —
-**for ChatGPT** fill `openai_api_key` (default model `gpt-4o`, or set the `OPENAI_API_KEY` env var),
-**for Claude** fill `anthropic_api_key`. If you fill both, choose with `llm_provider` (`openai` / `anthropic`); if unset it defaults to ChatGPT.
-Once configured, the button becomes **✍️ Generate tips with ChatGPT**, giving you an actionable checklist: which items to add first, where in the resume to add each and how to word it, which experiences to rewrite. **It won't invent experience you don't have.**
+**Want written suggestions generated in the tool?** Add an LLM key to `data/api_keys.json`:
+- **ChatGPT**: `openai_api_key` (default model `gpt-4o`, or the `OPENAI_API_KEY` env var)
+- **Claude**: `anthropic_api_key`
+- Filled both? Pick with `llm_provider` (`openai` / `anthropic`). Unset defaults to ChatGPT.
 
-## 🎯 Tailoring your resume for a single job
+You'll get an actionable checklist: what to add first, where in the resume and how to word it, which experiences to rewrite. **It won't invent experience you don't have.**
 
-Beyond "cross-platform" tips, you can get tailored advice for **one specific job**: on a job card, click the **match %** badge to expand it, and use **✍️ Tailor my resume for this job with ChatGPT** — it takes this **JD body + your resume's gaps + your full resume** and generates advice specific to that one job (which terms to add, which experiences to rewrite, an opening line for a cover letter), shown right on the card. Without an LLM key, the **📋 Copy prompt** button next to it still copies the full prompt so you can paste it into ChatGPT / Claude and generate it manually.
-
----
-
-# 👥 Host it for a group (multi-user)
-
-By default the tool is **single-user and local** (no login). If you want to host it on a server so **friends can each register and use their own copy**, it also runs multi-user:
-
-- **Multi-user mode** turns on automatically when the app is exposed (`HOST=0.0.0.0`, e.g. in Docker) or when you set `APP_MULTIUSER=1`. It then **requires login**, with a proper login/register page (passwords are salted+hashed in `data/users.json`, never stored in plain text).
-- **Each account is fully isolated**: its own resume, its own scans, its own matched jobs, applications board, hidden list — people can't see each other's data. Only the underlying **company directory and probe caches are shared** (so the ~120k-company list isn't duplicated per person).
-- **Self-serve registration** is **off by default** (only existing accounts can log in). Set `REGISTRATION_OPEN=1` to let anyone with the URL create an account.
-- **All AI calls run on the host's API key.** Because of that, each account has **per-day caps** — `LLM_DAILY_CAP` (default 100) and `SCAN_DAILY_CAP` (default 10) — to prevent runaway spend. The owner account (the `APP_USER` you set) is exempt.
-
-Environment variables (e.g. in a `.env` / Docker):
-
-| Var | Purpose |
-|---|---|
-| `APP_MULTIUSER=1` | Force multi-user mode (auto-on when `HOST=0.0.0.0`) |
-| `APP_USER` / `APP_PASSWORD` | Seed the owner account (cap-exempt) |
-| `REGISTRATION_OPEN=1` | Allow public self-serve registration (default off) |
-| `LLM_DAILY_CAP` / `SCAN_DAILY_CAP` | Per-user daily limits (default 100 / 10) |
-
-> ⚠️ Open registration + shared API key means strangers who find the URL can sign up and spend against your key (within the caps). Only set `REGISTRATION_OPEN=1` when you're comfortable with that, and keep the caps sensible.
+**Tailoring for one specific job:** click a job row to open its details → **Generate resume tips for this job**. It combines that JD's text + your gaps + your full resume into advice for that single role (terms to add, experiences to rewrite, a cover-letter opener). Without an LLM key, the **Copy prompt** button still hands you the full prompt to paste into ChatGPT/Claude yourself.
 
 ---
 
-# 🔒 Privacy
+# Privacy
 
-Running it **locally** (the default): all data (the company list, your resume, the jobs fetched) lives **only on your own computer** in the `data/` folder and is never uploaded to any server. `data/` is git-ignored and won't be synced to GitHub.
+**Running locally (the default):** everything — the company list, your resume, the jobs — stays **on your own computer** in the `data/` folder. Nothing is uploaded anywhere. `data/` is git-ignored and never syncs to GitHub.
 
-Running it **hosted (multi-user)**: each account's data lives on **your server** under `data/users/<account>/`, isolated per account. It's still never sent to any third party — but as the host, you are responsible for that server.
+**Running hosted (multi-user):** each account's data lives on **your server** under `data/users/<account>/`, isolated per account. Still no third party — but as the host, that server is your responsibility.
 
 ---
 
 <details>
-<summary><b>🧠 Advanced: how the match score works / which systems are covered (for the curious, optional)</b></summary>
+<summary><b>Advanced: how the match score works, coverage, and data files</b></summary>
 
-After you upload a resume, the tool scores each job 0–100 as an "ATS match" using **Jobscan-style rules**. This is **not** a machine-learning accuracy figure — it's an explainable weighted score:
+### The match score
+
+Each job is scored 0–100 as an "ATS match" using **Jobscan-style rules**. It's **not** an ML accuracy figure — it's an explainable weighted score:
 
 | Component | Weight | What it looks at |
 |---|---|---|
 | Must-have skill coverage | 55% | How many JD-required skills appear in your resume |
-| Nice-to-have skill coverage | 20% | Coverage of nice-to-have skills |
-| Seniority match | 10% | The role's level/years vs. your years |
-| Domain match | 10% | Whether the direction fits (NLP/recommendation/risk…) |
-| JD-fetch confidence | 5% | Whether the full JD was fetched or only the title |
+| Nice-to-have coverage | 20% | Coverage of nice-to-have skills |
+| Seniority match | 10% | The role's level/years vs. yours |
+| Domain match | 10% | Whether the direction fits (NLP / recommendation / risk…) |
+| JD-fetch confidence | 5% | Whether the full JD was read, or only the title |
 
-It also adds a ⚠️ warning to jobs that "explicitly don't sponsor / require too many years / require security clearance".
-To validate accuracy, prepare 30–50 "resume + JD + human label" rows in `eval/dataset.jsonl` and run `python eval/run_eval.py`.
+Jobs that **explicitly don't sponsor / demand too many years / require security clearance** get a warning flag.
 
-**Hiring systems covered**: Greenhouse, Lever, Ashby, Workable, SmartRecruiters, Recruitee, Personio (auto-detected);
-Workday (large enterprises/banks, needs manual host/site config, see `data/slug_overrides.json`); and the Adzuna / Reed / Jooble / JSearch(RapidAPI) aggregators (need free keys; JSearch covers LinkedIn/Indeed/Glassdoor via Google for Jobs).
+To measure accuracy yourself: put 30–50 "resume + JD + human label" rows in `eval/dataset.jsonl` and run `python eval/run_eval.py`.
 
-**For developers**: dependencies in `requirements.txt`; automated tests `pytest tests/`; evaluation scripts in `eval/`.
-Data files live in `data/`: `companies.json` (the shared list), `ats_cache.json` (probe cache = full-sweep progress),
-`slug_overrides.json` (manual overrides), `api_keys.json` (all keys). Per-user state (jobs / first-seen dates / match scores / resume) lives in `state.json` for local single-user, or under `data/users/<account>/state.json` when hosted multi-user; accounts are in `data/users.json` (hashed).
+### Hiring systems covered
+
+Auto-detected: **Greenhouse, Lever, Ashby, SmartRecruiters, Workable, Recruitee, Personio**.
+**Workday** (large enterprises/banks) needs a host/site entry — see `data/slug_overrides.json`.
+Plus the **Adzuna / Reed / Jooble / JSearch** aggregators (free keys; JSearch reaches LinkedIn/Indeed/Glassdoor via Google for Jobs).
+
+*Find missed companies* probes **Workable only** by default — measured against a real 121k-company cache, Workable costs ~16% of the time and finds ~93% of what that pass finds, while Recruitee/Personio burn most of the clock for a fraction of a percent. Set `DEEP_NICHE=1` for the thorough (much slower) version.
+
+### Data files (`data/`, git-ignored)
+
+| File | What's in it |
+|---|---|
+| `companies.json` | The company directory (shared by all accounts) |
+| `ats_cache.json` | Which hiring system each company uses = your sweep progress (shared) |
+| `users/<account>/state.json` | One per account: resume, jobs, first-seen dates, match scores, applications. Running locally, the account is `local`. |
+| `users.json` | Accounts, salted+hashed (multi-user only) |
+| `api_keys.json` | All your keys |
+| `slug_overrides.json` | Manual hiring-page overrides |
+
+An older single-user `data/state.json` is migrated into `users/<owner>/state.json` automatically on first start; the original is left untouched as a backup.
+
+### For developers
+
+Dependencies in `requirements.txt`. Tests: `pytest tests/`. Evaluation scripts in `eval/`.
+It's a single-process Flask app with in-memory state and background scan threads — **run one instance only** (don't scale to multiple workers/replicas).
 
 </details>
