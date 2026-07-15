@@ -20,7 +20,6 @@ venv/
 如何部署说明.md
 
 # Dev-tool artifacts
-.claude/
 *.spec
 build/
 dist/
