@@ -2730,76 +2730,73 @@ def add_companies(names, tag, towns=None):
     return added
 
 
-@app.route("/api/import_register", methods=["POST"])
-def api_import_register():
-    data = request.get_json(force=True)
-    path = (data.get("path") or "").strip().strip('"')
-    if not os.path.exists(path):
-        return jsonify({"error": f"文件不存在: {path}"}), 400
-    names, towns, seen = [], [], set()
-    try:
-        with open(path, encoding="utf-8-sig", errors="replace") as f:
-            for row in csvmod.DictReader(f):
-                if (row.get("Route") or "").strip() != "Skilled Worker":
-                    continue
-                n = (row.get("Organisation Name") or "").strip()
-                if not n:
-                    continue
-                key = n.lower()
-                if key in seen:
-                    continue
-                seen.add(key)
-                names.append(n)
-                towns.append((row.get("Town/City") or "").strip())
-    except Exception as e:
-        return jsonify({"error": f"解析失败: {e}"}), 400
-    added = add_companies(names, "register", towns)
-    return jsonify({"parsed": len(names), "added": added,
-                    "total": len(state["companies"])})
+REGISTER_ROUTE = "Skilled Worker"   # 官方名单里只要这条签证路线
+
+
+def _read_table(f):
+    """上传的 xlsx/csv 统一读成 (表头, 数据行)，两种格式后面走同一套识别。"""
+    fname = (f.filename or "").lower()
+    if fname.endswith((".xlsx", ".xlsm")):
+        import openpyxl
+        wb = openpyxl.load_workbook(BytesIO(f.read()), read_only=True, data_only=True)
+        for ws in wb.worksheets:
+            it = ws.iter_rows(values_only=True)
+            try:
+                header = ["" if c is None else str(c) for c in next(it)]
+            except StopIteration:
+                continue
+            if any(h.strip() for h in header):
+                return header, [["" if c is None else str(c) for c in r] for r in it]
+        return [], []
+    text = f.read().decode("utf-8-sig", errors="replace")
+    table = list(csvmod.reader(text.splitlines()))
+    return (table[0], table[1:]) if table else ([], [])
+
+
+def _extract_companies(header, rows):
+    """(names, towns, tag)。自动分辨「官方赞助商名单」和「普通公司清单」。
+
+    官方名单（gov.uk 那份 CSV）有 Organisation Name + Route 两列：只取 Skilled Worker
+    这条路线，并带上 Town/City，打 register 标签。其它文件按普通清单处理，打 curated。
+    """
+    idx = {str(h).strip().lower(): i for i, h in enumerate(header) if str(h).strip()}
+    ni, ri = idx.get("organisation name"), idx.get("route")
+    if ni is not None and ri is not None:          # 官方赞助商名单
+        ti = idx.get("town/city")
+        names, towns, seen = [], [], set()
+        for r in rows:
+            if len(r) <= max(ni, ri) or str(r[ri]).strip() != REGISTER_ROUTE:
+                continue
+            n = str(r[ni]).strip()
+            if not n or n.lower() in seen:
+                continue
+            seen.add(n.lower())
+            names.append(n)
+            towns.append(str(r[ti]).strip() if ti is not None and len(r) > ti else "")
+        return names, towns, "register"
+    col = _pick_company_col(header)                 # 普通清单
+    if col is not None:
+        names = [str(r[col]).strip() for r in rows if len(r) > col and str(r[col]).strip()]
+    else:                                            # 没表头：整列都当公司名
+        names = [str(r[0]).strip() for r in [header] + rows if r and str(r[0]).strip()]
+    return [n for n in names if not n.startswith("=")], None, "curated"
 
 
 @app.route("/api/upload", methods=["POST"])
 def api_upload():
+    """导入公司名单：官方赞助商 CSV 或自己的 Excel/CSV 清单，自动识别。"""
     f = request.files.get("file")
     if not f:
         return jsonify({"error": "没有收到文件"}), 400
-    fname = f.filename.lower()
-    names = []
     try:
-        if fname.endswith((".xlsx", ".xlsm")):
-            import openpyxl
-            wb = openpyxl.load_workbook(BytesIO(f.read()), read_only=True, data_only=True)
-            for ws in wb.worksheets:
-                rows = ws.iter_rows(values_only=True)
-                try:
-                    header = next(rows)
-                except StopIteration:
-                    continue
-                col = _pick_company_col(header)
-                if col is None:
-                    continue
-                for row in rows:
-                    if col < len(row) and row[col]:
-                        v = str(row[col]).strip()
-                        if v and not v.startswith("="):
-                            names.append(v)
-                if names:
-                    break
-        else:
-            text = f.read().decode("utf-8-sig", errors="replace")
-            rows = list(csvmod.reader(text.splitlines()))
-            if rows:
-                col = _pick_company_col(rows[0])
-                if col is not None and len(rows) > 1:
-                    names = [r[col].strip() for r in rows[1:] if len(r) > col and r[col].strip()]
-                else:
-                    names = [r[0].strip() for r in rows if r and r[0].strip()]
+        names, towns, tag = _extract_companies(*_read_table(f))
     except Exception as e:
         return jsonify({"error": f"解析失败: {e}"}), 400
     if not names:
-        return jsonify({"error": "没有识别到公司名"}), 400
-    added = add_companies(names, "curated")
-    return jsonify({"count": added, "total": len(state["companies"])})
+        return jsonify({"error": "没有识别到公司名（确认文件里有公司名那一列）"}), 400
+    added = add_companies(names, tag, towns)
+    return jsonify({"count": added, "parsed": len(names), "kind": tag,
+                    "total": len(state["companies"])})
 
 
 @app.route("/api/companies", methods=["POST"])

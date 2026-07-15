@@ -597,6 +597,14 @@
           <div class="ta"><button onclick="scan('known')" data-i18n="tool_start_scan">开始扫描</button></div>
         </div>
         <div class="toolcard">
+          <div class="ti"><div class="tn" data-i18n="tool_import_t">导入公司名单</div>
+            <div class="td" data-i18n-html="tool_import_d"><b>第一步做这个。</b>选中 gov.uk 下载的工签赞助商 CSV（自动只取 Skilled Worker），或你自己的公司清单（Excel / CSV）。可重复导入，自动去重。</div></div>
+          <div class="ta">
+            <input type="file" id="impFile" accept=".csv,.xlsx,.xlsm" style="display:none" onchange="importCompanies(this)">
+            <button class="ghost" id="btnImport" onclick="document.getElementById('impFile').click()" data-i18n="tool_import_btn">选择文件</button>
+          </div>
+        </div>
+        <div class="toolcard">
           <div class="ti"><div class="tn" data-i18n="tool_build_t">首次建立岗位库</div>
             <div class="td" data-i18n-html="tool_build_d">第一次使用时跑一遍：把 12 万家工签雇主里有招聘系统的摸出来。约几小时，可随时停，<b>进度自动保存、续跑不重复</b>。之后就不用再点了。</div></div>
           <div class="ta"><button class="ghost" id="btnPending" onclick="scan('pending')" data-i18n="tool_run">运行</button></div>
@@ -776,6 +784,16 @@ const I18N = {
   tools_sub:         { zh: '扫描岗位、补充来源、导出，都在这。日常只需第一张卡片「扫描新岗位」。', en: 'Scan, add sources and export — all here. Day-to-day you only need the first card, "Scan new jobs".' },
   tools_lib_loading: { zh: '岗位库状态加载中…', en: 'Loading job-library status…' },
   tools_sec_scan:    { zh: '扫描岗位', en: 'Scan jobs' },
+  tool_import_t:     { zh: '导入公司名单', en: 'Import company list' },
+  tool_import_d:     { zh: '<b>第一步做这个。</b>选中 gov.uk 下载的工签赞助商 CSV（自动只取 Skilled Worker），或你自己的公司清单（Excel / CSV）。可重复导入，自动去重。',
+                       en: '<b>Do this first.</b> Pick the UK sponsor-licence CSV from gov.uk (only Skilled Worker rows are taken), or your own company list (Excel / CSV). Safe to re-import — duplicates are merged.' },
+  tool_import_btn:   { zh: '选择文件', en: 'Choose file' },
+  tool_import_busy:  { zh: '导入中…', en: 'Importing…' },
+  tool_import_fail:  { zh: '导入失败。', en: 'Import failed.' },
+  tool_import_kind_reg: { zh: '工签赞助商名单', en: 'sponsor register' },
+  tool_import_kind_own: { zh: '公司清单', en: 'company list' },
+  tool_import_done:  { zh: '已导入{kind}：新增 {added} 家，现在共 {total} 家。',
+                       en: 'Imported {kind}: {added} new, {total} companies in total.' },
   tool_scan_new_t:   { zh: '扫描新岗位', en: 'Scan new jobs' },
   tool_scan_new_d:   { zh: '<b>日常就用这个。</b>从已经找到招聘系统的雇主里抓最新岗位，几分钟就好。', en: '<b>Your everyday button.</b> Fetch the latest jobs from employers whose ATS is already known — takes a few minutes.' },
   tool_start_scan:   { zh: '开始扫描', en: 'Start scan' },
@@ -2299,6 +2317,36 @@ async function runMatch() {
   const d = await r.json();
   if (d.error) { alert(d.error); return; }
   refresh();
+}
+
+// 导入公司名单：官方赞助商 CSV 或自己的 Excel/CSV，后端自动识别格式
+async function importCompanies(input) {
+  const f = input.files && input.files[0];
+  if (!f) return;
+  const btn = document.getElementById('btnImport');
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = t('tool_import_busy');
+  try {
+    const fd = new FormData();
+    fd.append('file', f);
+    const r = await fetch('/api/upload', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!r.ok) {
+      alert(d.error || t('tool_import_fail'));
+    } else {
+      const kind = d.kind === 'register' ? t('tool_import_kind_reg') : t('tool_import_kind_own');
+      alert(t('tool_import_done', { kind, added: (d.count || 0).toLocaleString(),
+                                    total: (d.total || 0).toLocaleString() }));
+      refresh();
+    }
+  } catch (e) {
+    alert(t('tool_import_fail') + ' ' + e);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+    input.value = '';   // 清空，才能重复选同一个文件
+  }
 }
 
 async function scan(mode) {
