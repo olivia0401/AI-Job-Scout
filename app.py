@@ -581,7 +581,11 @@ def _spawn(fn, *args):
     threading.Thread(target=runner, daemon=True).start()
 
 
-ats_cache = {}  # name -> {"ats","slug"} | "none"
+# name -> {"ats","slug"}：找到招聘系统
+#       | "none"      ：普通探测没找到（深度补扫还会再试它）
+#       | "none_deep" ：深度补扫也探过、确认没有（深度补扫不再重复扫 → 停了能续跑）
+ats_cache = {}
+_NO_ATS = ("none", "none_deep")   # 两者都表示"没有招聘页"
 company_sizes = {}  # company name -> {"band": startup|mid|large|unknown, "note": str}
 api_keys = {}   # {"adzuna_app_id","adzuna_app_key","reed_api_key"}
 slug_overrides = {}  # name.lower() -> {"ats","slug"}：手动修正 slug 猜错的重点公司
@@ -1118,7 +1122,7 @@ def find_ats(name, probes=PROBES, max_slugs=SWEEP_SLUGS, force=False):
         if res:  # 手动修正优先，抓不到再走自动探测
             return (ov["ats"], ov.get("slug") or ov.get("site") or "", res)
     cached = ats_cache.get(name)
-    if cached == "none" and not force:
+    if cached in _NO_ATS and not force:
         return None
     if isinstance(cached, dict):
         try:
@@ -1154,8 +1158,10 @@ def find_ats(name, probes=PROBES, max_slugs=SWEEP_SLUGS, force=False):
     if fallback:
         ats_cache[name] = {"ats": fallback[0], "slug": fallback[1]}
         return fallback
-    if not rate_limited:  # 限流时不写缓存，下次续跑会重新探测这家
-        ats_cache[name] = "none"
+    if not rate_limited:  # 限流/中途停止时不写缓存，下次续跑会重新探测这家
+        # 深度补扫(force=True)也没找到 → 记 none_deep，下次深度补扫直接跳过它。
+        # 这样「扫一半停掉、明天接着跑」不会从头再来（普通探测仍记 none，留给深度补扫再试）。
+        ats_cache[name] = "none_deep" if force else "none"
     return None
 
 
@@ -1431,6 +1437,7 @@ def start_scan(mode):
     elif mode == "pending":  # 还没探测过的公司：全量清查（可中断续跑）
         names = [n for n in comps if n not in ats_cache]
     elif mode == "deep":    # 深度补扫：对已判 none 的公司再试慢探测(Recruitee/Personio)
+        # 只挑「还没深度探过」的 none；深度探过确认没有的是 none_deep，故意排除 → 可中断续跑
         names = [n for n in comps if ats_cache.get(n) == "none"]
     else:  # all
         known = [n for n in comps if isinstance(ats_cache.get(n), dict)]
@@ -2800,7 +2807,7 @@ def api_state():
         # 精选公司即使没探测到招聘页也要显示
         for n in curated:
             if n not in res_out:
-                st = "no_board" if ats_cache.get(n) == "none" else "pending"
+                st = "no_board" if ats_cache.get(n) in _NO_ATS else "pending"
                 res_out[n] = {"name": n, "status": st, "matched": [],
                               "curated": True, "links": build_links(n)}
 
@@ -2912,7 +2919,7 @@ def api_state():
             "probed": probed,
             "pending": sum(1 for n in comps if n not in ats_cache),
             "with_board": len(results),
-            "slug_failed": sum(1 for v in ats_cache.values() if v == "none"),
+            "slug_failed": sum(1 for v in ats_cache.values() if v in _NO_ATS),
             "overrides": len(slug_overrides),
             "has_ai": sum(1 for r in results.values() if r["status"] == "has_ai"),
             "ai_jobs": len(feed),
