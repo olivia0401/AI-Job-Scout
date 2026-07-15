@@ -1230,7 +1230,10 @@ def match_job(title, desc, keywords):
                  AI 关键词 ≥2 次（拓宽召回；要求 ≥2 次是为了滤掉
                  公司简介里"we are an AI-powered..."这种一嘴带过的套话）；
       None    —— 都没命中。
-    JD 正文抓不到时（desc 为空）只走标题，天然保守。"""
+    JD 正文抓不到时（desc 为空）只走标题，天然保守。
+    keywords 为空 = 用户要"看全部"（不做行业过滤），收录每个岗位（返回 'all'）。"""
+    if not keywords:
+        return "all"
     t = (title or "").lower()
     if kw_match(t, keywords):
         return "title"
@@ -1276,14 +1279,29 @@ _ENG_ROLE_RE = re.compile(r"\b(engineer|developer|programmer)\b")
 _SCI_ROLE_RE = re.compile(r"\b(scientist|researcher|research)\b")
 
 
-def title_match(title, targets=None, acceptables=None):
+def title_match(title, targets=None, acceptables=None, custom=False, keywords=None):
     """岗位方向：target=正好想要 / acceptable=能接受 / off_target=方向不对。
     off_target 的岗位无论技能分多高都不该被强推（例如 IT Support、Sales）。
 
-    判定顺序：① 明确黑名单角色(support/sales/qa…)直接 off_target；
-    ② 用户显式列的目标/可接受短语优先；③ 词元启发式：AI方向词+角色词——
-    兼容各种标题写法，避免误伤真实相关岗位。"""
+    两种画像：
+    · custom=True —— 用户已经把工具切到别的行业（改了关键词或填了目标岗位）。
+      方向**完全**由用户自己的目标/可接受/搜索词决定，绝不套用 AI 专用的
+      标题黑名单和 AI 词元启发式——否则金融/建筑/机械/市场等岗位会被永久
+      判成 off_target 沉底，工具就退化成"只出得来 AI 岗"。
+    · custom=False（内置 AI 画像）—— 保持原逻辑：① 黑名单角色直接 off_target；
+      ② 目标/可接受短语；③ AI 方向词+角色词的词元启发式兜底。"""
     t = (title or "").lower()
+    if custom:
+        if targets and _title_hit(t, targets):
+            return "target"
+        if acceptables and _title_hit(t, acceptables):
+            return "acceptable"
+        if keywords and _title_hit(t, keywords):
+            # 标题命中用户的搜索词 = 至少对口；没单独列 target 时就当 target
+            return "acceptable" if targets else "target"
+        if not (targets or acceptables or keywords):
+            return "target"     # 关键词/目标全空 = 看全部，任何岗位都不沉底
+        return "off_target"
     tg = targets if targets is not None else DEFAULT_TARGET_TITLES
     ac = acceptables if acceptables is not None else DEFAULT_ACCEPTABLE_TITLES
     if EXCLUDE_TITLE_RE.search(t):          # ① 黑名单：即便带 engineer/AI 也算方向不对
@@ -1302,13 +1320,18 @@ def title_match(title, targets=None, acceptables=None):
 
 def build_links(name):
     q = quote_plus(name)
+    # 一键搜岗的关键词跟随当前用户自己的行业，而不是写死 AI——多用户下
+    # 每个账号(你搜 AI、朋友搜金融/建筑)拿到的都是自己方向的搜索链接。
+    kws = [k for k in (state.get("keywords") or []) if k][:3]
+    li_terms = " ".join(kws) if kws else "jobs"
+    g_role = (" OR ".join(f'"{k}"' for k in kws)) if kws else ""
+    g_query = f'"{name}" ({g_role}) job UK' if g_role else f'"{name}" jobs UK'
     return {
         "li_people": ("https://www.linkedin.com/search/results/people/?keywords="
                       + quote_plus(f'"{name}" (recruiter OR "talent acquisition" OR "hiring manager" OR "engineering manager")')),
         "li_jobs_kw": ("https://www.linkedin.com/jobs/search/?keywords="
-                       + quote_plus(f"{name} AI machine learning engineer") + "&location=United%20Kingdom"),
-        "google": ("https://www.google.com/search?q="
-                   + quote_plus(f'"{name}" ("AI engineer" OR "machine learning engineer") job UK')),
+                       + quote_plus(f"{name} {li_terms}") + "&location=United%20Kingdom"),
+        "google": ("https://www.google.com/search?q=" + quote_plus(g_query)),
         "hunter": f"https://hunter.io/search/{q}",
         "careers_google": ("https://www.google.com/search?q="
                            + quote_plus(f"{name} careers jobs")),
@@ -2842,8 +2865,19 @@ def api_state():
         excl = state.get("exclude_keywords") or []
         excl_re = (re.compile(r"\b(" + "|".join(re.escape(k) for k in excl) + r")\b")
                    if excl else None)
-        tgt = state.get("target_titles") or DEFAULT_TARGET_TITLES
-        acc = state.get("acceptable_titles") or DEFAULT_ACCEPTABLE_TITLES
+        # 目标/可接受岗位：内置 AI 默认值曾被前端回填后又存了回来——凡是与
+        # 默认完全相同的，一律当"没设"，否则会把工具永久锁死在 AI 画像。
+        user_tgt = state.get("target_titles") or None
+        if user_tgt == DEFAULT_TARGET_TITLES:
+            user_tgt = None
+        user_acc = state.get("acceptable_titles") or None
+        if user_acc == DEFAULT_ACCEPTABLE_TITLES:
+            user_acc = None
+        kws = [k.lower() for k in (state.get("keywords") or [])]
+        # 只要用户填了目标岗位、或把关键词从内置 AI 默认改成别的行业（含清空
+        # 关键词 = 看全部），就切到 custom 画像：方向跟随用户的词，不套 AI 黑名单。
+        default_kws = [k.lower() for k in DEFAULT_KEYWORDS]
+        custom_prof = bool(user_tgt) or bool(user_acc) or (kws != default_kws)
         show_hidden = request.args.get("hidden") == "1"  # 已隐藏视图：只看被隐藏的
 
         feed = []
@@ -2866,7 +2900,8 @@ def api_state():
                     days = None
                 ms = state["match_scores"].get(j.get("url", ""))
                 visa = visa_certainty(ms, on_reg)
-                tmatch = title_match(j.get("title", ""), tgt, acc)
+                tmatch = title_match(j.get("title", ""), user_tgt, user_acc,
+                                     custom=custom_prof, keywords=kws)
                 feed.append({
                     "title": j.get("title", ""), "url": j.get("url", ""),
                     "location": j.get("location", ""), "company": n,
@@ -2904,7 +2939,8 @@ def api_state():
                 days = None
             ms = state["match_scores"].get(u)
             visa = visa_certainty(ms, bool(j.get("sponsor")))
-            tmatch = title_match(j.get("title", ""), tgt, acc)
+            tmatch = title_match(j.get("title", ""), user_tgt, user_acc,
+                                 custom=custom_prof, keywords=kws)
             feed.append({
                 "title": j.get("title", ""), "url": u,
                 "location": j.get("location", ""), "company": j.get("company", ""),
@@ -2977,7 +3013,8 @@ def api_state():
         return jsonify({
             "keywords": state["keywords"], "uk_only": state["uk_only"],
             "exclude_keywords": state["exclude_keywords"],
-            "target_titles": tgt, "acceptable_titles": acc,
+            "target_titles": user_tgt or [],
+            "acceptable_titles": user_acc or [],
             "excl_suggest": exclude_suggestions(),
             "auto_hours": state["auto_hours"], "exp_years": state["exp_years"],
             "counts": counts, "results": res_out, "feed": feed[:limit],
@@ -3012,10 +3049,9 @@ def _auth_info():
 def api_settings():
     data = request.get_json(force=True)
     with _lock:
-        if "keywords" in data:
-            kws = [k.strip().lower() for k in data["keywords"] if k.strip()]
-            if kws:
-                state["keywords"] = kws
+        if "keywords" in data:  # 传空列表 = 看全部（不做行业过滤）
+            state["keywords"] = [
+                k.strip().lower() for k in data["keywords"] if k.strip()]
         if "exclude_keywords" in data:  # 传空列表 = 清空排除词
             state["exclude_keywords"] = [
                 k.strip().lower() for k in data["exclude_keywords"] if k.strip()]

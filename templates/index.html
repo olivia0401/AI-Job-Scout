@@ -536,8 +536,9 @@
     </div>
     <div class="advbody">
       <div class="row">
-        <span class="note" data-i18n="goal_kw">岗位关键词：</span>
-        <input type="text" id="kw" style="flex:1;min-width:280px">
+        <span class="note" data-i18n-title="goal_kw_tip" data-i18n="goal_kw" title="留空 = 显示全部行业的所有岗位；填了就只留标题/正文命中这些词的">岗位关键词：</span>
+        <input type="text" id="kw" style="flex:1;min-width:280px"
+               data-i18n-ph="goal_kw_ph" placeholder="留空 = 显示全部岗位；或逗号分隔按行业筛，如 accountant, financial analyst">
       </div>
       <div class="row" style="margin-top:6px">
         <span class="note" data-i18n="goal_exkw">排除词：</span>
@@ -761,6 +762,8 @@ const I18N = {
   goal_title:        { zh: '求职目标设置', en: 'Job-search settings' },
   goal_sub:          { zh: '告诉工具你要找什么、你的背景——它据此给岗位打分、排序、排雷。改完点「保存设置」即时生效。', en: 'Tell the tool what you want and your background — it scores, ranks and flags jobs accordingly. Click "Save settings" to apply.' },
   goal_kw:           { zh: '岗位关键词：', en: 'Job keywords:' },
+  goal_kw_tip:       { zh: '留空 = 显示全部行业的所有岗位；填了就只留标题/正文命中这些词的', en: 'Blank = show every job across all industries; fill in to keep only titles/descriptions matching these words' },
+  goal_kw_ph:        { zh: '留空 = 显示全部岗位；或逗号分隔按行业筛，如 accountant, financial analyst', en: 'Blank = show all jobs; or comma-separate to filter by industry, e.g. accountant, financial analyst' },
   goal_exkw:         { zh: '排除词：', en: 'Exclude words:' },
   goal_exkw_ph:      { zh: '标题含这些词的岗位直接隐藏，逗号分隔，如 sales, consultant, intern', en: 'Hide jobs whose title contains these, comma-separated, e.g. sales, consultant, intern' },
   goal_target:       { zh: '目标岗位：', en: 'Target roles:' },
@@ -1409,7 +1412,8 @@ async function refresh() {
     + '&limit=' + FEED_LIMIT + (F.tier === 'hidden' ? '&hidden=1' : ''));
   S = await r.json();
   updateAuth();
-  document.getElementById('kw').value = (S.keywords || []).join(', ');
+  const kwEl = document.getElementById('kw');
+  if (kwEl && document.activeElement !== kwEl) kwEl.value = (S.keywords || []).join(', ');
   const exEl = document.getElementById('exkw');
   if (exEl && document.activeElement !== exEl)
     exEl.value = (S.exclude_keywords || []).join(', ');
@@ -2424,7 +2428,7 @@ async function saveSettings(silent) {
                  exclude_keywords: splitList('exkw'),
                  target_titles: splitList('targetTitles'),
                  acceptable_titles: splitList('acceptTitles') };
-  if (kws.length) body.keywords = kws;
+  body.keywords = kws;  // 空数组 = 看全部（不做行业过滤）
   await fetch('/api/settings', { method: 'POST', headers: {'Content-Type':'application/json'},
     body: JSON.stringify(body) });
   if (!silent) refresh();

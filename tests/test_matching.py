@@ -238,6 +238,42 @@ def test_title_match_direction():
     assert app.title_match("Financial Analyst") == "off_target"
 
 
+def test_title_match_custom_industry_follows_user_words():
+    """换到别的行业后，方向判断跟随用户自己的关键词/目标岗位，
+    不再套用 AI 专用黑名单——否则金融/建筑/机械会被永久判成 off_target。"""
+    # 金融：只改了关键词（没填目标岗位）→ 标题命中搜索词就算 target
+    fin_kws = ["accountant", "financial analyst", "audit", "tax"]
+    assert app.title_match("Financial Analyst", None, None,
+                           custom=True, keywords=fin_kws) == "target"
+    assert app.title_match("Senior Auditor", None, None,
+                           custom=True, keywords=fin_kws) == "off_target"  # audit≠auditor
+    # 机械：AI 默认模式下被黑名单永久判 off_target；custom 模式下能对口
+    assert app.title_match("Mechanical Engineer") == "off_target"          # AI 画像
+    assert app.title_match("Mechanical Engineer", ["mechanical engineer"], None,
+                           custom=True) == "target"                         # 用户画像
+    # custom 模式不再误把 AI 标题当对口（金融用户不该被推 ML 岗）
+    assert app.title_match("Machine Learning Engineer", None, None,
+                           custom=True, keywords=fin_kws) == "off_target"
+    # 显式列了目标岗位时，只命中搜索词(未列进 target)的算 acceptable
+    assert app.title_match("Tax Manager", ["accountant"], None,
+                           custom=True, keywords=fin_kws) == "acceptable"
+
+
+def test_match_job_empty_keywords_keeps_everything():
+    """关键词留空 = 看全部：任何标题都收录（返回 'all'），不做行业过滤。"""
+    assert app.match_job("Accountant", "", []) == "all"
+    assert app.match_job("Site Manager", "we build bridges", []) == "all"
+    assert app.match_job("Machine Learning Engineer", "", []) == "all"
+
+
+def test_title_match_show_all_never_off_target():
+    """看全部模式（关键词/目标全空）下，任何岗位都是 target，不沉底。"""
+    assert app.title_match("Accountant", None, None,
+                           custom=True, keywords=[]) == "target"
+    assert app.title_match("Structural Engineer", None, None,
+                           custom=True, keywords=[]) == "target"
+
+
 def test_off_target_never_strong():
     """验收核心：技能分再高，方向不对(off_target)也绝不能进 strong。"""
     # IT Support + 高技能重合（python/docker/aws）→ 高分，但方向不对 → 不能 strong

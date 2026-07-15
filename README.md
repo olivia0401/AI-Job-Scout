@@ -164,7 +164,11 @@ Passwords are stored salted and hashed (pbkdf2) in `data/users.json` — never i
 
 # Not looking for AI jobs? Switch to your industry
 
-At heart this tool "scans company hiring systems for jobs whose title or body matches **your keywords**" — the AI focus is just the default keyword set. Go to **Settings → Job keywords**, replace them, save, and re-scan.
+At heart this tool "scans company hiring systems for jobs whose title or body matches **your keywords**" — the AI focus is just the default keyword set. Go to **Settings → Job keywords**, replace them, save, and **re-scan** (changing keywords doesn't retroactively rewrite jobs already scanned — run *Scan new jobs* again to pull your industry's roles).
+
+Once your keywords aren't the AI defaults, the tool automatically treats **titles that hit your keywords as on-target** — so your roles land in the top tiers instead of being sunk as "off-target". For finer control, **Settings → Target roles** lets you pin exact titles that should reach the top tier (e.g. `accountant, financial controller`).
+
+> **Want *everything*, no industry filter?** Leave **Job keywords blank** and save — the tool then keeps **every job** each sponsor company advertises, across all industries, and you narrow with the search box, tiers and filters yourself. (Re-scan after clearing keywords so the wider net is actually cast.)
 
 | Industry | Keywords to try |
 |---|---|

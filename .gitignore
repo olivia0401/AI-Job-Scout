@@ -23,3 +23,8 @@ venv/
 *.spec
 build/
 dist/
+
+# Editor / AI-assistant local config — never upload
+.claude/
+.vscode/
+.idea/
