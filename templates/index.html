@@ -588,6 +588,7 @@
     </div>
     <div class="advbody" style="margin-bottom:16px">
       <div class="note" id="pendingNote" data-i18n="tools_lib_loading">岗位库状态加载中…</div>
+      <div class="note" id="discNote" style="margin-top:4px;color:var(--faint)"></div>
     </div>
     <div class="toolsec">
       <h3 data-i18n="tools_sec_scan">扫描岗位</h3>
@@ -1143,6 +1144,11 @@ My resume:
   lib_fixes:         { zh: ' · 手动修正 {n} 家', en: ' · manual fixes {n}' },
   lib_jd_rate:       { zh: ' · JD 抓取成功率 {rate}（{ok}/{total}）', en: ' · JD fetch rate {rate} ({ok}/{total})' },
   lib_agg:           { zh: ' · 聚合平台 {n} 个（其中担保名单 {s} 个）', en: ' · aggregator {n} (on register {s})' },
+  disc_prefix:       { zh: '公司来源分布：', en: 'Companies found by: ' },
+  disc_build:        { zh: '建库 {n} 家', en: 'Build library {n}' },
+  disc_deep:         { zh: '找回漏掉 {n} 家', en: 'Deep top-up {n}' },
+  disc_legacy:       { zh: '更早·未记录 {n} 家', en: 'earlier/untracked {n}' },
+  disc_hn:           { zh: 'HN 招聘帖 {n} 个岗位', en: 'HN posts {n} jobs' },
   agg_searching:     { zh: '搜索中…', en: 'Searching…' },
   agg_need_key:      { zh: '需先在 data/api_keys.json 配置 Adzuna/Reed 的免费 API key', en: 'Configure a free Adzuna/Reed API key in data/api_keys.json first' },
   size_running:      { zh: '识别中… {done}/{total}', en: 'Estimating… {done}/{total}' },
@@ -1453,6 +1459,15 @@ async function refresh() {
     + (c.overrides ? t('lib_fixes', { n: c.overrides }) : '')
     + t('lib_jd_rate', { rate: jdRate, ok: (c.jd_ok ?? 0).toLocaleString(), total: ((c.jd_ok ?? 0) + (c.jd_fail ?? 0)).toLocaleString() })
     + (c.agg_jobs ? t('lib_agg', { n: c.agg_jobs, s: c.agg_sponsor ?? 0 }) : '');
+  // 公司来源分布：每家公司是被哪个扫描按钮首次发现的（found_via 汇总）
+  const bd = c.by_discovery || {};
+  const dparts = [];
+  if (bd.build)  dparts.push(t('disc_build',  { n: bd.build.toLocaleString() }));
+  if (bd.deep)   dparts.push(t('disc_deep',   { n: bd.deep.toLocaleString() }));
+  if (bd.legacy) dparts.push(t('disc_legacy', { n: bd.legacy.toLocaleString() }));
+  if (c.hn_jobs) dparts.push(t('disc_hn',     { n: c.hn_jobs.toLocaleString() }));
+  const discEl = document.getElementById('discNote');
+  if (discEl) discEl.textContent = dparts.length ? t('disc_prefix') + dparts.join(' · ') : '';
   const btnAgg = document.getElementById('btnAgg');
   if (btnAgg) {
     const running = (S.agg || {}).running;
