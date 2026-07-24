@@ -34,7 +34,7 @@ You install once. After that, starting it is one step.
 ### Step 1 — Install Python (once)
 1. Open https://www.python.org/downloads/
 2. Click the big yellow **Download Python 3.x** button, then run the downloaded file.
-3. ⚠️ **The step everyone misses**: at the **bottom** of the installer there's a checkbox **"Add python.exe to PATH"** — **tick it**, then click **Install Now**.
+3. **The step everyone misses**: at the **bottom** of the installer there's a checkbox **"Add python.exe to PATH"** — **tick it**, then click **Install Now**.
    (Skip it and you'll later see "not recognized as an internal or external command" — just reinstall and tick the box.)
 4. Click Close.
 
@@ -56,7 +56,7 @@ You install once. After that, starting it is one step.
    python app.py
    ```
 5. When you see `AI Job Scout running: http://127.0.0.1:5050`, it worked.
-6. Open your browser at **http://127.0.0.1:5050** 🎉
+6. Open your browser at **http://127.0.0.1:5050**
 
 > **Don't close the black window** — it *is* the server. Leave it open (minimising is fine) while you use the tool.
 
@@ -156,7 +156,7 @@ Multi-user mode switches on automatically when the app is exposed (`HOST=0.0.0.0
 | `DEEP_WORKERS` | `48` | Worker threads for *Find missed companies*. |
 | `DEEP_NICHE` | off | Also probe Recruitee/Personio during *Find missed companies*. Far slower for a very small extra yield — off by default. |
 
-> ⚠️ **`REGISTRATION_OPEN=1` on a public URL means anyone who finds it can create an account and spend against your API key** (within the per-day caps, but there's no cap on how many people sign up). Only turn it on if you're comfortable with that, keep the caps low, and don't publish the URL.
+> **`REGISTRATION_OPEN=1` on a public URL means anyone who finds it can create an account and spend against your API key** (within the per-day caps, but there's no cap on how many people sign up). Only turn it on if you're comfortable with that, keep the caps low, and don't publish the URL.
 
 Passwords are stored salted and hashed (pbkdf2) in `data/users.json` — never in plain text.
 
@@ -203,7 +203,7 @@ Every company card includes one-click **LinkedIn recruiter search / Hunter email
 | **Adzuna** | https://developer.adzuna.com/ | UK-wide aggregation (~1000 calls/month) |
 | **Reed** | https://www.reed.co.uk/developers | One of the largest UK-native job sites |
 | **Jooble** | https://jooble.org/api/about | Aggregates many UK sites; broad top-up |
-| **JSearch (RapidAPI)** | https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch | ⭐ Pulls **Google for Jobs**, which covers **LinkedIn / Indeed / Glassdoor / ZipRecruiter** — exactly the blind spots above. Free tier ~200 calls/month. |
+| **JSearch (RapidAPI)** | https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch | Pulls **Google for Jobs**, which covers **LinkedIn / Indeed / Glassdoor / ZipRecruiter** — exactly the blind spots above. Free tier ~200 calls/month. |
 
 > To dent the LinkedIn/Indeed blind spot, `rapidapi_key` (JSearch) is the one that matters — it's the only source that reaches those aggregators. No free official API connects directly to the full LinkedIn/Indeed feed; Google for Jobs is the practical approximation.
 > There's also **Toolbox → Social hiring posts (Hacker News)** for "Who is hiring" threads.
@@ -219,7 +219,7 @@ A set of well-known employers ships pre-loaded and gets scanned on first launch:
 
 > Workday addresses are **best-effort** presets. If one breaks (the company moved), it's skipped and **no other company is affected**.
 >
-> ❗ **Google / Amazon / Meta / Microsoft / JPMorgan** and similar run **in-house systems with no public API** — no tool can read those. Use the Google/LinkedIn search links on the company card.
+> **Google / Amazon / Meta / Microsoft / JPMorgan** and similar run **in-house systems with no public API** — no tool can read those. Use the Google/LinkedIn search links on the company card.
 
 ---
 
