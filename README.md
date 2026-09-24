@@ -263,7 +263,26 @@ Each job is scored 0–100 as an "ATS match" using **Jobscan-style rules**. It's
 
 Jobs that **explicitly don't sponsor / demand too many years / require security clearance** get a warning flag.
 
-To measure accuracy yourself: put 30–50 "resume + JD + human label" rows in `eval/dataset.jsonl` and run `python eval/run_eval.py`.
+### How the scorer is evaluated
+
+Scoring is a **ranking problem**, not a classification one — what matters is
+whether the good jobs float to the top, not whether any single score is
+"correct". So it is measured with ranking metrics, against hand-labelled
+relevance (`strong` / `medium` / `weak` / `none`):
+
+| Metric | Question it answers |
+|---|---|
+| **Spearman ρ** | Does the score order jobs the same way a human would? |
+| **Precision@k** | Of the top *k* the tool actually shows you, how many are worth opening? |
+| **NDCG@k** | Same, but a `strong` match ranked 1st counts for more than one ranked 5th. |
+
+Put 30–50 "resume + JD + human label" rows in `eval/dataset.jsonl` and run
+`python eval/run_eval.py`.
+
+**Read the numbers with their sample size attached.** Ranking metrics on a few
+dozen labelled rows are noisy, and a Precision@5 computed on 30 labels is
+directional, not a measurement. The label count is printed with every result for
+exactly that reason.
 
 ### Hiring systems covered
 
