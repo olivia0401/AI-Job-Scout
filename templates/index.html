@@ -1541,7 +1541,8 @@ async function loadSuggestions() {
 async function genAdvice() {
   const out = document.getElementById('adviceOut');
   out.innerHTML = `<div class="info" style="margin-top:8px">${t('sugg_generating')}</div>`;
-  const r = await fetch('/api/resume_suggestions/generate', { method: 'POST' });
+  const r = await fetch('/api/resume_suggestions/generate', { method: 'POST',
+    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lang: LANG }) });
   const d = await r.json();
   if (d.error) { out.innerHTML = `<div class="info" style="margin-top:8px;color:var(--red)">${esc(d.error)}</div>`; return; }
   out.innerHTML = `<div class="advice">${mdToHtml(d.advice || '')}</div>`;
@@ -1795,7 +1796,7 @@ function extraBadges(j) {
   let h = '';
   if (j.level) h += `<span class="badge lvl">${esc(levelLabel(j.level))}</span>`;
   if (j.title_match === 'target') h += `<span class="badge fgood">${t('badge_target')}</span>`;
-  if (j.csize && j.csize !== 'unknown') h += `<span class="badge lvl" title="${t('badge_csize_tip')}">${esc((S.consts.size_labels || {})[j.csize] || j.csize)}</span>`;
+  if (j.csize && j.csize !== 'unknown') h += `<span class="badge lvl" title="${t('badge_csize_tip')}">${esc(I18N['csize_' + j.csize] ? t('csize_' + j.csize) : ((S.consts.size_labels || {})[j.csize] || j.csize))}</span>`;
   if (j.njobs) h += `<span class="badge lvl" title="${t('badge_njobs_tip')}">${t('badge_njobs', { n: j.njobs })}</span>`;
   if (j.llm) h += `<span class="badge llm">${t('badge_llm')}</span>`;
   if (d != null && d >= S.consts.long_days) h += `<span class="badge long">${t('badge_long', { n: d })}</span>`;
@@ -2000,7 +2001,7 @@ async function genOutreach(url) {
   outreachBusy.add(url); render();
   try {
     const r = await fetch('/api/outreach', { method: 'POST',
-      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, lang: LANG }) });
     const d = await r.json();
     jobOutreach[url] = d.error ? t('outreach_err', { e: d.error }) : (d.draft || t('outreach_empty'));
   } catch (e) {
@@ -2019,7 +2020,7 @@ async function genJobAdvice(url) {
   jobAdviceBusy.add(url); render();
   try {
     const r = await fetch('/api/job_advice', { method: 'POST',
-      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, lang: LANG }) });
     const d = await r.json();
     jobAdvice[url] = d.error ? t('outreach_err', { e: d.error }) : (d.advice || t('advice_empty'));
   } catch (e) {

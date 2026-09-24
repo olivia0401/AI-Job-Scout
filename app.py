@@ -55,8 +55,6 @@ DEFAULT_KEYWORDS = [
     "llmops", "ai platform", "model evaluation", "reinforcement learning",
 ]
 
-# 这些词在标题里是强信号，但在 JD 正文里到处都是（"make recommendations to
-# stakeholders"、营销文案里的 personalization），只允许参与标题匹配
 # Pure matching/scoring logic lives in matching.py (Flask-free, unit-tested).
 from matching import (  # noqa: E402
     TITLE_ONLY_KEYWORDS, LLM_KEYWORDS, UK_RE, EU_PLACES, EU_RES, CHINA_RE,
@@ -108,6 +106,13 @@ else:
     with open(_SECRET_FILE, "w", encoding="utf-8") as _f:
         _f.write(app.secret_key)
 app.permanent_session_lifetime = timedelta(days=30)
+# Session cookie hardening. SameSite=Lax blocks cross-site form POSTs (basic CSRF
+# protection for login and the API). Secure is set further down, once we know
+# whether multi-user mode is on.
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+)
 
 # ---- 可观测性：RED 指标（Rate / Errors / Duration）--------------------------
 # 记录最近请求的耗时与状态码，暴露两个端点：
@@ -211,8 +216,17 @@ MULTIUSER = bool(os.environ.get("APP_MULTIUSER")) or os.environ.get("HOST") == "
 # 开放自助注册。默认关：陌生人无法注册（否则会看到你的数据、烧你的 API key）。
 # 等每人独立数据(阶段B)+用量上限(阶段C)做完，再设 REGISTRATION_OPEN=1 开放。
 REG_OPEN = bool(os.environ.get("REGISTRATION_OPEN"))
-_USERNAME_RE = re.compile(r"^[A-Za-z0-9_.\-]{2,32}$")
+# Must start with a letter/digit: rejects "." / ".." (which would resolve
+# data/users/<name>/ to a parent directory) and hidden-file style names.
+_USERNAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.\-]{1,31}$")
 _OPEN_PATHS = {"/login", "/register", "/logout", "/healthz"}  # 免登录路径
+# Secure cookie (sent over HTTPS only): on by default in multi-user mode, which is
+# meant to sit behind an HTTPS reverse proxy. Set COOKIE_SECURE=0 to test over
+# plain http://<server-ip>:8080 (otherwise the browser drops the login cookie).
+_cookie_secure_env = (os.environ.get("COOKIE_SECURE") or "").strip().lower()
+app.config["SESSION_COOKIE_SECURE"] = (
+    _cookie_secure_env not in ("0", "false", "no")
+    if _cookie_secure_env else MULTIUSER)   # unset/empty -> on in multi-user mode
 users = {}  # 用户名 -> {"salt","hash","created"}；明文密码从不落盘
 _users_lock = threading.Lock()
 
@@ -336,6 +350,23 @@ def _bind_user(uid):
     _ctx_user.set(uid)
 
 
+def _is_admin():
+    """May the current user change state shared by every account (company
+    directory, hiring-system overrides and probe cache)? Always true in local
+    single-user mode; in multi-user mode only the owner account (APP_USER)."""
+    if not MULTIUSER:
+        return True
+    return bool(OWNER) and _uid() == OWNER
+
+
+def _admin_only():
+    """Return a 403 response for non-owners, or None when allowed."""
+    if _is_admin():
+        return None
+    return jsonify({"error": "Only the owner account (APP_USER) can change the "
+                             "shared company list or hiring-system settings."}), 403
+
+
 @app.before_request
 def _require_login():
     # 每个请求先重置上下文，防止复用的工作线程串到上一个请求的用户
@@ -356,25 +387,65 @@ def _require_login():
     return jsonify({"error": "not logged in"}), 401
 
 
+# ---- Login throttling -------------------------------------------------------
+# Failed logins are counted per (client IP, username). Keying on the username as
+# well means that behind a reverse proxy (where every request shares the proxy's
+# IP) one attacker cannot lock everybody out, while guessing one account's
+# password is still capped.
+LOGIN_MAX_FAILS = int(os.environ.get("LOGIN_MAX_FAILS", "10"))
+LOGIN_WINDOW_SEC = int(os.environ.get("LOGIN_WINDOW_SEC", "900"))
+_login_fails = {}   # (ip, username) -> timestamps of recent failures
+_login_lock = threading.Lock()
+
+
+def _login_key(name):
+    return (request.remote_addr or "?", (name or "").lower())
+
+
+def _login_blocked(key):
+    now = time.time()
+    with _login_lock:
+        recent = [t for t in _login_fails.get(key, []) if now - t < LOGIN_WINDOW_SEC]
+        if recent:
+            _login_fails[key] = recent
+        else:
+            _login_fails.pop(key, None)
+        return len(recent) >= LOGIN_MAX_FAILS
+
+
+def _login_failed(key):
+    with _login_lock:
+        _login_fails.setdefault(key, []).append(time.time())
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login_page():
     if not MULTIUSER:
         return redirect("/")
     error = ""
+    status = 200
     nxt = request.values.get("next") or "/"
-    if not nxt.startswith("/"):
+    if not nxt.startswith("/") or nxt.startswith("//"):
         nxt = "/"
     if request.method == "POST":
         name = (request.form.get("username") or "").strip()
-        rec = users.get(name)
-        if rec and _verify_pw(request.form.get("password") or "",
-                              rec["salt"], rec["hash"]):
-            session.permanent = True
-            session["user"] = name
-            return redirect(nxt)
-        error = "Incorrect username or password"
+        key = _login_key(name)
+        if _login_blocked(key):
+            error = "Too many failed attempts. Please wait a few minutes and try again."
+            status = 429
+        else:
+            rec = users.get(name)
+            if rec and _verify_pw(request.form.get("password") or "",
+                                  rec["salt"], rec["hash"]):
+                with _login_lock:
+                    _login_fails.pop(key, None)
+                session.permanent = True
+                session["user"] = name
+                return redirect(nxt)
+            _login_failed(key)
+            error = "Incorrect username or password"
     return render_template("login.html", mode="login", error=error,
-                           next=nxt, reg_open=REG_OPEN)
+                           next=nxt, reg_open=REG_OPEN), status
 
 
 @app.route("/register", methods=["GET", "POST"])
@@ -743,7 +814,15 @@ class RateLimited(Exception):
 # 停止扫描的全局开关。深度补扫时在飞任务可能卡在 Workable 信号量排队/退避 sleep 里
 # 几十秒到几分钟，光靠 run_scan 主循环检查 state["scan"]["stop"] 根本停不下来——
 # 所有慢环节（探测间隙、信号量等待、退避）都要能被这个事件秒级打断。
-_stop_event = threading.Event()
+_stop_event = threading.Event()   # fallback only: never set by the API
+_scan_stops = {}                  # uid -> stop Event of that user's running scan
+
+
+def _cur_stop():
+    """The stop event of the scan running on this thread. Each scan gets its own
+    event (bound to its worker threads in run_scan), so one user pressing Stop
+    never halts another user's scan."""
+    return getattr(_tls, "stop", None) or _stop_event
 
 
 # 近期限流(429/503)次数监控——仅作可观测性用（_recent_rl 可供诊断/后续接指标）。
@@ -846,8 +925,9 @@ def probe_workable(slug):
     # 不进全量热路径，所以第一次全量不受它拖累。
     url = f"https://apply.workable.com/api/v1/widget/accounts/{slug}"
     # 排队等并发槽时每 0.5s 看一眼停止开关；停止按 RateLimited 处理 → 不落 none 缓存
+    stop = _cur_stop()
     while not _WORKABLE_SEM.acquire(timeout=0.5):
-        if _stop_event.is_set():
+        if stop.is_set():
             raise RateLimited(url)
     try:
         data = None
@@ -859,7 +939,7 @@ def probe_workable(slug):
                 if attempt == 3:
                     raise                       # 连试 4 次仍限流 → 本轮不落 none，下轮再补
                 # 退避：1.5s, 3s, 6s；期间被停止则立刻放弃（wait 返回 True = 事件已置位）
-                if _stop_event.wait(1.5 * (2 ** attempt)):
+                if stop.wait(1.5 * (2 ** attempt)):
                     raise RateLimited(url)
     finally:
         _WORKABLE_SEM.release()
@@ -1079,11 +1159,12 @@ def find_ats(name, probes=PROBES, max_slugs=SWEEP_SLUGS, force=False):
             return (cached["ats"], cached["slug"], res)
         # 缓存失效则重新探测
 
+    stop = _cur_stop()
     fallback = None  # 0 岗位的空账号可能是重名壳账号，只作兜底
     rate_limited = False  # 被限流的探测视为"未知"而非"没有"
     for slug in slug_candidates(name)[:max_slugs]:
         for ats_name, fn in probes:
-            if _stop_event.is_set():
+            if stop.is_set():
                 rate_limited = True  # 中途放弃按"未知"处理，不写 none 缓存
                 break
             try:
@@ -1099,7 +1180,7 @@ def find_ats(name, probes=PROBES, max_slugs=SWEEP_SLUGS, force=False):
                     return (ats_name, slug, res)
                 if fallback is None:
                     fallback = (ats_name, slug, res)
-        if _stop_event.is_set():
+        if stop.is_set():
             break
     if fallback:
         _ats_set(name, {"ats": fallback[0], "slug": fallback[1]})
@@ -1220,8 +1301,13 @@ def run_scan(names, mode):
     state["scan"] = {"running": True, "done": 0, "total": len(names), "mode": mode,
                      "started_ts": time.time(), "stop": False, "new_jobs": 0,
                      "paused_until": 0}
-    _stop_event.clear()
+    stop_ev = threading.Event()        # this scan's own stop signal
+    _scan_stops[_uid()] = stop_ev
     processed = 0
+
+    def scan_one(*args):
+        _tls.stop = stop_ev            # bind the stop signal to the worker thread
+        return scan_company(*args)
 
     try:
         with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -1236,7 +1322,7 @@ def run_scan(names, mode):
                         n = next(it)
                     except StopIteration:
                         return
-                    futures[pool.submit(scan_company, n, keywords, uk_only,
+                    futures[pool.submit(scan_one, n, keywords, uk_only,
                                         probes, max_slugs, force)] = n
 
             submit_more()
@@ -1267,6 +1353,8 @@ def run_scan(names, mode):
                 submit_more()
     finally:
         state["scan"]["running"] = False
+        if _scan_stops.get(_uid()) is stop_ev:
+            _scan_stops.pop(_uid(), None)
         save_ats_cache()
         save_state()
         # 扫描结束后自动重算匹配度（有简历时），新岗位无需手动点"计算匹配度"
@@ -1488,7 +1576,7 @@ def run_aggregators():
 # HN 每月有一贴 "Ask HN: Who is hiring?"（机器人 whoishiring 于每月 1 号发），
 # 下面每条顶层评论就是一个招聘帖，惯例首行：Company | Role | Location | Remote | Visa | tech | url。
 # Algolia 提供免费无鉴权检索接口，无需 API key，是这个工具最契合的社媒来源。
-HN_ALGOLIA = "http://hn.algolia.com/api/v1"
+HN_ALGOLIA = "https://hn.algolia.com/api/v1"
 _HN_URL_RE = re.compile(r"https?://[^\s|)<>\"']+")
 _HN_VISA_RE = re.compile(r"\b(visa|sponsor|sponsorship|relocation|relocat\w*|h1b|h-1b|tier 2|skilled worker)\b", re.I)
 
@@ -1509,7 +1597,7 @@ def _hn_get(url):
             if r.status_code == 200:
                 return r.json()
         except Exception:
-            if attempt == 0 and _stop_event.wait(1.0):
+            if attempt == 0 and _cur_stop().wait(1.0):
                 break
     return None
 
@@ -1566,7 +1654,7 @@ def run_social():
             posts = search_hackernews(n_threads=1)
         except Exception as e:
             posts = []
-            state["social"]["err"] = f"抓取 HN 失败：{e}"[:200]
+            state["social"]["err"] = f"Hacker News fetch failed: {e}"[:200]
         state["social"]["total"] = len(posts)
         with _lock:
             for j in posts:
@@ -1607,8 +1695,8 @@ def run_social():
 
 # ---------------------------------------------------------------- 公司规模（大模型估）
 SIZE_BANDS = ("startup", "mid", "large", "unknown")
-SIZE_LABELS = {"startup": "初创 <50", "mid": "中型 50–500",
-               "large": "大型 500+", "unknown": "规模未知"}
+SIZE_LABELS = {"startup": "Startup <50", "mid": "Mid 50–500",
+               "large": "Large 500+", "unknown": "Size unknown"}
 _SIZE_BATCH = 30   # 每次问大模型多少家公司
 
 
@@ -1656,12 +1744,13 @@ def run_company_size():
         for i in range(0, len(todo), _SIZE_BATCH):
             batch = todo[i:i + _SIZE_BATCH]
             prompt = (
-                "给下面每家英国公司判断员工规模档位。只输出 JSON 数组，"
-                '每项 {"name":..., "band":..., "note":...}。\n'
-                'band 只能取："startup"(<50人), "mid"(50-500), "large"(500+), '
-                '"unknown"（你不确定/没听过的必须用这个，绝不要猜）。\n'
-                "note 用中文，最多6字，写判断依据或\"不确定\"。\n"
-                "公司：" + json.dumps(batch, ensure_ascii=False))
+                "Classify each UK company below by employee headcount. Output ONLY "
+                'a JSON array; each item {"name":..., "band":..., "note":...}.\n'
+                'band must be one of: "startup" (<50 people), "mid" (50-500), '
+                '"large" (500+), "unknown" (use this whenever you are not sure or '
+                "do not recognise the company; never guess).\n"
+                'note: at most 12 characters, the basis for the call or "unsure".\n'
+                "Companies: " + json.dumps(batch, ensure_ascii=False))
             try:
                 rows = _parse_llm_json(_llm_complete(prompt, max_tokens=2000))
             except Exception:
@@ -1856,15 +1945,15 @@ def api_resume():
         try:
             text = extract_resume_text(f)
         except Exception as e:
-            return jsonify({"error": f"解析失败: {e}（可试试导出为 PDF/TXT 再传）"}), 400
+            return jsonify({"error": f"Could not parse the file: {e} (try exporting it as PDF or TXT)"}), 400
         name = f.filename
     else:
         data = request.get_json(silent=True) or {}
         text = (data.get("text") or "").strip()
-        name = "粘贴文本"
+        name = "Pasted text"
     text = (text or "").strip()
     if len(text) < 100:
-        return jsonify({"error": "简历内容太短，未能识别（PDF 若是扫描件请用文字版）"}), 400
+        return jsonify({"error": "Resume text is too short to read (if the PDF is a scan, use a text PDF or paste the text)"}), 400
     kws = sorted(extract_skills(text))
     with _lock:
         state["resume"] = {"text": text[:20000], "keywords": kws, "name": name,
@@ -1878,9 +1967,9 @@ def api_resume():
 @app.route("/api/match", methods=["POST"])
 def api_match():
     if not state.get("resume"):
-        return jsonify({"error": "请先上传简历"}), 400
+        return jsonify({"error": NEED_RESUME_MSG}), 400
     if state["match"]["running"]:
-        return jsonify({"error": "匹配计算进行中"}), 409
+        return jsonify({"error": "Match scoring is already running"}), 409
     _spawn(run_match)
     return jsonify({"started": True})
 
@@ -1983,20 +2072,38 @@ def _llm_ready():
 
 
 LLM_LABELS = {"openai": "ChatGPT", "anthropic": "Claude"}
-LLM_MISSING_MSG = ("未配置大模型 API key：在 data/api_keys.json 填 openai_api_key（ChatGPT）"
-                   "或 anthropic_api_key（Claude），也可设环境变量 "
-                   "OPENAI_API_KEY / ANTHROPIC_API_KEY")
+LLM_MISSING_MSG = ("No LLM API key configured: add openai_api_key (ChatGPT) or "
+                   "anthropic_api_key (Claude) to data/api_keys.json, or set the "
+                   "OPENAI_API_KEY / ANTHROPIC_API_KEY environment variable")
+NEED_RESUME_MSG = "Please upload your resume first"
+NEED_URL_MSG = "Missing job URL"
 
-RESUME_SYS = ("你是资深简历顾问兼 ATS 优化专家，服务在英国找 AI/ML 工作的求职者。"
-              "建议要具体、可执行、诚实，绝不编造求职者没有的经历。")
+# System prompt per UI language. Deliberately industry-neutral: the tool is used
+# for nursing, accounting, engineering... not only AI/ML roles.
+RESUME_SYS = {
+    "en": ("You are a senior resume consultant and ATS-optimisation expert helping "
+           "job seekers in the UK. Your advice is specific, actionable and honest; "
+           "never invent experience the candidate does not have."),
+    "zh": ("你是资深简历顾问兼 ATS 优化专家，服务在英国求职的候选人。"
+           "建议要具体、可执行、诚实，绝不编造求职者没有的经历。"),
+}
 
 
-def _openai_complete(prompt, max_tokens):
+def _req_lang():
+    """UI language of the current request: "en" by default, "zh" when the UI is
+    in Chinese. The frontend sends it as JSON {"lang": ...} or ?lang=."""
+    data = request.get_json(silent=True) or {}
+    lang = str(data.get("lang") or request.args.get("lang") or "en").lower()
+    return "zh" if lang.startswith("zh") else "en"
+
+
+def _openai_complete(prompt, max_tokens, lang="en"):
     from openai import OpenAI
     client = OpenAI(api_key=_openai_key())
     model = api_keys.get("openai_model", "gpt-4o")
+    sys_prompt = RESUME_SYS.get(lang, RESUME_SYS["en"])
     kw = dict(model=model,
-              messages=[{"role": "system", "content": RESUME_SYS},
+              messages=[{"role": "system", "content": sys_prompt},
                         {"role": "user", "content": prompt}])
     try:
         resp = client.chat.completions.create(max_tokens=max_tokens, **kw)
@@ -2005,37 +2112,42 @@ def _openai_complete(prompt, max_tokens):
     return resp.choices[0].message.content or ""
 
 
-def _anthropic_complete(prompt, max_tokens):
+def _anthropic_complete(prompt, max_tokens, lang="en"):
     import anthropic
     client = anthropic.Anthropic(api_key=_anthropic_key())
     model = api_keys.get("anthropic_model", "claude-opus-4-8")
     with client.messages.stream(model=model, max_tokens=max_tokens,
                                 thinking={"type": "adaptive"},
-                                system=RESUME_SYS,
+                                system=RESUME_SYS.get(lang, RESUME_SYS["en"]),
                                 messages=[{"role": "user", "content": prompt}]) as stream:
         msg = stream.get_final_message()
     return "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
 
 
-def _llm_complete(prompt, max_tokens=6000):
+def _llm_complete(prompt, max_tokens=6000, lang="en"):
     """按所配 provider 调用大模型生成建议，返回纯文本。
     多租户下先扣当前用户的每日 LLM 配额，超限抛 UsageLimitError。"""
     _charge("llm", LLM_DAILY_CAP)
     return (_openai_complete if _llm_provider() == "openai"
-            else _anthropic_complete)(prompt, max_tokens)
+            else _anthropic_complete)(prompt, max_tokens, lang)
 
 
-def generate_resume_advice(report):
-    """依据缺口报告 + 简历全文生成可执行的修改建议（Markdown）。"""
+def generate_resume_advice(report, lang="en"):
+    """Actionable resume advice (Markdown) from the gap report + full resume text,
+    written in the UI language."""
     resume = state.get("resume") or {}
-    gaps_txt = "\n".join(
-        f"- {g['skill']}：缺失于 {g['jobs']} 个岗位"
-        + (f"（其中 {g['near']} 个是中等匹配，最可能因此被拉低）" if g["near"] else "")
-        for g in report.get("gaps", []))
-    free_txt = "、".join(f"{f['term']}({f['jobs']})" for f in report.get("freeform", []))
-    prompt = f"""我在英国找 AI/ML 相关工作。以下是把我的简历与全平台 {report.get('n_scored', 0)} 个岗位匹配后的统计。
+    resume_txt = (resume.get("text") or "")[:8000]
+    n_scored = report.get("n_scored", 0)
+    if lang == "zh":
+        gaps_txt = "\n".join(
+            f"- {g['skill']}：缺失于 {g['jobs']} 个岗位"
+            + (f"（其中 {g['near']} 个是中等匹配，最可能因此被拉低）" if g["near"] else "")
+            for g in report.get("gaps", []))
+        free_txt = "、".join(f"{f['term']}({f['jobs']})" for f in report.get("freeform", []))
+        have_txt = "、".join(report.get("have", [])) or "（无）"
+        prompt = f"""我在英国求职。以下是把我的简历与全平台 {n_scored} 个岗位匹配后的统计。
 
-【我简历已覆盖的高频技能】{('、'.join(report.get('have', [])) or '（无）')}
+【我简历已覆盖的高频技能】{have_txt}
 
 【全平台最常要求、但我简历缺失的技能（按影响排序）】
 {gaps_txt or '（无）'}
@@ -2043,7 +2155,7 @@ def generate_resume_advice(report):
 【JD 里高频出现、但可能既不在我简历也不在技能词表里的表达（启发式，仅供参考）】{free_txt or '（无）'}
 
 【我的简历全文】
-{(resume.get('text') or '')[:8000]}
+{resume_txt}
 
 请给我一份可执行的简历修改建议（中文，Markdown）：
 1. 优先级：先补哪 3–5 个技能/关键词最能整体提升匹配度，并引用“缺失于多少个岗位”说明理由。
@@ -2051,7 +2163,33 @@ def generate_resume_advice(report):
 3. 指出我简历里 2–3 条最该改写的经历，怎么改更贴近这些岗位。
 4. 诚实提醒：哪些缺失技能若我确实没有，别硬写，应通过项目/课程补齐。
 不要编造我没有的经历。"""
-    return _llm_complete(prompt, max_tokens=8000)
+    else:
+        gaps_txt = "\n".join(
+            f"- {g['skill']}: missing from {g['jobs']} jobs"
+            + (f" ({g['near']} of them medium matches, most likely pulled down by it)"
+               if g["near"] else "")
+            for g in report.get("gaps", []))
+        free_txt = ", ".join(f"{f['term']} ({f['jobs']})" for f in report.get("freeform", []))
+        have_txt = ", ".join(report.get("have", [])) or "(none)"
+        prompt = f"""I'm job hunting in the UK. Below are the statistics from matching my resume against {n_scored} jobs.
+
+[High-frequency skills my resume already covers] {have_txt}
+
+[Skills most often required but missing from my resume (ranked by impact)]
+{gaps_txt or '(none)'}
+
+[Phrases that appear often in the job descriptions but may be in neither my resume nor the skill vocabulary (heuristic, for reference only)] {free_txt or '(none)'}
+
+[My full resume]
+{resume_txt}
+
+Please give me actionable resume advice (in English, Markdown):
+1. Priorities: which 3–5 skills/keywords to add first for the biggest overall lift, citing how many jobs each is missing from.
+2. For each skill to add: if I plausibly already have it, which resume section to put it in and the most natural wording (give one quantified bullet example).
+3. Point out the 2–3 experiences in my resume most worth rewriting, and how to bring them closer to these jobs.
+4. Honesty check: for missing skills I genuinely don't have, don't fake them; suggest how to build them through projects or courses instead.
+Do not invent experience I don't have."""
+    return _llm_complete(prompt, max_tokens=8000, lang=lang)
 
 
 @app.route("/api/resume_suggestions")
@@ -2066,16 +2204,18 @@ def api_resume_suggestions():
 @app.route("/api/resume_suggestions/generate", methods=["POST"])
 def api_resume_suggestions_generate():
     if not state.get("resume"):
-        return jsonify({"error": "请先上传简历"}), 400
+        return jsonify({"error": NEED_RESUME_MSG}), 400
     report = resume_gap_report()
     if not report.get("ready") or not report.get("gaps"):
-        return jsonify({"error": "还没有匹配数据——请先上传简历并等匹配计算完成"}), 400
+        return jsonify({"error": "No match data yet: upload your resume and wait for scoring to finish"}), 400
     if not _llm_ready():
         return jsonify({"error": LLM_MISSING_MSG}), 400
     try:
-        advice = generate_resume_advice(report)
+        advice = generate_resume_advice(report, _req_lang())
+    except UsageLimitError:
+        raise
     except Exception as e:
-        return jsonify({"error": f"生成失败: {e}"}), 500
+        return jsonify({"error": f"Generation failed: {e}"}), 500
     return jsonify({"advice": advice})
 
 
@@ -2094,17 +2234,20 @@ def _find_job(url):
     return None
 
 
-def generate_job_advice(url):
-    """针对单个岗位：拿 JD 正文 + 该岗位的匹配分析 + 简历全文，让大模型生成
-    这一份岗位专属的简历修改建议（Markdown）。"""
+def generate_job_advice(url, lang="en"):
+    """Job-specific resume advice (Markdown): the JD text + this job's match
+    analysis + the full resume, written in the UI language."""
     resume = state.get("resume") or {}
     meta = _find_job(url) or {}
     ms = state["match_scores"].get(url) or {}
     jd = (load_desc_cache().get(url) or "")[:8000]
-    flags_txt = "；".join(f.get("t", "") for f in ms.get("flags", []))
-    prompt = f"""请针对下面这个具体岗位，帮我优化简历，让它更容易通过 ATS 筛选并打动招聘官。
+    resume_txt = (resume.get("text") or "")[:8000]
+    title, company, loc = meta.get("title", ""), meta.get("company", ""), meta.get("location", "")
+    if lang == "zh":
+        flags_txt = "；".join(f.get("t", "") for f in ms.get("flags", []))
+        prompt = f"""请针对下面这个具体岗位，帮我优化简历，让它更容易通过 ATS 筛选并打动招聘官。
 
-【目标岗位】{meta.get('title', '')} — {meta.get('company', '')}（{meta.get('location', '')}）
+【目标岗位】{title} — {company}（{loc}）
 【岗位链接】{url}
 【当前匹配度】{ms.get('score', '未知')}%
 【JD 要求、我简历已覆盖】{('、'.join(ms.get('hit', [])) or '（无）')}
@@ -2116,7 +2259,7 @@ def generate_job_advice(url):
 {jd or '（未抓到正文，请只依据上面的技能缺口给建议）'}
 
 【我的简历全文】
-{(resume.get('text') or '')[:8000]}
+{resume_txt}
 
 请给出这一份岗位专属的简历修改建议（中文，Markdown）：
 1. 若缺失技能我实际具备：该加到简历哪一段、用什么措辞最自然（给量化 bullet 示例）。
@@ -2124,32 +2267,81 @@ def generate_job_advice(url):
 3. 针对这家公司写一段 3 句话的求职信开场白。
 4. 诚实提醒：哪些缺失技能若我确实没有，别硬写，建议怎么补齐。
 不要编造我没有的经历。"""
-    return _llm_complete(prompt, max_tokens=6000)
+    else:
+        # Flags are stored as Chinese keys by matching.py; translate for the prompt.
+        flags_txt = "; ".join(_flag_en(f.get("t", "")) for f in ms.get("flags", []))
+        prompt = f"""Please help me tailor my resume to the specific job below so it passes ATS screening and appeals to the recruiter.
+
+[Target role] {title} — {company} ({loc})
+[Job link] {url}
+[Current match score] {ms.get('score', 'unknown')}%
+[JD skills my resume already covers] {(', '.join(ms.get('hit', [])) or '(none)')}
+[JD required skills missing from my resume (prioritise)] {(', '.join(ms.get('must_miss', [])) or '(none)')}
+[JD nice-to-have skills missing from my resume] {(', '.join(ms.get('nice_miss', [])) or '(none)')}
+{('[Visa / threshold warnings] ' + flags_txt) if flags_txt else ''}
+
+[Job description excerpt]
+{jd or '(Full JD text was not fetched; base the advice on the skill gaps above only)'}
+
+[My full resume]
+{resume_txt}
+
+Please give resume advice specific to this one job (in English, Markdown):
+1. For missing skills I actually have: which resume section to add them to and the most natural wording (give quantified bullet examples).
+2. Rewrite the 2–3 most relevant experiences in my resume to fit this job: quantify results and mirror the JD's keywords (good for ATS, but don't stuff them).
+3. Write a 3-sentence cover-letter opening tailored to this company.
+4. Honesty check: for missing skills I genuinely don't have, don't fake them; suggest how to build them.
+Do not invent experience I don't have."""
+    return _llm_complete(prompt, max_tokens=6000, lang=lang)
+
+
+def _flag_en(t):
+    """English text for a match flag (matching.py stores them in Chinese; the
+    frontend translates them the same way)."""
+    m = re.match(r"^要求 (\d+)\+ 年经验$", t or "")
+    if m:
+        return f"Requires {m.group(1)}+ years of experience"
+    return {
+        "需安全许可/国籍要求": "Security clearance / nationality required",
+        "JD 声明不担保签证": "JD says no visa sponsorship",
+        "明确提供签证担保": "JD explicitly offers visa sponsorship",
+        "未抓到 JD，仅按标题估分": "JD not fetched; scored from the title only",
+    }.get(t, t)
 
 
 @app.route("/api/job_advice", methods=["POST"])
 def api_job_advice():
     if not state.get("resume"):
-        return jsonify({"error": "请先上传简历"}), 400
+        return jsonify({"error": NEED_RESUME_MSG}), 400
     if not _llm_ready():
         return jsonify({"error": LLM_MISSING_MSG}), 400
     data = request.get_json(silent=True) or {}
     url = (data.get("url") or "").strip()
     if not url:
-        return jsonify({"error": "缺少岗位链接"}), 400
+        return jsonify({"error": NEED_URL_MSG}), 400
     if url not in state["match_scores"]:
-        return jsonify({"error": "这个岗位还没算过匹配度，请先点「计算匹配度」"}), 400
-    cached = state["advice"].get(url)
+        return jsonify({"error": "This job has no match score yet; run match scoring first"}), 400
+    lang = _req_lang()
+    ckey = _cache_key(url, lang)
+    cached = state["advice"].get(ckey)
     if cached and not data.get("force"):
         return jsonify({"advice": cached, "cached": True})
     try:
-        advice = generate_job_advice(url)
+        advice = generate_job_advice(url, lang)
+    except UsageLimitError:
+        raise
     except Exception as e:
-        return jsonify({"error": f"生成失败: {e}"}), 500
+        return jsonify({"error": f"Generation failed: {e}"}), 500
     with _lock:
-        state["advice"][url] = advice
+        state["advice"][ckey] = advice
     save_state()
     return jsonify({"advice": advice})
+
+
+def _cache_key(url, lang):
+    """Cache key for LLM drafts. English keeps the bare URL; other languages get a
+    suffix so switching the UI language never serves a draft in the wrong one."""
+    return url if lang == "en" else f"{url}#lang={lang}"
 
 
 # ---------------------------------------------------------------- 隐藏岗位
@@ -2179,7 +2371,7 @@ def api_hide():
     data = request.get_json(silent=True) or {}
     url = (data.get("url") or "").strip()
     if not url:
-        return jsonify({"error": "缺少岗位链接"}), 400
+        return jsonify({"error": NEED_URL_MSG}), 400
     with _lock:
         if data.get("on", True):
             state["hidden"][url] = {"ts": date.today().isoformat(),
@@ -2201,7 +2393,7 @@ def api_track():
     url = (data.get("url") or "").strip()
     status = (data.get("status") or "").strip()
     if not url:
-        return jsonify({"error": "缺少岗位链接"}), 400
+        return jsonify({"error": NEED_URL_MSG}), 400
     with _lock:
         if status == "remove":
             state["tracker"].pop(url, None)
@@ -2214,27 +2406,32 @@ def api_track():
                     ent[k] = data[k]
             state["tracker"][url] = ent
         else:
-            return jsonify({"error": "无效状态"}), 400
+            return jsonify({"error": "Invalid status"}), 400
         tracker = dict(state["tracker"])
     save_state()
     return jsonify({"ok": True, "tracker": tracker})
 
 
-def generate_outreach(url):
-    """针对单个岗位生成个性化 networking 搭话草稿（LinkedIn 申请附言、跟进私信、冷邮件）。"""
+def generate_outreach(url, lang="en"):
+    """Personalised networking drafts for one job (LinkedIn connection note,
+    follow-up DM, cold email). The drafts themselves are always in English (they
+    go to UK recruiters); the section labels follow the UI language."""
     resume = state.get("resume") or {}
     meta = _find_job(url) or {}
     ms = state["match_scores"].get(url) or {}
     jd = (load_desc_cache().get(url) or "")[:4000]
-    prompt = f"""我想就下面这个岗位，主动联系这家公司的招聘官或团队成员（networking）。请基于我的简历亮点，为我起草个性化的英文搭话内容——要像我本人手写的：具体、真诚、克制，绝不能有套话群发感。
+    resume_txt = (resume.get("text") or "")[:6000]
+    title, company, loc = meta.get("title", ""), meta.get("company", ""), meta.get("location", "")
+    if lang == "zh":
+        prompt = f"""我想就下面这个岗位，主动联系这家公司的招聘官或团队成员（networking）。请基于我的简历亮点，为我起草个性化的英文搭话内容——要像我本人手写的：具体、真诚、克制，绝不能有套话群发感。
 
-【目标岗位】{meta.get('title', '')} — {meta.get('company', '')}（{meta.get('location', '')}）
+【目标岗位】{title} — {company}（{loc}）
 【我与岗位的重合点】{('、'.join(ms.get('hit', [])[:10]) or '（还没算匹配度，请从我简历里挑最相关的亮点）')}
 【JD 正文节选】
 {jd or '（未抓到正文，依据岗位标题和公司背景来写）'}
 
 【我的简历全文】
-{(resume.get('text') or '')[:6000]}
+{resume_txt}
 
 请输出三部分（英文正文，每部分前用一行中文说明用途；Markdown 格式）：
 1. **LinkedIn 好友申请附言**（≤280 字符：一句对这家公司具体产品/技术方向的真实兴趣 + 一句我是谁 + 轻量请求）
@@ -2242,28 +2439,49 @@ def generate_outreach(url):
 3. **冷邮件**（含 Subject 行；120–180 词，结构同上但更正式，结尾提一句简历见附件）
 
 硬性要求：不编造我没有的经历；语气自信但不自夸；每一封都必须包含至少一个只属于这家公司的具体细节（产品名/技术方向/公开的近期动态），JD 里没有就基于公司名选择其公开的主营方向。"""
-    return _llm_complete(prompt, max_tokens=4000)
+    else:
+        prompt = f"""I want to reach out to a recruiter or team member at this company about the job below (networking). Based on the highlights of my resume, draft personalised outreach in English. It should read as if I wrote it by hand: specific, sincere and restrained, never like a mass template.
+
+[Target role] {title} — {company} ({loc})
+[Where I overlap with the role] {(', '.join(ms.get('hit', [])[:10]) or '(No match score yet; pick the most relevant highlights from my resume)')}
+[Job description excerpt]
+{jd or '(Full JD text was not fetched; write from the job title and the company background)'}
+
+[My full resume]
+{resume_txt}
+
+Output three parts (Markdown, each preceded by a one-line heading saying what it is for):
+1. **LinkedIn connection note** (≤280 characters: one line of genuine interest in a specific product/technical direction of this company + one line on who I am + a light ask)
+2. **Follow-up message after they accept** (100–150 words: why this role/team interests me (specific product or stack), my 1–2 most relevant quantified achievements, and one clear small ask: a 15-minute chat or a referral)
+3. **Cold email** (with a Subject line; 120–180 words, same structure but more formal, ending with a note that my resume is attached)
+
+Hard rules: don't invent experience I don't have; confident but not boastful; every draft must include at least one detail specific to this company (product name, technical direction or a recent public update). If the JD has none, use the company's publicly known main business."""
+    return _llm_complete(prompt, max_tokens=4000, lang=lang)
 
 
 @app.route("/api/outreach", methods=["POST"])
 def api_outreach():
     if not state.get("resume"):
-        return jsonify({"error": "请先上传简历"}), 400
+        return jsonify({"error": NEED_RESUME_MSG}), 400
     if not _llm_ready():
         return jsonify({"error": LLM_MISSING_MSG}), 400
     data = request.get_json(silent=True) or {}
     url = (data.get("url") or "").strip()
     if not url:
-        return jsonify({"error": "缺少岗位链接"}), 400
-    cached = state["outreach"].get(url)
+        return jsonify({"error": NEED_URL_MSG}), 400
+    lang = _req_lang()
+    ckey = _cache_key(url, lang)
+    cached = state["outreach"].get(ckey)
     if cached and not data.get("force"):
         return jsonify({"draft": cached, "cached": True})
     try:
-        draft = generate_outreach(url)
+        draft = generate_outreach(url, lang)
+    except UsageLimitError:
+        raise
     except Exception as e:
-        return jsonify({"error": f"生成失败: {e}"}), 500
+        return jsonify({"error": f"Generation failed: {e}"}), 500
     with _lock:
-        state["outreach"][url] = draft
+        state["outreach"][ckey] = draft
     save_state()
     return jsonify({"draft": draft})
 
@@ -2366,16 +2584,21 @@ def _extract_companies(header, rows):
 
 @app.route("/api/upload", methods=["POST"])
 def api_upload():
-    """导入公司名单：官方赞助商 CSV 或自己的 Excel/CSV 清单，自动识别。"""
+    """Import a company list: the official sponsor-register CSV or your own
+    Excel/CSV list, detected automatically. Owner-only in multi-user mode
+    (the company directory is shared by every account)."""
+    denied = _admin_only()
+    if denied:
+        return denied
     f = request.files.get("file")
     if not f:
-        return jsonify({"error": "没有收到文件"}), 400
+        return jsonify({"error": "No file received"}), 400
     try:
         names, towns, tag = _extract_companies(*_read_table(f))
     except Exception as e:
-        return jsonify({"error": f"解析失败: {e}"}), 400
+        return jsonify({"error": f"Could not parse the file: {e}"}), 400
     if not names:
-        return jsonify({"error": "没有识别到公司名（确认文件里有公司名那一列）"}), 400
+        return jsonify({"error": "No company names found (check the file has a company-name column)"}), 400
     added = add_companies(names, tag, towns)
     return jsonify({"count": added, "parsed": len(names), "kind": tag,
                     "total": len(state["companies"])})
@@ -2383,6 +2606,9 @@ def api_upload():
 
 @app.route("/api/companies", methods=["POST"])
 def api_companies():
+    denied = _admin_only()
+    if denied:
+        return denied
     data = request.get_json(force=True)
     names = [n for n in data.get("names", []) if n.strip()]
     added = add_companies(names, "curated")
@@ -2642,16 +2868,18 @@ def api_scan():
     mode = data.get("mode", "known")
     n = start_scan(mode)
     if n is None:
-        return jsonify({"error": "已有扫描在进行中"}), 409
+        return jsonify({"error": "A scan is already running"}), 409
     if n == 0:
-        return jsonify({"error": "该模式下没有待扫描的公司"}), 400
+        return jsonify({"error": "No companies to scan in this mode"}), 400
     return jsonify({"started": True, "total": n, "mode": mode})
 
 
 @app.route("/api/scan/stop", methods=["POST"])
 def api_scan_stop():
     state["scan"]["stop"] = True
-    _stop_event.set()  # 打断在飞任务的信号量排队/退避 sleep，让扫描秒级收尾
+    ev = _scan_stops.get(_uid())
+    if ev is not None:
+        ev.set()  # interrupt only this user's in-flight probes (semaphore wait / backoff)
     return jsonify({"ok": True})
 
 
@@ -2659,11 +2887,15 @@ def api_scan_stop():
 def api_slug_override():
     """手动修正某公司的 ATS 定位（slug 猜错、或 Workday 这类必须手配的）。
     body: {name, ats, slug}  或  {name, ats:"Workday", host, site}。
-    slug/host 都传空 → 删除该 override。"""
+    slug/host 都传空 → 删除该 override。
+    Owner-only in multi-user mode: overrides and the probe cache are shared."""
+    denied = _admin_only()
+    if denied:
+        return denied
     data = request.get_json(force=True)
     name = (data.get("name") or "").strip()
     if not name:
-        return jsonify({"error": "缺少公司名"}), 400
+        return jsonify({"error": "Missing company name"}), 400
     key = name.lower()
     ats = (data.get("ats") or "").strip()
     slug = (data.get("slug") or "").strip()
@@ -2674,14 +2906,14 @@ def api_slug_override():
         _ats_pop(name)                     # 清掉旧缓存，下次重新探测
     else:
         if ats not in OVERRIDE_ATS:
-            return jsonify({"error": f"ats 需为 {sorted(OVERRIDE_ATS)} 之一"}), 400
+            return jsonify({"error": f"ats must be one of {sorted(OVERRIDE_ATS)}"}), 400
         if ats == "Workday":
             if not (host and site):
-                return jsonify({"error": "Workday 需要 host 和 site"}), 400
+                return jsonify({"error": "Workday needs both host and site"}), 400
             slug_overrides[key] = {"ats": "Workday", "host": host, "site": site}
         else:
             if not slug:
-                return jsonify({"error": f"{ats} 需要 slug"}), 400
+                return jsonify({"error": f"{ats} needs a slug"}), 400
             slug_overrides[key] = {"ats": ats, "slug": slug}
         _ats_pop(name)                     # 让下次扫描按 override 走
     save_slug_overrides()
@@ -2693,9 +2925,9 @@ def api_slug_override():
 def api_aggregators():
     """触发 Adzuna/Reed 聚合搜索，按用户关键词横扫全英国岗位。"""
     if not _has_agg_keys():
-        return jsonify({"error": "未配置 Adzuna/Reed 的 API key（见 data/api_keys.json）"}), 400
+        return jsonify({"error": "No job-board API keys configured (Adzuna / Reed / Jooble / JSearch; see data/api_keys.json)"}), 400
     if state["agg"]["running"]:
-        return jsonify({"error": "聚合搜索进行中"}), 409
+        return jsonify({"error": "Job-board search is already running"}), 409
     _spawn(run_aggregators)
     return jsonify({"started": True,
                     "queries": len(state["keywords"][:AGG_MAX_QUERIES])})
@@ -2705,7 +2937,7 @@ def api_aggregators():
 def api_social():
     """抓 Hacker News 'Who is hiring' 招聘帖，按关键词过滤后并入岗位流。无需 API key。"""
     if state["social"]["running"]:
-        return jsonify({"error": "社媒招聘帖抓取进行中"}), 409
+        return jsonify({"error": "Hacker News fetch is already running"}), 409
     _spawn(run_social)
     return jsonify({"started": True})
 
@@ -2716,10 +2948,10 @@ def api_company_size():
     if not _llm_ready():
         return jsonify({"error": LLM_MISSING_MSG}), 400
     if state["size"]["running"]:
-        return jsonify({"error": "公司规模识别进行中"}), 409
+        return jsonify({"error": "Company-size estimation is already running"}), 409
     n = len(_size_targets())
     if not n:
-        return jsonify({"error": "没有需要识别的新公司（有岗位的都已识别过）"}), 400
+        return jsonify({"error": "No new companies to size (all companies with jobs are done)"}), 400
     _spawn(run_company_size)
     return jsonify({"started": True, "total": n})
 
@@ -2737,32 +2969,40 @@ def api_clear():
     return jsonify({"ok": True})
 
 
-@app.route("/api/export")
-def api_export():
-    import openpyxl
-    from openpyxl.styles import Font
-    today = date.today()
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "AI Jobs"
-    head = ["Company", "精选", "Job Title", "级别", "LLM", "地区", "Location",
-            "首次发现", "在线天数", "长期在招", "Job URL", "ATS", "Job Board",
-            "LinkedIn People Search", "Hunter.io"]
-    ws.append(head)
-    for c in ws[1]:
-        c.font = Font(bold=True)
+EXPORT_HEADERS = ["Company", "Curated", "Job Title", "Level", "LLM", "Region",
+                  "Location", "First Seen", "Days Online", "Long-running", "Job URL",
+                  "ATS / Source", "Job Board", "LinkedIn People Search", "Hunter.io"]
+LEVEL_LABELS_EN = {"grad": "Intern/Graduate", "junior": "Junior", "mid": "Mid",
+                   "senior": "Senior", "staff": "Staff/Lead", "mgmt": "Management"}
+
+
+def export_rows(today=None):
+    """Rows for the Excel export: jobs from company hiring systems *and* from
+    job boards / Hacker News (the latter were missing before)."""
+    today = today or date.today()
+
+    def days_of(fs):
+        try:
+            return (today - date.fromisoformat(fs)).days if fs else ""
+        except Exception:
+            return ""
+
+    def region_label(region, country):
+        return country or ("UK" if region in ("uk", "unknown") else region)
+
     with _lock:
         results = dict(state["results"])
+        agg = dict(state["agg_jobs"])
+        hidden = set(state["hidden"])
         curated = _curated_names()
     rows = []
     for name, r in results.items():
         links = build_links(name)
         for j in r.get("matched", []):
+            if j.get("url") in hidden:
+                continue
             fs = j.get("first_seen", "")
-            try:
-                days = (today - date.fromisoformat(fs)).days if fs else ""
-            except Exception:
-                days = ""
+            days = days_of(fs)
             level = j.get("level") or classify_level(j.get("title"))
             region = j.get("region")
             country = j.get("country", "")
@@ -2770,22 +3010,52 @@ def api_export():
                 region, country = classify_region(j.get("location"))
             rows.append([
                 name, "*" if name in curated else "", j.get("title", ""),
-                LEVEL_LABELS.get(level, level), "*" if j.get("llm") else "",
-                country or ("UK" if region in ("uk", "unknown") else region),
+                LEVEL_LABELS_EN.get(level, level), "*" if j.get("llm") else "",
+                region_label(region, country),
                 j.get("location", ""), fs, days,
-                "长期" if isinstance(days, int) and days >= LONG_RUNNING_DAYS else "",
+                "Yes" if isinstance(days, int) and days >= LONG_RUNNING_DAYS else "",
                 j.get("url", ""), r.get("ats") or "", r.get("board_url") or "",
                 links["li_people"], links["hunter"],
             ])
+    for u, j in agg.items():
+        if u in hidden:
+            continue
+        company = j.get("company", "")
+        links = build_links(company) if company else {"li_people": "", "hunter": ""}
+        fs = j.get("first_seen", "")
+        days = days_of(fs)
+        level = j.get("level") or classify_level(j.get("title"))
+        rows.append([
+            company, "", j.get("title", ""),
+            LEVEL_LABELS_EN.get(level, level), "*" if j.get("llm") else "",
+            region_label(j.get("region", "unknown"), j.get("country", "")),
+            j.get("location", ""), fs, days,
+            "Yes" if isinstance(days, int) and days >= LONG_RUNNING_DAYS else "",
+            u, j.get("source", ""), "",
+            links["li_people"], links["hunter"],
+        ])
     rows.sort(key=lambda x: (x[7] or ""), reverse=True)
-    for row in rows:
+    return rows
+
+
+@app.route("/api/export")
+def api_export():
+    import openpyxl
+    from openpyxl.styles import Font
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Jobs"
+    ws.append(EXPORT_HEADERS)
+    for c in ws[1]:
+        c.font = Font(bold=True)
+    for row in export_rows():
         ws.append(row)
-    for col, w in zip("ABCDEFGHIJKLMNO", [28, 6, 45, 10, 6, 12, 25, 12, 9, 9, 60, 14, 40, 60, 40]):
+    for col, w in zip("ABCDEFGHIJKLMNO", [28, 8, 45, 14, 6, 12, 25, 12, 11, 12, 60, 16, 40, 60, 40]):
         ws.column_dimensions[col].width = w
     buf = BytesIO()
     wb.save(buf)
     buf.seek(0)
-    fname = f"AI_Job_Scout_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+    fname = f"Job_Scout_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
     return send_file(buf, as_attachment=True, download_name=fname,
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
@@ -2808,6 +3078,7 @@ if __name__ == "__main__":
         app.run(host=host, port=port, debug=False, threaded=True)
     except OSError:
         # 端口被占用：多半是工具已经开着了，直接打开页面即可
-        print("  看起来工具已经在运行了，直接打开浏览器页面。")
+        print(f"  Port {port} is already in use - the tool is probably already "
+              "running in another window. Opening it in your browser.")
         webbrowser.open(f"http://127.0.0.1:{port}")
         time.sleep(3)

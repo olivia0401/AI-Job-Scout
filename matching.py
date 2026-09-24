@@ -85,8 +85,8 @@ def classify_region(location):
 
 
 LEVEL_LABELS = {
-    "grad": "实习/毕业生", "junior": "初级", "mid": "中级",
-    "senior": "高级", "staff": "Staff/Lead", "mgmt": "管理层",
+    "grad": "Intern/Graduate", "junior": "Junior", "mid": "Mid",
+    "senior": "Senior", "staff": "Staff/Lead", "mgmt": "Management",
 }
 _LEVEL_RES = [
     ("grad", re.compile(r"\b(intern|internship|graduate|grad|early careers?|entry[- ]?level|apprentice|working student|placement)\b")),

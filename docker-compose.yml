@@ -1,5 +1,12 @@
-# 自建服务器 / 本机用 Docker 跑：docker compose up -d
-# 说明：这个应用是单进程内存态 + 后台扫描线程，务必单实例（不要 scale / 多副本）。
+# Run on your own server / machine with Docker:  docker compose up -d --build
+# Note: this app is a single process with in-memory state + background scan
+# threads, so run exactly one instance (no `scale`, no replicas).
+#
+# Put these in a .env file next to this file (never commit it):
+#   APP_USER=yourname
+#   APP_PASSWORD=a-long-random-password
+#   # COOKIE_SECURE=0      # only while testing over plain http://<server-ip>:8080
+#   # REGISTRATION_OPEN=1  # only if you want strangers to be able to sign up
 services:
   app:
     build: .
@@ -7,17 +14,21 @@ services:
     container_name: ai-job-scout
     restart: unless-stopped
     ports:
-      - "8080:8080"          # 浏览器访问 http://<服务器IP>:8080
+      - "8080:8080"          # browse to http://<server-ip>:8080 (put HTTPS in front for real use)
     environment:
       HOST: "0.0.0.0"
       PORT: "8080"
-      # ⚠️ 部署到公网务必设置登录，否则任何人都能看到你的简历、消耗你的 API key。
-      # HOST=0.0.0.0 时自动要求登录。你现有的账号：
+      # HOST=0.0.0.0 turns on multi-user mode, which requires a login.
+      # APP_USER/APP_PASSWORD create the owner account - without them nobody can log in.
       APP_USER: "${APP_USER:-}"
       APP_PASSWORD: "${APP_PASSWORD:-}"
-      # 开放陌生人自助注册。默认关（只有已有账号能登录）。等每人独立数据+用量上限
-      # 做完，再在 .env 里设 REGISTRATION_OPEN=1 开放。现在保持不设 = 安全。
+      # Public self-serve sign-up. Off by default (only existing accounts can log in).
       REGISTRATION_OPEN: "${REGISTRATION_OPEN:-}"
+      # Session cookie is HTTPS-only by default in multi-user mode; set 0 for plain-http testing.
+      COOKIE_SECURE: "${COOKIE_SECURE:-}"
+      LLM_DAILY_CAP: "${LLM_DAILY_CAP:-100}"
+      SCAN_DAILY_CAP: "${SCAN_DAILY_CAP:-10}"
     volumes:
-      # 把宿主机的 data/ 挂进容器：你现有的公司库/设置/结果直接复用，且持久化不丢。
+      # Mount the host's data/ folder: company list, settings, results and API keys
+      # persist across rebuilds and are reused as-is.
       - ./data:/app/data

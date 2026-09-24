@@ -1,12 +1,12 @@
-# AI Job Scout 运行依赖
+# AI Job Scout runtime dependencies
 flask>=3.0
 requests>=2.31
 openpyxl>=3.1
-pypdf>=4.0        # 解析 PDF 简历（extract_resume_text）
+pypdf>=4.0        # parses PDF resumes (extract_resume_text)
 
-# 简历修改建议（可选）：在工具里用 ChatGPT 或 Claude 生成，二选一装即可
-openai>=1.30           # 用 ChatGPT 生成建议时需要（配 openai_api_key）
-anthropic>=0.40        # 用 Claude 生成建议时需要（配 anthropic_api_key）
+# Resume tips (optional): generated with ChatGPT or Claude - install either one
+openai>=1.30           # needed for ChatGPT suggestions (set openai_api_key)
+anthropic>=0.40        # needed for Claude suggestions (set anthropic_api_key)
 
-# 开发/测试（可选）：pytest 跑 tests/，scipy 跑 eval/ 的排名相关性
-# pip install pytest scipy
+# Development / testing (optional): pytest runs tests/; eval/ needs nothing extra
+# pip install pytest

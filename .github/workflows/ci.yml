@@ -1,7 +1,8 @@
 name: CI
 
-# 每次 push 到 main、以及针对 main 的 Pull Request 都会跑单元测试。
-# 只跑 tests/ 下的离线单元测试，不碰 eval/（那个要 API key 和网络）。
+# Runs on every push to main and every pull request targeting main.
+# Everything here is offline: unit tests plus the ranking-metric smoke test
+# (eval/run_eval.py needs no API key and no network).
 on:
   push:
     branches: [main]
@@ -23,11 +24,15 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        # 只装跑测试需要的：Flask/requests（app.py 顶层 import）+ 解析/导出用到的库 + pytest。
-        # openai / anthropic 是可选的在线功能，测试不需要，故不安装。
+        # Only what the tests need: Flask/requests (imported at the top of app.py),
+        # the parsing/export libraries, and pytest. openai / anthropic are optional
+        # online features that the tests never call, so they are not installed.
         run: |
           python -m pip install --upgrade pip
           pip install flask requests openpyxl pypdf pytest
 
       - name: Run unit tests
         run: pytest tests/ -q
+
+      - name: Evaluation smoke test (ranking metrics on the seed set)
+        run: python eval/run_eval.py

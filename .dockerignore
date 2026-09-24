@@ -1,7 +1,9 @@
-# 个人数据：简历、扫描结果、缓存、API key —— 绝不进镜像（运行时用挂载卷提供）
+# Personal data: resume, scan results, caches, API keys - never baked into the
+# image (provided at runtime via the mounted volume)
 data/
+.env
 
-# 版本库与开发文件
+# Version control and dev files
 .git/
 .github/
 .gitignore
@@ -12,11 +14,12 @@ __pycache__/
 .venv/
 venv/
 
-# 测试 / 评测（运行时用不到）
+# Tests / evaluation (not needed at runtime)
 tests/
 eval/
 
-# 导出表格、本地临时
+# Exported spreadsheets, local launchers, docs
 *.xlsx
-启动求职雷达.bat
+*.csv
+Start-Job-Scout.bat
 README.md
