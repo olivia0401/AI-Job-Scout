@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""AI Job Scout — 扫描全部工签雇主的 AI/LLM 岗位。
+"""AI Job Scout — scan every UK visa-sponsor employer for AI/LLM roles.
 
-用法:  python app.py  然后浏览器打开 http://127.0.0.1:5050
+Usage:  python app.py  then open http://127.0.0.1:5050 in a browser
 """
 import contextvars
 import csv as csvmod
@@ -26,10 +26,10 @@ import requests
 from flask import (Flask, Response, g, jsonify, redirect, render_template,
                    request, send_file, session, url_for)
 
-FROZEN = getattr(sys, "frozen", False)  # PyInstaller 打包后的 exe 模式
+FROZEN = getattr(sys, "frozen", False)  # running as a PyInstaller-packaged exe
 if FROZEN:
-    BASE_DIR = os.path.dirname(os.path.abspath(sys.executable))  # data/ 放在 exe 旁边
-    RES_DIR = sys._MEIPASS  # 模板等资源被打进包里
+    BASE_DIR = os.path.dirname(os.path.abspath(sys.executable))  # data/ lives next to the exe
+    RES_DIR = sys._MEIPASS  # templates and other resources are bundled inside
 else:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     RES_DIR = BASE_DIR
@@ -48,7 +48,7 @@ DEFAULT_KEYWORDS = [
     "generative ai", "foundation model", "prompt engineer", "agentic",
     "ai agent", "conversational ai", "data scientist", "research engineer",
     "computer vision", "mlops", "ai scientist", "applied ai",
-    # 扩充：召回更多“标题不含 ai/ml 但其实是 AI 方向”的岗位
+    # Expanded: recall more roles that are AI work even without "ai/ml" in the title
     "applied scientist", "research scientist", "recommendation",
     "recommendations", "recommender", "personalization", "search ranking",
     "learning to rank", "information retrieval", "knowledge graph",
@@ -69,34 +69,34 @@ from matching import (  # noqa: E402
 )
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (personal job-search tool)"}
-# (连接, 读取) 分离：死掉的每公司子域名 2 秒就放弃连接（原来连接也要磨满 5 秒）；
-# 读取仍给 5 秒，保证 Workable 这类偶尔较慢但有效的招聘页不会被误判为“无岗位”。
+# (connect, read) split: dead per-company subdomains give up connecting after 2s (used to burn the full 5s);
+# read still gets 5s so slow-but-valid boards like Workable aren't misjudged as "no jobs".
 TIMEOUT = (2, 5)
-# 外层并发。全量热路径只跑 4 家健康 ATS(GH/Lever/Ashby/SR)——它们不限流、且探测在工作
-# 线程内顺序跑以复用 keep-alive 连接，所以可以放到 32。限流最狠的 Workable 已移出热路径
-# （见 WORKABLE_PROBES），不会再被高并发打成 429。
+# Outer concurrency. The full hot path only runs the 4 healthy ATSs (GH/Lever/Ashby/SR) — they don't rate-limit, and probes
+# run sequentially inside each worker thread to reuse keep-alive connections, so 32 is fine. Workable, the harshest limiter, is off the hot path
+# (see WORKABLE_PROBES), so high concurrency no longer triggers 429s.
 SCAN_WORKERS = 32
-# Workable 全局并发上限：命中最多但限流最狠。它是 deep 补扫的吞吐闸门（每家 find_ats 都要先
-# 过这道信号量）——4 太保守把 32 线程压成近似单线程。提到 12：3× 吞吐；配合单探测 429 退避
-# 自节流（见 probe_workable）+ 已废除整体 5 分钟冷却，实测更快。若频繁 429 可调回小一点。
-# 可用环境变量调：看扫描进度条上的 429 数字——429 少就往上调，429 多就往下调。
+# Workable global concurrency cap: most hits but harshest rate limiting. It gates deep-rescan throughput (every find_ats must first
+# pass this semaphore) — 4 was too conservative and squeezed 32 threads to near single-threaded. Raised to 12: 3x throughput; with per-probe 429 backoff
+# self-throttling (see probe_workable) + the removed global 5-minute cooldown, measurably faster. Lower it if 429s are frequent.
+# Tunable via env var: watch the 429 count on the scan progress bar — few 429s, raise it; many, lower it.
 WORKABLE_CONC = int(os.environ.get("WORKABLE_CONC", "12"))
-SWEEP_SLUGS = 2          # 全量 sweep 每家公司试几个 slug 候选（命中基本落在前 2 个）
-# 深度补扫专用：无限流的 Recruitee/Personio 纯 DNS/IO 等待，可放更高并发把 Workable 排队的
-# 空档填满；且补扫求快，每家只试 1 个 slug（省一半探测）。
+SWEEP_SLUGS = 2          # slug candidates tried per company in a full sweep (hits almost always land in the first 2)
+# Deep-rescan only: the non-rate-limited Recruitee/Personio are pure DNS/IO waits, so higher concurrency fills the gaps while
+# Workable queues; the rescan also favours speed, trying only 1 slug per company (half the probes).
 DEEP_WORKERS = int(os.environ.get("DEEP_WORKERS", "48"))
 DEEP_SLUGS = 1
-# 深度补扫默认只跑 Workable。实测每家不存在的公司：Workable 0.26s(历史命中 426 家)、
-# Recruitee 0.43s(17 家)、Personio 0.96s(12 家)——冷门那两个吃掉 84% 的时间，只换来
-# 0.02% 的命中。默认关掉它们 → 每家 1.65s 降到 0.26s。要连冷门源一起扫：设 DEEP_NICHE=1。
+# Deep rescan runs only Workable by default. Measured per non-existent company: Workable 0.26s (426 historical hits),
+# Recruitee 0.43s (17), Personio 0.96s (12) — the two niche sources eat 84% of the time for only
+# 0.02% of hits. Off by default → 1.65s down to 0.26s per company. To include them: set DEEP_NICHE=1.
 DEEP_NICHE = bool(os.environ.get("DEEP_NICHE"))
 
 app = Flask(__name__, template_folder=os.path.join(RES_DIR, "templates"))
-# 模板改动后浏览器刷新即生效，不必重启服务器（前端调整迭代更省心）
+# Template changes take effect on browser refresh, no server restart needed (faster front-end iteration)
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 app.jinja_env.auto_reload = True
 
-# 会话密钥：持久化到 data/，重启后已登录用户不会掉线
+# Session secret key: persisted to data/ so logged-in users stay logged in across restarts
 _SECRET_FILE = os.path.join(DATA_DIR, "secret.key")
 if os.path.exists(_SECRET_FILE):
     with open(_SECRET_FILE, encoding="utf-8") as _f:
@@ -114,17 +114,17 @@ app.config.update(
     SESSION_COOKIE_SAMESITE="Lax",
 )
 
-# ---- 可观测性：RED 指标（Rate / Errors / Duration）--------------------------
-# 记录最近请求的耗时与状态码，暴露两个端点：
-#   /stats   —— 人可读 JSON：p50/p95/p99、错误率、吞吐、uptime（可截图当证据）
-#   /metrics —— Prometheus 文本格式：以后接 Grafana 画图用
+# ---- Observability: RED metrics (Rate / Errors / Duration) --------------------------
+# Records recent request latency and status codes, exposing two endpoints:
+#   /stats   —— human-readable JSON: p50/p95/p99, error rate, throughput, uptime (screenshot-able evidence)
+#   /metrics —— Prometheus text format: for Grafana dashboards later
 _metrics_lock = threading.Lock()
-_lat_samples = deque(maxlen=2000)   # 最近 N 次请求耗时（毫秒），环形缓冲省内存
-_req_total = 0                      # 累计请求数
-_req_by_status = Counter()          # 按 HTTP 状态码计数
-_req_errors = 0                     # 5xx 数
-_proc_start = time.time()           # 进程启动时刻（算 uptime）
-_METRICS_SKIP = ("/stats", "/metrics", "/healthz")  # 这些自身不计入，避免污染真实流量
+_lat_samples = deque(maxlen=2000)   # latency of the last N requests (ms); ring buffer saves memory
+_req_total = 0                      # total requests
+_req_by_status = Counter()          # count per HTTP status code
+_req_errors = 0                     # number of 5xx
+_proc_start = time.time()           # process start time (for uptime)
+_METRICS_SKIP = ("/stats", "/metrics", "/healthz")  # not counted themselves, to avoid polluting real traffic
 
 
 @app.before_request
@@ -148,7 +148,7 @@ def _metrics_end(resp):
 
 
 def _percentile(sorted_vals, p):
-    """从已排序列表取第 p 百分位（p=95 表示 p95）。空列表返回 0。"""
+    """p-th percentile of a sorted list (p=95 means p95). Returns 0 for an empty list."""
     if not sorted_vals:
         return 0.0
     k = min(len(sorted_vals) - 1, int(round((p / 100.0) * (len(sorted_vals) - 1))))
@@ -204,22 +204,22 @@ def metrics():
     return Response("\n".join(lines) + "\n", mimetype="text/plain; version=0.0.4")
 
 
-# ---- 可选登录保护（部署到公网时用）----------------------------------------
-# ---------------------------------------------------------------- 多用户登录 / 注册
-# 多用户模式：设了环境变量 APP_MULTIUSER=1，或 HOST=0.0.0.0（对外暴露）时自动开启。
-#   → 需要登录；任何人可在 /register 自助注册；密码加盐哈希(pbkdf2)存 data/users.json。
-# 本地默认（HOST=127.0.0.1、未设 APP_MULTIUSER）→ 单机免登录，行为跟以前完全一样。
-# 开放注册 + 共用你的 API key：务必配合每人每日用量上限（阶段 3），否则会被刷爆。
+# ---- Optional login protection (for public deployment) ----------------------------------------
+# ---------------------------------------------------------------- Multi-user login / registration
+# Multi-user mode: enabled automatically when APP_MULTIUSER=1 is set, or HOST=0.0.0.0 (publicly exposed).
+#   → login required; anyone can self-register at /register; passwords salted+hashed (pbkdf2) in data/users.json.
+# Local default (HOST=127.0.0.1, APP_MULTIUSER unset) → single-user, no login, same behaviour as before.
+# Open registration + your shared API key: must be paired with per-user daily usage caps (phase 3), or it gets drained.
 USERS_FILE = os.path.join(DATA_DIR, "users.json")
-LOCAL_USER = "local"   # 本地免登录时的默认用户名
+LOCAL_USER = "local"   # default username when running locally without login
 MULTIUSER = bool(os.environ.get("APP_MULTIUSER")) or os.environ.get("HOST") == "0.0.0.0"
-# 开放自助注册。默认关：陌生人无法注册（否则会看到你的数据、烧你的 API key）。
-# 等每人独立数据(阶段B)+用量上限(阶段C)做完，再设 REGISTRATION_OPEN=1 开放。
+# Open self-registration. Off by default: strangers can't register (they'd otherwise see your data and burn your API key).
+# Once per-user data (phase B) + usage caps (phase C) are done, set REGISTRATION_OPEN=1 to open it.
 REG_OPEN = bool(os.environ.get("REGISTRATION_OPEN"))
 # Must start with a letter/digit: rejects "." / ".." (which would resolve
 # data/users/<name>/ to a parent directory) and hidden-file style names.
 _USERNAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.\-]{1,31}$")
-_OPEN_PATHS = {"/login", "/register", "/logout", "/healthz"}  # 免登录路径
+_OPEN_PATHS = {"/login", "/register", "/logout", "/healthz"}  # paths that need no login
 # Secure cookie (sent over HTTPS only): on by default in multi-user mode, which is
 # meant to sit behind an HTTPS reverse proxy. Set COOKIE_SECURE=0 to test over
 # plain http://<server-ip>:8080 (otherwise the browser drops the login cookie).
@@ -227,12 +227,12 @@ _cookie_secure_env = (os.environ.get("COOKIE_SECURE") or "").strip().lower()
 app.config["SESSION_COOKIE_SECURE"] = (
     _cookie_secure_env not in ("0", "false", "no")
     if _cookie_secure_env else MULTIUSER)   # unset/empty -> on in multi-user mode
-users = {}  # 用户名 -> {"salt","hash","created"}；明文密码从不落盘
+users = {}  # username -> {"salt","hash","created"}; plaintext passwords never hit disk
 _users_lock = threading.Lock()
 
-# ---- 每人每日用量上限（花钱护栏）------------------------------------------
-# 开放注册后，所有 LLM 调用都烧 owner 的 API key。用每人每日配额挡住刷爆。
-# 都可用环境变量覆盖；owner(APP_USER) 不受限；本地单机模式不限。
+# ---- Per-user daily usage caps (spending guardrail) ------------------------------------------
+# With open registration, every LLM call burns the owner's API key. Per-user daily quotas stop abuse.
+# All overridable via env vars; owner (APP_USER) is exempt; local single-user mode is unlimited.
 OWNER = os.environ.get("APP_USER") or None
 LLM_DAILY_CAP = int(os.environ.get("LLM_DAILY_CAP", "100"))
 SCAN_DAILY_CAP = int(os.environ.get("SCAN_DAILY_CAP", "10"))
@@ -241,7 +241,7 @@ _usage_lock = threading.Lock()
 
 
 class UsageLimitError(Exception):
-    """超出每日配额。请求处理里由 errorhandler 转成 429。"""
+    """Daily quota exceeded. Turned into a 429 by the errorhandler during request handling."""
 
 
 def _usage_today(uid):
@@ -254,7 +254,7 @@ def _usage_today(uid):
 
 
 def _charge(kind, cap, n=1):
-    """在配额内则计数；超限抛 UsageLimitError。owner/本地不计。"""
+    """Count usage if within quota; raise UsageLimitError when over. Owner/local are not counted."""
     if not MULTIUSER:
         return
     uid = _uid()
@@ -290,17 +290,17 @@ def _verify_pw(password, salt, expected_hex):
 
 
 def _norm_user_record(v):
-    """规整成 {'salt','hash','created'}。兼容明文（老 users.json / 环境变量）→ 载入即哈希。"""
+    """Normalise to {'salt','hash','created'}. Accepts plaintext (old users.json / env vars) → hashed on load."""
     if isinstance(v, dict) and v.get("salt") and v.get("hash"):
         return {"salt": v["salt"], "hash": v["hash"], "created": v.get("created", 0)}
-    if isinstance(v, str) and v:   # 明文密码
+    if isinstance(v, str) and v:   # plaintext password
         salt, h = _hash_pw(v)
         return {"salt": salt, "hash": h, "created": 0}
     return None
 
 
 def load_users():
-    """从 users.json + 老环境变量载入账号表。data/ 已被 gitignore，凭据不会进仓库。"""
+    """Load the account table from users.json + legacy env vars. data/ is gitignored, so credentials never enter the repo."""
     global users
     loaded = {}
     if os.path.exists(USERS_FILE):
@@ -315,7 +315,7 @@ def load_users():
             loaded = {}
     env_u = os.environ.get("APP_USER", "")
     env_p = os.environ.get("APP_PASSWORD", "")
-    if env_u and env_p and env_u not in loaded:   # 兼容老的单账号环境变量
+    if env_u and env_p and env_u not in loaded:   # backward compat with the old single-account env vars
         salt, h = _hash_pw(env_p)
         loaded[env_u] = {"salt": salt, "hash": h, "created": 0}
     users = loaded
@@ -328,7 +328,7 @@ def save_users():
 
 
 def create_user(name, password):
-    """新建账号，返回 (ok, 错误信息)。用户名校验 + 密码长度 + 去重。"""
+    """Create an account, returning (ok, error message). Username validation + password length + dedup."""
     name = (name or "").strip()
     if not _USERNAME_RE.match(name):
         return False, "Username must be 2–32 characters: letters, digits, or _ . -"
@@ -344,7 +344,7 @@ def create_user(name, password):
 
 
 def _bind_user(uid):
-    """把本次请求绑定到某用户：加载其数据 + 设置上下文（供 state[...] 路由）。"""
+    """Bind this request to a user: load their data + set the context (used by state[...] routing)."""
     g.user = uid
     ensure_user(uid)
     _ctx_user.set(uid)
@@ -369,19 +369,19 @@ def _admin_only():
 
 @app.before_request
 def _require_login():
-    # 每个请求先重置上下文，防止复用的工作线程串到上一个请求的用户
+    # Reset context at the start of each request so a reused worker thread can't leak the previous request's user
     _ctx_user.set(None)
     if not MULTIUSER:
-        _bind_user(LOCAL_USER)   # 本地单机模式，不登录
+        _bind_user(LOCAL_USER)   # local single-user mode, no login
         return
     p = request.path
     if p in _OPEN_PATHS or p.startswith("/static/"):
-        return  # 这些路径不碰 state；上下文保持 None
+        return  # these paths never touch state; context stays None
     user = session.get("user")
     if user and user in users:
         _bind_user(user)
         return
-    # 未登录：页面导航跳登录页，前端 fetch 拿到 401（避免把登录 HTML 当 JSON 解析）
+    # Not logged in: page navigation redirects to login, front-end fetch gets 401 (so login HTML isn't parsed as JSON)
     if request.method == "GET" and "text/html" in request.headers.get("Accept", ""):
         return redirect(url_for("login_page", next=p))
     return jsonify({"error": "not logged in"}), 401
@@ -453,7 +453,7 @@ def register_page():
     if not MULTIUSER:
         return redirect("/")
     if not REG_OPEN:
-        return redirect(url_for("login_page"))  # 注册未开放 → 回登录页
+        return redirect(url_for("login_page"))  # registration not open → back to login page
     error = ""
     if request.method == "POST":
         name = (request.form.get("username") or "").strip()
@@ -476,34 +476,34 @@ def logout_page():
     session.pop("user", None)
     return redirect(url_for("login_page"))
 
-# ---------------------------------------------------------------- state（多租户）
-# 每个用户一份独立的 state（简历/岗位/匹配/投递…各自独立）。
-# `state` 是一个按「当前用户」路由的代理：所有 state[...] 访问自动落到当前用户的数据上。
-# 当前用户由 contextvars 决定——请求线程在 before_request 里设，后台线程在入口处设。
-# 公司总目录（含 12 万赞助商）是所有用户共享的一份对象，避免重复占内存/硬盘。
-_lock = threading.Lock()                 # 保护 state 写入（全局粗粒度锁，够用）
-_states_lock = threading.Lock()          # 保护 user_states 字典本身
-user_states = {}                         # uid -> 该用户的 state dict
-_shared_companies = {}                   # 公司总目录：所有用户共享同一个对象
+# ---------------------------------------------------------------- state (multi-tenant)
+# Each user gets an independent state (resume/jobs/matches/applications… all separate).
+# `state` is a proxy routed by "current user": every state[...] access lands on the current user's data.
+# The current user comes from contextvars — request threads set it in before_request, background threads at their entry point.
+# The company master directory (incl. 120k sponsors) is one object shared by all users, avoiding duplicate memory/disk.
+_lock = threading.Lock()                 # guards state writes (global coarse-grained lock, good enough)
+_states_lock = threading.Lock()          # guards the user_states dict itself
+user_states = {}                         # uid -> that user's state dict
+_shared_companies = {}                   # company master directory: one object shared by all users
 _ctx_user = contextvars.ContextVar("ctx_user", default=None)
 
 
 def _uid():
-    """当前上下文用户；未设置时回落到 LOCAL_USER（本地单机 / 免登录路径）。"""
+    """Current context user; falls back to LOCAL_USER when unset (local single-user / no-login paths)."""
     return _ctx_user.get() or LOCAL_USER
 
 
 def blank_state():
-    """一份全新的用户 state。companies 指向共享目录（同一对象，不复制 12 万条）。"""
+    """A fresh user state. companies points at the shared directory (same object, not a copy of 120k entries)."""
     return {
-        "companies": _shared_companies,   # 共享引用（所有用户同一份公司目录）
+        "companies": _shared_companies,   # shared reference (all users share one company directory)
         "keywords": list(DEFAULT_KEYWORDS),
-        "exclude_keywords": [],  # 标题命中即隐藏（如 sales / frontend / qa）
-        "target_titles": [],     # 目标岗位标题（空=用 DEFAULT_TARGET_TITLES）
-        "acceptable_titles": [], # 可接受岗位标题（空=用 DEFAULT_ACCEPTABLE_TITLES）
+        "exclude_keywords": [],  # hide when the title matches (e.g. sales / frontend / qa)
+        "target_titles": [],     # target job titles (empty = use DEFAULT_TARGET_TITLES)
+        "acceptable_titles": [], # acceptable job titles (empty = use DEFAULT_ACCEPTABLE_TITLES)
         "uk_only": True,
-        "auto_hours": 0,   # >0 时后台每隔 N 小时自动快速刷新
-        "results": {},     # name -> result（只存探测到招聘页的公司 + 精选公司）
+        "auto_hours": 0,   # >0: background quick refresh every N hours
+        "results": {},     # name -> result (only companies with a detected board + curated ones)
         "jobs_seen": {},   # job_url -> {"first_seen","last_seen"}
         "scan": {"running": False, "done": 0, "total": 0, "mode": None,
                  "started_ts": 0, "stop": False, "new_jobs": 0},
@@ -511,37 +511,37 @@ def blank_state():
         "resume": None,        # {"text","keywords","updated","name"}
         "match_scores": {},    # job_url -> {"score","hit","must_miss","nice_miss","flags","n"}
         "match": {"running": False, "done": 0, "total": 0},
-        "match_stats": {},     # JD 抓取覆盖率：{"jd_ok","jd_fail","updated"}
-        "exp_years": 1,        # 我的工作年限（用于年限门槛检测）
-        "agg_jobs": {},        # 聚合器(Adzuna/Reed)/社媒招聘帖岗位：url -> {...}
+        "match_stats": {},     # JD fetch coverage: {"jd_ok","jd_fail","updated"}
+        "exp_years": 1,        # my years of experience (for the experience-threshold check)
+        "agg_jobs": {},        # aggregator (Adzuna/Reed) / social hiring-post jobs: url -> {...}
         "agg": {"running": False, "done": 0, "total": 0},
-        "social": {"running": False, "done": 0, "total": 0},  # 社媒招聘帖(HN)抓取进度
-        "tracker": {},         # 投递清单：job_url -> {"status","ts","title","company","location"}
-        "size": {"running": False, "done": 0, "total": 0},  # 公司规模识别进度
-        "hidden": {},          # 用户手动隐藏的岗位：url -> {"ts","title"}
-        "advice": {},          # 岗位简历建议缓存：url -> markdown（刷新页面不丢、不重复扣 LLM 费）
-        "outreach": {},        # networking 草稿缓存：url -> markdown
+        "social": {"running": False, "done": 0, "total": 0},  # social hiring-post (HN) fetch progress
+        "tracker": {},         # application tracker: job_url -> {"status","ts","title","company","location"}
+        "size": {"running": False, "done": 0, "total": 0},  # company size detection progress
+        "hidden": {},          # jobs hidden manually by the user: url -> {"ts","title"}
+        "advice": {},          # per-job resume advice cache: url -> markdown (survives page refresh, no repeat LLM cost)
+        "outreach": {},        # networking draft cache: url -> markdown
     }
 
 
 def ensure_user(uid):
-    """确保该用户的 state 已在内存（首次访问时从磁盘懒加载）。返回其 state dict。"""
+    """Ensure this user's state is in memory (lazy-loaded from disk on first access). Returns its state dict."""
     with _states_lock:
         st = user_states.get(uid)
         if st is not None:
             return st
-    st = blank_state()          # 锁外构建 + 读盘，避免半成品被别的线程看到
+    st = blank_state()          # build + read disk outside the lock so other threads never see a half-built state
     load_user_state(uid, st)
     with _states_lock:
         existing = user_states.get(uid)
-        if existing is not None:  # 竞态：别的线程已建好，用它的
+        if existing is not None:  # race: another thread already built it, use theirs
             return existing
         user_states[uid] = st
         return st
 
 
 class _StateProxy:
-    """把全局名字 `state` 变成「当前用户的 state」。只需 __getitem__/__setitem__/get。"""
+    """Makes the global name `state` mean "the current user's state". Only needs __getitem__/__setitem__/get."""
     def _d(self):
         uid = _uid()
         st = user_states.get(uid)
@@ -561,8 +561,8 @@ state = _StateProxy()
 
 
 def _spawn(fn, *args):
-    """启动一个后台线程，并把「当前用户」绑定进新线程的上下文。
-    新线程默认不继承 contextvars，所以这里显式捕获 + 设置，避免跑到别人的数据上。"""
+    """Start a background thread with the "current user" bound into the new thread's context.
+    New threads don't inherit contextvars, so capture + set explicitly to avoid running on someone else's data."""
     u = _uid()
 
     def runner():
@@ -572,13 +572,13 @@ def _spawn(fn, *args):
     threading.Thread(target=runner, daemon=True).start()
 
 
-# name -> {"ats","slug"}：找到招聘系统
-#       | "none"      ：普通探测没找到（深度补扫还会再试它）
-#       | "none_deep" ：深度补扫也探过、确认没有（深度补扫不再重复扫 → 停了能续跑）
+# name -> {"ats","slug"}: ATS found
+#       | "none"      : regular probe found nothing (deep rescan will retry it)
+#       | "none_deep" : deep rescan also probed and confirmed none (not rescanned → stop and resume works)
 ats_cache = {}
-_NO_ATS = ("none", "none_deep")   # 两者都表示"没有招聘页"
-# 保护 ats_cache：扫描时 32~48 个工作线程在并发写它，落盘要先在锁内快照，
-# 否则 json.dump 边遍历边被改 → RuntimeError 打死扫描线程（表现为"闪退"）。
+_NO_ATS = ("none", "none_deep")   # both mean "no job board"
+# Guards ats_cache: 32~48 worker threads write it concurrently during scans, so snapshot inside the lock before saving,
+# otherwise json.dump iterates while it's mutated → RuntimeError kills the scan thread (shows up as a "crash").
 _ats_lock = threading.Lock()
 
 
@@ -592,11 +592,11 @@ def _ats_pop(name):
         ats_cache.pop(name, None)
 company_sizes = {}  # company name -> {"band": startup|mid|large|unknown, "note": str}
 api_keys = {}   # {"adzuna_app_id","adzuna_app_key","reed_api_key"}
-slug_overrides = {}  # name.lower() -> {"ats","slug"}：手动修正 slug 猜错的重点公司
+slug_overrides = {}  # name.lower() -> {"ats","slug"}: manual fixes for key companies whose slug was guessed wrong
 
 
 def _valid_override(v):
-    """一条手动修正是否可用。Workday 用 host+site 定位，其它 ATS 用 slug。"""
+    """Whether a manual override is usable. Workday is located by host+site, other ATSs by slug."""
     if not v.get("ats"):
         return False
     if v["ats"] == "Workday":
@@ -615,7 +615,7 @@ def _user_state_file(uid):
 
 
 def load_all():
-    """启动时载入所有用户共享的数据：探测缓存 + 公司总目录。各用户 state 懒加载。"""
+    """On startup, load data shared by all users: probe cache + company master directory. Per-user state is lazy-loaded."""
     global ats_cache, slug_overrides, api_keys, company_sizes
     if os.path.exists(COMPANY_SIZE_FILE):
         try:
@@ -643,7 +643,7 @@ def load_all():
                               if isinstance(v, dict) and _valid_override(v)}
         except Exception:
             slug_overrides = {}
-    # 公司总目录（共享）：就地填充 _shared_companies，保持 blank_state 里的引用有效
+    # Company master directory (shared): fill _shared_companies in place so references in blank_state stay valid
     if os.path.exists(COMPANIES_FILE):
         try:
             with open(COMPANIES_FILE, encoding="utf-8") as f:
@@ -654,21 +654,21 @@ def load_all():
 
 
 def migrate_legacy_state():
-    """把老的单租户 data/state.json 迁移成 owner 账号的 per-user state（只做一次）。
-    老文件里的 companies 并入共享目录。原文件保留作备份，不删除。"""
+    """Migrate the old single-tenant data/state.json into the owner account's per-user state (once only).
+    companies from the old file are merged into the shared directory. The original is kept as a backup, not deleted."""
     if not os.path.exists(STATE_FILE):
         return
     owner = os.environ.get("APP_USER") or LOCAL_USER
     dest = _user_state_file(owner)
     if os.path.exists(dest):
-        return  # 已迁移
+        return  # already migrated
     try:
         with open(STATE_FILE, encoding="utf-8") as f:
             saved = json.load(f)
     except Exception:
         return
     comps = saved.pop("companies", {})
-    if isinstance(comps, list):  # 更老的格式：当时导入的就是精选清单
+    if isinstance(comps, list):  # even older format: what was imported then was the curated list
         comps = {c["name"]: {"tags": ["curated"], "town": ""} for c in comps}
     for k, v in (comps or {}).items():
         _shared_companies.setdefault(k, v)
@@ -676,7 +676,7 @@ def migrate_legacy_state():
 
 
 def load_user_state(uid, st):
-    """把某用户的 per-user state.json 载入到 st（companies 不在此文件里，是共享的）。"""
+    """Load a user's per-user state.json into st (companies aren't in this file; they're shared)."""
     path = _user_state_file(uid)
     if not os.path.exists(path):
         return
@@ -702,7 +702,7 @@ def load_user_state(uid, st):
     st["advice"] = saved.get("advice", {})
     st["outreach"] = saved.get("outreach", {})
     for name, r in saved.get("results", {}).items():
-        r.pop("links", None)  # 旧版把链接存了盘，现在改为按需生成
+        r.pop("links", None)  # old versions saved links to disk; now generated on demand
         st["results"][name] = r
 
 
@@ -714,17 +714,17 @@ def _atomic_write(path, payload):
 
 
 def save_companies():
-    """公司名单单独存（12 万条只在导入时变），避免扫描期间反复写大文件。
-    调用方不得持锁。"""
+    """Company list is stored separately (120k entries only change on import), so scans don't keep rewriting a big file.
+    Caller must not hold the lock."""
     with _lock:
         payload = json.dumps(state["companies"], ensure_ascii=False)
     _atomic_write(COMPANIES_FILE, payload)
 
 
 def save_state():
-    """把「当前用户」的 state 落盘到 data/users/<uid>/state.json。
-    锁内序列化（results/jobs_seen 都不大），锁外写盘。调用方不得持锁。
-    companies 是共享的，单独由 save_companies() 存，不进本文件。"""
+    """Save the "current user's" state to data/users/<uid>/state.json.
+    Serialise inside the lock (results/jobs_seen are small), write to disk outside it. Caller must not hold the lock.
+    companies is shared and saved separately by save_companies(), not in this file."""
     dest = _user_state_file(_uid())
     with _lock:
         payload = json.dumps({
@@ -750,22 +750,22 @@ def save_state():
 
 
 def save_ats_cache():
-    """锁内快照 → 锁外序列化 → 原子写。调用方不得持 _ats_lock。
+    """Snapshot inside lock → serialise outside lock → atomic write. Caller must not hold _ats_lock.
 
-    修的两个真实事故：
-    ① 过去直接 json.dump(ats_cache, f)：32 个扫描线程边写、序列化边遍历 →
-       RuntimeError: dictionary changed size during iteration，把 run_scan 线程
-       当场打死（界面上就是扫描"闪退"）。
-    ② 过去用 open(...,"w") 直写：文件先被清空，一旦崩在半路，整份探测缓存就被
-       写坏；load_all() 解析失败会静默当成空 → 12 万家全量重扫。改原子写后，
-       写坏的只会是临时文件，原文件始终完整。
+    Fixes two real incidents:
+    ① Previously json.dump(ats_cache, f) directly: 32 scan threads writing while serialisation iterated →
+       RuntimeError: dictionary changed size during iteration, killing the run_scan thread
+       on the spot (in the UI the scan just "crashed").
+    ② Previously wrote in place with open(...,"w"): the file is truncated first, so a crash midway left the whole
+       probe cache corrupted; load_all() silently treats a parse failure as empty → full rescan of 120k. With atomic writes,
+       only the temp file can be corrupted; the original always stays intact.
     """
     with _ats_lock:
-        snap = dict(ats_cache)      # 锁内只做快照（C 层拷贝，很快）
+        snap = dict(ats_cache)      # only snapshot inside the lock (C-level copy, very fast)
     _atomic_write(ATS_CACHE_FILE, json.dumps(snap, ensure_ascii=False))
 
 
-# ---------------------------------------------------------------- slug 生成
+# ---------------------------------------------------------------- slug generation
 STRIP_SUFFIXES = [
     "ltd", "limited", "plc", "llp", "inc", "uk", "group", "holdings",
     "international", "technologies", "technology", "labs", "lab", "co",
@@ -774,14 +774,14 @@ STRIP_SUFFIXES = [
 
 def slug_candidates(name):
     base = name.lower().strip()
-    base = re.sub(r"t/a.*$", " ", base)  # 去掉 trading-as 别名
+    base = re.sub(r"t/a.*$", " ", base)  # strip trading-as aliases
     base = re.sub(r"[&+]", " and ", base)
     base = re.sub(r"[^a-z0-9\s-]", "", base)
     words = [w for w in base.split() if w]
     trimmed = list(words)
     while len(trimmed) > 1 and trimmed[-1] in STRIP_SUFFIXES:
         trimmed.pop()
-    # 只试命中率最高的形式，控制全量清查的请求量
+    # only try the highest-hit-rate forms, to keep full-sweep request volume down
     cands = []
     if trimmed:
         cands.append("".join(trimmed))
@@ -796,7 +796,7 @@ def slug_candidates(name):
     return out[:3]
 
 
-# ---------------------------------------------------------------- ATS 探测
+# ---------------------------------------------------------------- ATS probing
 _tls = threading.local()
 
 
@@ -808,12 +808,12 @@ def _session():
 
 
 class RateLimited(Exception):
-    """对方限流/暂时不可用；此时不能把公司记为 none，否则永久漏掉。"""
+    """Remote side is rate-limited / temporarily unavailable; don't record the company as none, or it's missed forever."""
 
 
-# 停止扫描的全局开关。深度补扫时在飞任务可能卡在 Workable 信号量排队/退避 sleep 里
-# 几十秒到几分钟，光靠 run_scan 主循环检查 state["scan"]["stop"] 根本停不下来——
-# 所有慢环节（探测间隙、信号量等待、退避）都要能被这个事件秒级打断。
+# Global stop switch for scans. During a deep rescan, in-flight tasks can sit in the Workable semaphore queue / backoff sleep
+# for tens of seconds to minutes; checking state["scan"]["stop"] in run_scan's main loop alone can't stop them —
+# every slow step (gaps between probes, semaphore waits, backoff) must be interruptible by this event within seconds.
 _stop_event = threading.Event()   # fallback only: never set by the API
 _scan_stops = {}                  # uid -> stop Event of that user's running scan
 
@@ -825,11 +825,11 @@ def _cur_stop():
     return getattr(_tls, "stop", None) or _stop_event
 
 
-# 近期限流(429/503)次数监控——仅作可观测性用（_recent_rl 可供诊断/后续接指标）。
-# 注：全源提速后已废除「命中 cap 就整体冷却 5 分钟」的逻辑，429 改由单探测退避自节流。
+# Monitoring of recent rate-limit (429/503) counts — observability only (_recent_rl for diagnostics / future metrics).
+# Note: since the all-source speedup, "hit the cap → global 5-minute cooldown" is gone; 429s use per-probe backoff self-throttling.
 _rl_lock = threading.Lock()
-_rl_hits = []          # 最近的 429/503 时间戳
-RL_WINDOW = 120        # 统计窗口（秒）
+_rl_hits = []          # timestamps of recent 429/503s
+RL_WINDOW = 120        # stats window (seconds)
 
 
 def _note_rate_limit():
@@ -870,8 +870,8 @@ def probe_greenhouse(slug):
 
 
 def greenhouse_bodies(slug):
-    """Greenhouse 基础列表不含 JD，用 content=true 一次拿全公司所有岗位正文。
-    只在有“广撒网候选”时才调用，均摊到每家公司最多一次额外请求。"""
+    """Greenhouse's basic list has no JD; content=true fetches the full text of every job at the company in one go.
+    Only called when there are "wide-net candidates", so at most one extra request per company."""
     data = _get_json(
         f"https://boards-api.greenhouse.io/v1/boards/{slug}/jobs?content=true")
     out = {}
@@ -897,7 +897,7 @@ def probe_lever(slug):
         "title": j.get("text", ""),
         "url": j.get("hostedUrl", ""),
         "location": (j.get("categories") or {}).get("location", "") or "",
-        "desc": _lever_desc(j),  # Lever 列表接口自带 JD，二次确认零成本
+        "desc": _lever_desc(j),  # Lever's list API includes the JD, so the second check is free
     } for j in data]
     return {"board_url": f"https://jobs.lever.co/{slug}", "jobs": jobs}
 
@@ -920,11 +920,11 @@ _WORKABLE_SEM = threading.BoundedSemaphore(WORKABLE_CONC)
 
 
 def probe_workable(slug):
-    # Workable 限流最狠：① 全局并发闸限死同时探测数；② 被 429 退避重试而非直接放弃，
-    # 让深度补扫最终能查完（退避期间占着并发槽 → 等于自动降速自愈）。只影响 deep 补扫，
-    # 不进全量热路径，所以第一次全量不受它拖累。
+    # Workable rate-limits hardest: ① a global concurrency gate caps simultaneous probes; ② 429s are retried with backoff, not dropped,
+    # so the deep rescan eventually finishes (backoff holds a slot → automatic slow-down and self-healing). Only affects deep rescans,
+    # not the full hot path, so the first full sweep isn't slowed by it.
     url = f"https://apply.workable.com/api/v1/widget/accounts/{slug}"
-    # 排队等并发槽时每 0.5s 看一眼停止开关；停止按 RateLimited 处理 → 不落 none 缓存
+    # while waiting for a slot, check the stop switch every 0.5s; stop is treated as RateLimited → no none cache entry
     stop = _cur_stop()
     while not _WORKABLE_SEM.acquire(timeout=0.5):
         if stop.is_set():
@@ -937,8 +937,8 @@ def probe_workable(slug):
                 break
             except RateLimited:
                 if attempt == 3:
-                    raise                       # 连试 4 次仍限流 → 本轮不落 none，下轮再补
-                # 退避：1.5s, 3s, 6s；期间被停止则立刻放弃（wait 返回 True = 事件已置位）
+                    raise                       # still rate-limited after 4 tries → don't record none this round, retry next round
+                # backoff: 1.5s, 3s, 6s; give up at once if stopped meanwhile (wait returns True = event set)
                 if stop.wait(1.5 * (2 ** attempt)):
                     raise RateLimited(url)
     finally:
@@ -955,7 +955,7 @@ def probe_workable(slug):
 
 def probe_smartrecruiters(slug):
     data = _get_json(f"https://api.smartrecruiters.com/v1/companies/{slug}/postings?limit=100")
-    # SmartRecruiters 对不存在的公司也返回 200+空列表，必须把空结果当未命中
+    # SmartRecruiters returns 200 + an empty list even for non-existent companies, so treat empty results as a miss
     if not data or not data.get("content"):
         return None
     jobs = []
@@ -984,7 +984,7 @@ def probe_recruitee(slug):
 
 
 def probe_personio(slug):
-    # Personio 每家公司自带公开 XML 岗位源，正文也在里面（二次确认零成本）
+    # Personio gives each company a public XML job feed that includes the full text (second check is free)
     try:
         r = _session().get(f"https://{slug}.jobs.personio.com/xml", timeout=TIMEOUT)
     except Exception:
@@ -1013,15 +1013,15 @@ def probe_personio(slug):
 
 
 def probe_workday_tenant(host, site):
-    """Workday 公开岗位站的匿名接口。host 如 nvidia.wd5.myworkdayjobs.com，
-    site 如 NVIDIAExternalCareerSite。只能通过手动 override 配置（无法从公司名猜）。"""
+    """Anonymous API of Workday public career sites. host like nvidia.wd5.myworkdayjobs.com,
+    site like NVIDIAExternalCareerSite. Only configurable via manual override (can't be guessed from the company name)."""
     if not host or not site:
         return None
     tenant = host.split(".")[0]
     base = f"https://{host}/wday/cxs/{tenant}/{site}"
     jobs, offset = [], 0
     try:
-        while offset < 200:  # 最多取 200 个，避免超大站拖慢
+        while offset < 200:  # fetch at most 200, so huge sites don't slow things down
             r = _session().post(f"{base}/jobs",
                                 json={"appliedFacets": {}, "limit": 20,
                                       "offset": offset, "searchText": ""},
@@ -1035,7 +1035,7 @@ def probe_workday_tenant(host, site):
                     "title": j.get("title", ""),
                     "url": f"https://{host}/en-US/{site}{j.get('externalPath', '')}",
                     "location": j.get("locationsText", "") or "",
-                })  # Workday 列表不含正文 → 只按标题判断
+                })  # Workday's list has no full text → judge by title only
             total = d.get("total") or 0
             offset += 20
             if not batch or offset >= total:
@@ -1047,38 +1047,38 @@ def probe_workday_tenant(host, site):
     return {"board_url": f"https://{host}/en-US/{site}", "jobs": jobs}
 
 
-# 健康快探测：走各家共享域名，快且不限流——全量 sweep 默认只跑这几个，能真正跑完
+# Healthy fast probes: shared domains, fast and not rate-limited — the full sweep runs only these by default and actually finishes
 FAST_PROBES = [
     ("Greenhouse", probe_greenhouse),
     ("Lever", probe_lever),
     ("Ashby", probe_ashby),
     ("SmartRecruiters", probe_smartrecruiters),
 ]
-# Workable：命中最多(273家)但限流最狠，放进全量热路径会整片 429 把 sweep 拖到跑不完。
-# 移到「深度补扫」(mode=deep) 里，用 _WORKABLE_SEM 节流跑，不拖垮主扫描。
+# Workable: most hits (273 companies) but harshest rate limiting; on the hot path it would 429 en masse and the sweep would never finish.
+# Moved to the "deep rescan" (mode=deep), throttled with _WORKABLE_SEM so it doesn't drag down the main scan.
 WORKABLE_PROBES = [("Workable", probe_workable)]
-# 慢探测：Recruitee/Personio 用「每公司独立子域名」，对不存在的公司要付一次注定
-# 失败的 DNS+握手（实测各 ~3.7s），而命中极少（Recruitee 8、Personio 0）。同样放深度补扫。
+# Slow probes: Recruitee/Personio use per-company subdomains, so each non-existent company costs a doomed
+# DNS+handshake (measured ~3.7s each), with very few hits (Recruitee 8, Personio 0). Also moved to the deep rescan.
 EXTRA_PROBES = [
     ("Recruitee", probe_recruitee),
     ("Personio", probe_personio),
 ]
-PROBES = FAST_PROBES                             # 默认 hot path（pending/all/known）
-CORE_PROBES = FAST_PROBES + WORKABLE_PROBES      # 精选小清单：连 Workable 一起扫（量小不怕限流）
-# 深度补扫：默认只跑 Workable（快约 6 倍，且拿到深度补扫 93% 的产出）。
-# 设 DEEP_NICHE=1 才把 Recruitee/Personio 这两个冷门源加回来（慢很多，多找万分之二）。
+PROBES = FAST_PROBES                             # default hot path (pending/all/known)
+CORE_PROBES = FAST_PROBES + WORKABLE_PROBES      # small curated list: include Workable (small volume, rate limits don't matter)
+# Deep rescan: Workable only by default (~6x faster, and still gets 93% of the deep rescan's yield).
+# Set DEEP_NICHE=1 to add back the niche Recruitee/Personio sources (much slower, finds ~0.02% more).
 DEEP_PROBES = WORKABLE_PROBES + (EXTRA_PROBES if DEEP_NICHE else [])
 ALL_PROBES = CORE_PROBES + EXTRA_PROBES
-PROBE_FN = dict(ALL_PROBES)       # 缓存命中/手动 override 反查仍需认得全部 ATS
-# Workday 不参与按公司名猜 slug（需要 host+site），只能手动 override
+PROBE_FN = dict(ALL_PROBES)       # cache hits / manual override lookups still need to know every ATS
+# Workday takes no part in guessing slugs from company names (needs host+site); manual override only
 OVERRIDE_ATS = set(PROBE_FN) | {"Workday"}
 
-# 预置大厂 Workday 招聘站（host, site）。这些公司用 Workday/自建系统，按公司名猜
-# slug 猜不到，故内置 host/site 直连其公开岗位接口。属"尽力而为"：
-#   · 探测失败不会有副作用——find_ats 会自动回落到普通探测；
-#   · host/site 日后若变动，可在网页「手动修正」里改（会写入 data/slug_overrides.json，覆盖内置）。
-# 注意：Google / Amazon / Meta / Microsoft / 摩根等用**自建**招聘系统（非 Workday），
-# 无公开接口可抓，仍需用公司卡片里的「Google 直达 / LinkedIn 搜索」手动查。
+# Preset Workday career sites (host, site) for big employers. These use Workday/in-house systems, so guessing
+# the slug from the name fails; the built-in host/site hit their public job API directly. Best-effort:
+#   · a failed probe has no side effects — find_ats falls back to regular probing;
+#   · if host/site change later, fix them via "Manual fix" in the web UI (written to data/slug_overrides.json, overriding the built-ins).
+# Note: Google / Amazon / Meta / Microsoft / Morgan etc. use **in-house** hiring systems (not Workday),
+# with no public API to scrape; check them manually via the "Google direct / LinkedIn search" links on the company card.
 BUILTIN_WORKDAY = {
     "NVIDIA": ("nvidia.wd5.myworkdayjobs.com", "NVIDIAExternalCareerSite"),
     "Salesforce": ("salesforce.wd12.myworkdayjobs.com", "External_Career_Site"),
@@ -1094,9 +1094,9 @@ BUILTIN_WORKDAY = {
 BUILTIN_OVERRIDES = {name.lower(): {"ats": "Workday", "host": host, "site": site}
                      for name, (host, site) in BUILTIN_WORKDAY.items()}
 
-# 预置一批知名 AI/ML/金融科技雇主，作为 curated 公司种子。它们多用 Greenhouse/Lever/
-# Ashby 等可自动探测的系统，加入清单后会被自动识别 slug；探测不到的会显示为"无招聘页"，
-# 提醒你手动去查。（这些都在英国招人且常担保工签。）
+# Preset well-known AI/ML/fintech employers as curated company seeds. Most use Greenhouse/Lever/
+# Ashby and other auto-detectable systems, so slugs are detected once added; any not found show as "no job board",
+# reminding you to check manually. (All hire in the UK and often sponsor visas.)
 CURATED_SEED = [
     "Anthropic", "OpenAI", "Cohere", "Hugging Face", "DeepMind", "Databricks",
     "Palantir Technologies", "Wayve", "Faculty", "Quantexa", "Synthesia",
@@ -1106,7 +1106,7 @@ CURATED_SEED = [
 
 
 def seed_builtin_companies():
-    """把预置大厂/AI 雇主加入公司清单（curated），使其被扫描；Workday 大厂还会命中内置 override。"""
+    """Add preset big-name/AI employers to the company list (curated) so they get scanned; Workday ones also hit the built-in overrides."""
     changed = False
     with _lock:
         existing = {n.strip().lower() for n in state["companies"]}
@@ -1137,15 +1137,15 @@ def _probe_override(ov):
 
 
 def find_ats(name, probes=PROBES, max_slugs=SWEEP_SLUGS, force=False):
-    """返回 (ats_name, slug, {board_url, jobs}) 或 None。结果写入 ats_cache。
-    probes/max_slugs 由扫描模式决定；force=True 时忽略 'none' 缓存（深度补扫用）。
-    探测在调用线程内顺序跑——复用该线程的 keep-alive 连接（比每家公司新建线程池、
-    每个请求都重握手 TLS 快数倍）。"""
+    """Return (ats_name, slug, {board_url, jobs}) or None. Results are written to ats_cache.
+    probes/max_slugs depend on the scan mode; force=True ignores the 'none' cache (for deep rescans).
+    Probes run sequentially in the calling thread — reusing its keep-alive connections (several times faster than
+    a new thread pool per company with a fresh TLS handshake per request)."""
     key = (name or "").strip().lower()
-    ov = slug_overrides.get(key) or BUILTIN_OVERRIDES.get(key)  # 用户修正优先，其次内置大厂
+    ov = slug_overrides.get(key) or BUILTIN_OVERRIDES.get(key)  # user overrides first, then built-in big employers
     if ov:
         res = _probe_override(ov)
-        if res:  # 手动修正优先，抓不到再走自动探测
+        if res:  # manual override first; fall back to auto-probing if it finds nothing
             return (ov["ats"], ov.get("slug") or ov.get("site") or "", res)
     cached = ats_cache.get(name)
     if cached in _NO_ATS and not force:
@@ -1157,15 +1157,15 @@ def find_ats(name, probes=PROBES, max_slugs=SWEEP_SLUGS, force=False):
             res = None
         if res:
             return (cached["ats"], cached["slug"], res)
-        # 缓存失效则重新探测
+        # cache invalid, re-probe
 
     stop = _cur_stop()
-    fallback = None  # 0 岗位的空账号可能是重名壳账号，只作兜底
-    rate_limited = False  # 被限流的探测视为"未知"而非"没有"
+    fallback = None  # an empty account with 0 jobs may be a same-name shell account; fallback only
+    rate_limited = False  # rate-limited probes count as "unknown", not "none"
     for slug in slug_candidates(name)[:max_slugs]:
         for ats_name, fn in probes:
             if stop.is_set():
-                rate_limited = True  # 中途放弃按"未知"处理，不写 none 缓存
+                rate_limited = True  # aborted midway counts as "unknown"; don't write a none cache entry
                 break
             try:
                 res = fn(slug)
@@ -1185,20 +1185,20 @@ def find_ats(name, probes=PROBES, max_slugs=SWEEP_SLUGS, force=False):
     if fallback:
         _ats_set(name, {"ats": fallback[0], "slug": fallback[1]})
         return fallback
-    if not rate_limited:  # 限流/中途停止时不写缓存，下次续跑会重新探测这家
-        # 深度补扫(force=True)也没找到 → 记 none_deep，下次深度补扫直接跳过它。
-        # 这样「扫一半停掉、明天接着跑」不会从头再来（普通探测仍记 none，留给深度补扫再试）。
+    if not rate_limited:  # don't write the cache when rate-limited/stopped midway; resuming will re-probe this company
+        # Not found even by the deep rescan (force=True) → record none_deep, so the next deep rescan skips it.
+        # So "stop halfway, resume tomorrow" doesn't restart from scratch (regular probes still record none, left for the deep rescan).
         _ats_set(name, "none_deep" if force else "none")
     return None
 
 
-# ---------------------------------------------------------------- 匹配
+# ---------------------------------------------------------------- matching
 
 
 def build_links(name):
     q = quote_plus(name)
-    # 一键搜岗的关键词跟随当前用户自己的行业，而不是写死 AI——多用户下
-    # 每个账号(你搜 AI、朋友搜金融/建筑)拿到的都是自己方向的搜索链接。
+    # One-click job search keywords follow the current user's own industry, not hardcoded AI — in multi-user mode
+    # each account (you search AI, a friend searches finance/construction) gets search links for their own field.
     kws = [k for k in (state.get("keywords") or []) if k][:3]
     li_terms = " ".join(kws) if kws else "jobs"
     g_role = (" OR ".join(f'"{k}"' for k in kws)) if kws else ""
@@ -1215,7 +1215,7 @@ def build_links(name):
     }
 
 
-# ---------------------------------------------------------------- 扫描
+# ---------------------------------------------------------------- scanning
 def scan_company(name, keywords, uk_only, probes=PROBES, max_slugs=SWEEP_SLUGS,
                  force=False):
     result = {
@@ -1233,7 +1233,7 @@ def scan_company(name, keywords, uk_only, probes=PROBES, max_slugs=SWEEP_SLUGS,
         result["board_url"] = res["board_url"]
         result["total_jobs"] = len(res["jobs"])
         matched = []
-        gh_bodies = None  # Greenhouse 正文按需拉取一次
+        gh_bodies = None  # Greenhouse full text fetched once, on demand
         for j in res["jobs"]:
             title = (j.get("title") or "").lower()
             body = j.get("desc") or ""
@@ -1247,14 +1247,14 @@ def scan_company(name, keywords, uk_only, probes=PROBES, max_slugs=SWEEP_SLUGS,
                 continue
             region, rlabel = classify_region(j.get("location"))
             if uk_only and region == "other":
-                continue  # 排除美国/亚洲等；英国+欧洲+Remote 都保留
-            j.pop("desc", None)  # JD 正文不入库，简历匹配时另存 desc_cache
+                continue  # exclude US/Asia etc.; keep UK + Europe + Remote
+            j.pop("desc", None)  # JD text isn't stored here; resume matching saves it separately in desc_cache
             j["region"] = region
             j["country"] = rlabel
             j["level"] = classify_level(title)
             j["llm"] = kw_match(title, LLM_KEYWORDS) or bool(
                 body and kw_match(body.lower(), LLM_KEYWORDS))
-            j["via"] = via  # title=标题命中 / jd=正文命中（标题没写 AI）
+            j["via"] = via  # title = matched on title / jd = matched on body (title doesn't mention AI)
             matched.append(j)
         result["matched"] = matched[:80]
         if matched:
@@ -1262,7 +1262,7 @@ def scan_company(name, keywords, uk_only, probes=PROBES, max_slugs=SWEEP_SLUGS,
         elif res["jobs"]:
             result["status"] = "board_no_ai"
         else:
-            result["status"] = "no_board"  # 空壳账号
+            result["status"] = "no_board"  # empty shell account
     return result
 
 
@@ -1271,7 +1271,7 @@ def _curated_names():
 
 
 def _record_result(name, res, today, curated):
-    """在锁内调用：登记岗位首见/末见日期，按需入库。"""
+    """Call while holding the lock: record first-seen/last-seen dates for jobs, storing them as needed."""
     for j in res.get("matched", []):
         seen = state["jobs_seen"].setdefault(j["url"], {"first_seen": today})
         seen["last_seen"] = today
@@ -1279,7 +1279,7 @@ def _record_result(name, res, today, curated):
         if seen["first_seen"] == today:
             state["scan"]["new_jobs"] += 1
     if res["status"] == "no_board" and name not in curated:
-        state["results"].pop(name, None)  # register 里没招聘页的不占地方
+        state["results"].pop(name, None)  # register companies without a job board take up no space
     else:
         state["results"][name] = res
 
@@ -1289,14 +1289,14 @@ def run_scan(names, mode):
     uk_only = state["uk_only"]
     curated = _curated_names()
     today = date.today().isoformat()
-    # 深度补扫：对已判 none 的公司再跑限流/慢探测(Workable+Recruitee+Personio)，须绕过 none 缓存。
-    # 全源提速：保留 Workable（覆盖不减），靠更高 Workable 并发 + 更多线程 + 单 slug 提速，
-    # 429 交给 probe_workable 的单探测退避自节流（整体 5 分钟冷却已废除，见主循环）。
+    # Deep rescan: re-run rate-limited/slow probes (Workable+Recruitee+Personio) on companies marked none; must bypass the none cache.
+    # All-source speedup: keep Workable (no coverage loss); speed comes from higher Workable concurrency + more threads + single slug,
+    # 429s are left to probe_workable's per-probe backoff self-throttling (the global 5-minute cooldown is gone, see main loop).
     if mode == "deep":
         probes, force, max_slugs, workers = DEEP_PROBES, True, DEEP_SLUGS, DEEP_WORKERS
-    elif mode == "curated":       # 精选清单小，连 Workable 一起扫
+    elif mode == "curated":       # curated list is small; include Workable
         probes, force, max_slugs, workers = CORE_PROBES, False, SWEEP_SLUGS, SCAN_WORKERS
-    else:                         # pending / all / known：只跑健康快探测
+    else:                         # pending / all / known: healthy fast probes only
         probes, force, max_slugs, workers = PROBES, False, SWEEP_SLUGS, SCAN_WORKERS
     state["scan"] = {"running": True, "done": 0, "total": len(names), "mode": mode,
                      "started_ts": time.time(), "stop": False, "new_jobs": 0,
@@ -1313,7 +1313,7 @@ def run_scan(names, mode):
         with ThreadPoolExecutor(max_workers=workers) as pool:
             it = iter(names)
             futures = {}
-            # 缓冲只比并发略多——按「停止」时要抛弃的在飞任务少，停得快
+            # buffer only slightly above concurrency — fewer in-flight tasks to discard on "stop", so it stops fast
             buf = workers * 2
 
             def submit_more():
@@ -1327,8 +1327,8 @@ def run_scan(names, mode):
 
             submit_more()
             while futures:
-                # 带超时轮询：深度补扫时在飞任务可能几十秒都没有一家"完成"，
-                # 不加超时的话停止标志要等到有任务完成才会被检查
+                # poll with a timeout: during a deep rescan, in-flight tasks may go tens of seconds without any "completing";
+                # without a timeout the stop flag would only be checked once some task finishes
                 done_set, _ = wait(list(futures), timeout=2,
                                    return_when=FIRST_COMPLETED)
                 for fut in done_set:
@@ -1346,10 +1346,10 @@ def run_scan(names, mode):
                         save_ats_cache()
                         save_state()
                 if state["scan"]["stop"]:
-                    pool.shutdown(wait=False, cancel_futures=True)  # 取消还在排队的，秒停
+                    pool.shutdown(wait=False, cancel_futures=True)  # cancel anything still queued, stop immediately
                     break
-                # 全源提速：不再因近期 429 触发整体 5 分钟冷却——429 由 probe_workable 的单探测
-                # 退避(1.5/3/6s，4 次)就地自节流，只拖住踩雷的那几条探测，不冻结整片扫描。
+                # All-source speedup: recent 429s no longer trigger a global 5-minute cooldown — 429s are handled by probe_workable's per-probe
+                # backoff (1.5/3/6s, 4 tries) in place, holding up only the affected probes instead of freezing the whole scan.
                 submit_more()
     finally:
         state["scan"]["running"] = False
@@ -1357,7 +1357,7 @@ def run_scan(names, mode):
             _scan_stops.pop(_uid(), None)
         save_ats_cache()
         save_state()
-        # 扫描结束后自动重算匹配度（有简历时），新岗位无需手动点"计算匹配度"
+        # after a scan, recompute match scores automatically (if a resume exists), so new jobs don't need a manual "compute match"
         if state.get("resume") and not state["match"]["running"]:
             _spawn(run_match)
 
@@ -1370,12 +1370,12 @@ def start_scan(mode):
     curated = _curated_names()
     if mode == "curated":
         names = sorted(curated)
-    elif mode == "known":   # 已探测到招聘系统的公司：快速刷新最新岗位
+    elif mode == "known":   # companies with a detected ATS: quick refresh of the latest jobs
         names = [n for n in comps if isinstance(ats_cache.get(n), dict)]
-    elif mode == "pending":  # 还没探测过的公司：全量清查（可中断续跑）
+    elif mode == "pending":  # companies not probed yet: full sweep (interruptible and resumable)
         names = [n for n in comps if n not in ats_cache]
-    elif mode == "deep":    # 深度补扫：对已判 none 的公司再试慢探测(Recruitee/Personio)
-        # 只挑「还没深度探过」的 none；深度探过确认没有的是 none_deep，故意排除 → 可中断续跑
+    elif mode == "deep":    # deep rescan: retry slow probes (Recruitee/Personio) on companies marked none
+        # only pick "none" entries not yet deep-probed; confirmed ones are none_deep and deliberately excluded → resumable
         names = [n for n in comps if ats_cache.get(n) == "none"]
     else:  # all
         known = [n for n in comps if isinstance(ats_cache.get(n), dict)]
@@ -1383,34 +1383,34 @@ def start_scan(mode):
         names = sorted(curated) + [n for n in known if n not in curated] + pending
     if not names:
         return 0
-    _charge("scan", SCAN_DAILY_CAP)   # 扣每日扫描配额（超限抛 UsageLimitError）
+    _charge("scan", SCAN_DAILY_CAP)   # charge the daily scan quota (raises UsageLimitError when over)
     _spawn(run_scan, names, mode)
     return len(names)
 
 
 def auto_loop():
-    """auto_hours>0 时定时快速刷新已知招聘系统，第一时间发现新岗位。
-    多租户：逐个用户检查各自的 auto_hours（只覆盖当前已在内存的用户；
-    某用户重启后首次登录会重新进入内存，其定时随之恢复）。"""
+    """When auto_hours>0, periodically quick-refresh known ATSs to catch new jobs as early as possible.
+    Multi-tenant: checks each user's own auto_hours (only users currently in memory;
+    after a restart, a user's first login loads them back into memory and their timer resumes)."""
     while True:
         time.sleep(300)
         for uid in list(user_states.keys()):
             try:
-                _ctx_user.set(uid)   # 把上下文切到这个用户，state[...] 即其数据
+                _ctx_user.set(uid)   # switch the context to this user; state[...] is now their data
                 h = state["auto_hours"]
                 if h > 0 and not state["scan"]["running"] \
                         and time.time() - state["last_auto"] > h * 3600:
-                    if start_scan("known"):   # 内部 _spawn 会捕获当前 uid
+                    if start_scan("known"):   # the internal _spawn captures the current uid
                         state["last_auto"] = time.time()
             except Exception:
                 pass
 
 
-# ---------------------------------------------------------------- 聚合平台搜索
-# Adzuna / Reed 是关键词聚合器：几次调用就能横扫全英国所有公司/ATS 的岗位，
-# 是“抓最全 + 求快”的最大杠杆。需要各自的免费官方 API key（放 data/api_keys.json）。
-# 搜索词跟随用户设置的岗位关键词（改行找护理/会计也能用）；免费 API 有配额，
-# 每轮最多取前 N 个关键词。
+# ---------------------------------------------------------------- aggregator search
+# Adzuna / Reed are keyword aggregators: a few calls sweep jobs from every UK company/ATS,
+# the biggest lever for "most complete + fastest". Each needs its own free official API key (in data/api_keys.json).
+# Search terms follow the user's job keywords (works for nursing/accounting too); the free APIs have quotas,
+# so at most the first N keywords are used per round.
 AGG_MAX_QUERIES = 6
 
 AGG_KEY_FIELDS = ("adzuna_app_id", "reed_api_key", "jooble_api_key", "rapidapi_key")
@@ -1421,7 +1421,7 @@ def _has_agg_keys():
 
 
 def _norm_company(n):
-    """公司名归一化，用于把聚合器岗位和官方 sponsor 名单交叉核对。"""
+    """Normalise company names, for cross-checking aggregator jobs against the official sponsor register."""
     b = re.sub(r"[^a-z0-9 ]", " ", (n or "").lower())
     words = [w for w in b.split() if w and w not in STRIP_SUFFIXES]
     return " ".join(words)
@@ -1471,7 +1471,7 @@ def search_reed(query):
 
 
 def search_jooble(query):
-    """Jooble 聚合了大量招聘站（含部分 LinkedIn/Indeed 转载）。免费 key，POST 调用。"""
+    """Jooble aggregates many job sites (including some LinkedIn/Indeed reposts). Free key, called via POST."""
     key = api_keys.get("jooble_api_key")
     if not key:
         return []
@@ -1492,8 +1492,8 @@ def search_jooble(query):
 
 
 def search_jsearch(query):
-    """JSearch(RapidAPI) 抓 Google for Jobs——覆盖 LinkedIn/Indeed/Glassdoor/ZipRecruiter，
-    正是本工具官方 ATS 扫描的最大盲区。免费额度约每月 200 次。"""
+    """JSearch (RapidAPI) scrapes Google for Jobs — covering LinkedIn/Indeed/Glassdoor/ZipRecruiter,
+    exactly the biggest blind spot of this tool's official ATS scanning. Free tier is about 200 calls a month."""
     key = api_keys.get("rapidapi_key")
     if not key:
         return []
@@ -1522,16 +1522,16 @@ def search_jsearch(query):
 
 
 def run_aggregators():
-    """跑 Adzuna+Reed 关键词搜索，AI 过滤后并入 agg_jobs，并标注是否为工签 sponsor。"""
+    """Run Adzuna+Reed keyword searches, AI-filter, merge into agg_jobs, and flag whether each is a visa sponsor."""
     if not _has_agg_keys():
         return
     kws = [k.lower() for k in state["keywords"]]
-    queries = kws[:AGG_MAX_QUERIES]  # 跟随用户关键词，不再硬编码 AI 词
+    queries = kws[:AGG_MAX_QUERIES]  # follow the user's keywords instead of hardcoded AI terms
     today = date.today().isoformat()
     with _lock:
         sponsor_idx = {_norm_company(n) for n in state["companies"]}
     state["agg"] = {"running": True, "done": 0, "total": len(queries)}
-    new_descs = {}  # url -> JD 摘要，存入 desc_cache 供简历匹配打分
+    new_descs = {}  # url -> JD summary, saved into desc_cache for resume match scoring
     try:
         for q in queries:
             found = (search_adzuna(q) + search_reed(q)
@@ -1563,34 +1563,34 @@ def run_aggregators():
         if new_descs:
             cache = load_desc_cache()
             for u, d in new_descs.items():
-                if len(d) > len(cache.get(u) or ""):  # 保留更完整的版本
+                if len(d) > len(cache.get(u) or ""):  # keep the more complete version
                     cache[u] = d
             _atomic_write(DESC_CACHE_FILE, json.dumps(cache, ensure_ascii=False))
         save_state()
-        # 抓完顺手把新岗位的匹配分算出来
+        # score the new jobs right after fetching
         if state.get("resume") and not state["match"]["running"]:
             _spawn(run_match)
 
 
-# ---------------------------------------------------------------- 社媒招聘帖（Hacker News）
-# HN 每月有一贴 "Ask HN: Who is hiring?"（机器人 whoishiring 于每月 1 号发），
-# 下面每条顶层评论就是一个招聘帖，惯例首行：Company | Role | Location | Remote | Visa | tech | url。
-# Algolia 提供免费无鉴权检索接口，无需 API key，是这个工具最契合的社媒来源。
+# ---------------------------------------------------------------- Social hiring posts (Hacker News)
+# HN has a monthly "Ask HN: Who is hiring?" thread (posted by the whoishiring bot on the 1st);
+# each top-level comment is a hiring post, conventionally headed: Company | Role | Location | Remote | Visa | tech | url.
+# Algolia offers a free, unauthenticated search API with no API key — the best-fitting social source for this tool.
 HN_ALGOLIA = "https://hn.algolia.com/api/v1"
 _HN_URL_RE = re.compile(r"https?://[^\s|)<>\"']+")
 _HN_VISA_RE = re.compile(r"\b(visa|sponsor|sponsorship|relocation|relocat\w*|h1b|h-1b|tier 2|skilled worker)\b", re.I)
 
 
 def _hn_first_para(html_text):
-    """取评论第一段（招聘帖的抬头行：公司 | 岗位 | 地点 | Remote | …）。
-    HN 评论各段用 <p> 分隔，首段在第一个 <p> 之前。"""
+    """Take the comment's first paragraph (the hiring post's header line: Company | Role | Location | Remote | …).
+    HN comment paragraphs are separated by <p>; the first one comes before the first <p>."""
     head = re.split(r"<p>", html_text or "", maxsplit=1)[0]
     return _strip_html(head)
 
 
 def _hn_get(url):
-    """HN Algolia 专用取数：宽松超时 + 一次重试。不走 ATS 那套 (2,5) 超时和限流抛错，
-    因为 items 端点是 ~500KB 的大 JSON，用短超时会偶发失败被静默吞成 0。"""
+    """HN Algolia-specific fetch: generous timeout + one retry. Skips the ATS (2,5) timeout and rate-limit exceptions,
+    because the items endpoint returns ~500KB of JSON; a short timeout occasionally fails and is silently swallowed as 0."""
     for attempt in range(2):
         try:
             r = _session().get(url, timeout=(5, 30))
@@ -1610,8 +1610,8 @@ def _hn_hiring_threads(n_threads=1):
 
 
 def search_hackernews(n_threads=1):
-    """把最近 n 期 HN 'Who is hiring' 主帖下的每条招聘评论解析成一个岗位。
-    返回形状与 search_adzuna 一致：{company,title,url,location,desc,source}。"""
+    """Parse every hiring comment under the latest n HN 'Who is hiring' threads into a job.
+    Same shape as search_adzuna: {company,title,url,location,desc,source}."""
     out = []
     for th in _hn_hiring_threads(n_threads):
         item = _hn_get(f"{HN_ALGOLIA}/items/{th.get('objectID')}")
@@ -1620,26 +1620,26 @@ def search_hackernews(n_threads=1):
             if not raw:
                 continue
             plain = _strip_html(raw)
-            if len(plain) < 30:       # 跳过 "[dead]"、纯 meta 之类的短评论
+            if len(plain) < 30:       # skip short comments like "[dead]" or pure meta
                 continue
             header = _hn_first_para(raw)[:200] or plain[:200]
-            m = _HN_URL_RE.search(plain)          # 正文里的外部申请链接
+            m = _HN_URL_RE.search(plain)          # external application link in the body
             apply_url = m.group(0) if m and "ycombinator.com" not in m.group(0) else None
             hn_url = f"https://news.ycombinator.com/item?id={c.get('id')}"
             company = re.split(r"[|:\-–—]", header)[0].strip()[:80]
             out.append({
                 "company": company, "title": header,
                 "url": apply_url or hn_url, "hn_url": hn_url,
-                "location": header,   # 抬头行常含地点/Remote，交给 classify_region 识别
-                "desc": (plain + f"  · 原帖：{hn_url}")[:8000],
+                "location": header,   # header line often contains location/Remote; classify_region handles it
+                "desc": (plain + f"  · Original post: {hn_url}")[:8000],
                 "source": "HackerNews",
             })
     return out
 
 
 def run_social():
-    """抓 HN 招聘帖，按用户关键词过滤后并入 agg_jobs（复用聚合器的展示/匹配管线）。
-    无需任何 API key。"""
+    """Fetch HN hiring posts, filter by user keywords and merge into agg_jobs (reusing the aggregator display/matching pipeline).
+    No API key needed."""
     if state["social"]["running"]:
         return
     kws = [k.lower() for k in state["keywords"]]
@@ -1693,11 +1693,11 @@ def run_social():
             _spawn(run_match)
 
 
-# ---------------------------------------------------------------- 公司规模（大模型估）
+# ---------------------------------------------------------------- Company size (LLM estimate)
 SIZE_BANDS = ("startup", "mid", "large", "unknown")
 SIZE_LABELS = {"startup": "Startup <50", "mid": "Mid 50–500",
                "large": "Large 500+", "unknown": "Size unknown"}
-_SIZE_BATCH = 30   # 每次问大模型多少家公司
+_SIZE_BATCH = 30   # companies per LLM request
 
 
 def save_company_sizes():
@@ -1705,7 +1705,7 @@ def save_company_sizes():
 
 
 def _parse_llm_json(text):
-    """从大模型输出里抠出 JSON 数组（容忍 ```json 围栏和前后废话）。"""
+    """Extract a JSON array from LLM output (tolerating ```json fences and surrounding chatter)."""
     t = (text or "").strip()
     if "```" in t:
         t = re.sub(r"```(?:json)?", "", t)
@@ -1720,7 +1720,7 @@ def _parse_llm_json(text):
 
 
 def _size_targets():
-    """需要识别规模的公司名：有匹配岗位的 sponsor 公司 + 聚合器岗位公司，去重、跳过已缓存。"""
+    """Company names needing size detection: sponsors with matching jobs + aggregator job companies, deduped, cached ones skipped."""
     names = set()
     with _lock:
         for n, r in state["results"].items():
@@ -1734,8 +1734,8 @@ def _size_targets():
 
 
 def run_company_size():
-    """用大模型给"有岗位的公司"批量估员工规模档位，写入 company_sizes 并缓存。
-    只问没缓存过的公司，均摊成本；不认识的模型会返回 unknown（不瞎猜）。"""
+    """Use an LLM to batch-estimate employee-size bands for "companies with jobs", writing to company_sizes and caching.
+    Only uncached companies are asked, to spread cost; the model returns unknown for ones it doesn't know (no guessing)."""
     if not _llm_ready():
         return
     todo = _size_targets()
@@ -1767,10 +1767,10 @@ def run_company_size():
         save_company_sizes()
 
 
-# ---------------------------------------------------------------- 简历匹配
+# ---------------------------------------------------------------- Resume matching
 DESC_CACHE_FILE = os.path.join(DATA_DIR, "desc_cache.json")
 DESC_FAIL_FILE = os.path.join(DATA_DIR, "desc_fail.json")
-FAIL_RETRY_SEC = 24 * 3600  # JD 抓取失败 24 小时后允许重试
+FAIL_RETRY_SEC = 24 * 3600  # allow a retry 24 hours after a JD fetch failure
 
 
 
@@ -1819,7 +1819,7 @@ def load_desc_fail():
 
 
 def _should_retry(u, fails):
-    """抓取失败过的 URL，超过 24h 才允许再抓，避免每次匹配都重试死链。"""
+    """URLs whose fetch failed; only re-fetched after 24h, so each match run doesn't retry dead links."""
     ts = fails.get(u)
     if not ts:
         return True
@@ -1830,8 +1830,8 @@ def _should_retry(u, fails):
 
 
 def fetch_descriptions(r, cache, fails):
-    """尽力抓取一家公司所有匹配岗位的 JD 文本，写入 cache（url -> text）。
-    抓不到的记入 fails（url -> 失败时间戳），24h 后允许重试。"""
+    """Best-effort fetch of JD text for all matching jobs at one company, written to cache (url -> text).
+    Failures go into fails (url -> failure timestamp) and may be retried after 24h."""
     ats, slug = r.get("ats"), r.get("slug")
     urls = {j["url"] for j in r.get("matched", []) if j.get("url")}
     todo = {u for u in urls if not cache.get(u) and _should_retry(u, fails)}
@@ -1886,12 +1886,12 @@ def fetch_descriptions(r, cache, fails):
         pass
     for u in todo:
         if cache.get(u):
-            fails.pop(u, None)          # 这次抓到了，清除失败记录
+            fails.pop(u, None)          # fetched this time, clear the failure record
         else:
-            fails[u] = time.time()      # 仍抓不到，登记失败时间，24h 后重试
+            fails[u] = time.time()      # still not fetched; record the failure time, retry after 24h
 
 
-# --- 贴近真实英国招聘筛选的规则 ---
+# --- Rules approximating real UK recruiting screens ---
 
 
 def run_match():
@@ -1918,7 +1918,7 @@ def run_match():
                     if res["n"]:
                         state["match_scores"][u] = res
                 state["match"]["done"] += 1
-        if agg:  # 聚合平台岗位也算分：JD 用抓取时存进 desc_cache 的摘要
+        if agg:  # aggregator jobs are scored too: the JD is the summary saved into desc_cache at fetch time
             agg_scores = {}
             for u, j in agg:
                 res = analyze_job(j.get("title", ""), cache.get(u, ""),
@@ -1974,8 +1974,8 @@ def api_match():
     return jsonify({"started": True})
 
 
-# ---------------------------------------------------------------- 简历提升建议
-# 语料挖掘：抓 JD 里“experience with X / proficiency in X”之类短语，捞出词表外的技能
+# ---------------------------------------------------------------- Resume improvement advice
+# Corpus mining: catch phrases like "experience with X / proficiency in X" in JDs to surface skills outside the vocabulary
 _FREEFORM_CUE_RE = re.compile(
     r"(?:experience (?:with|in|using)|proficien(?:t|cy) (?:in|with)|knowledge of|"
     r"familiar(?:ity)? with|expertise in|skilled? in|hands[- ]on (?:with|experience with)|"
@@ -1994,14 +1994,14 @@ _FREEFORM_STOP = {
 
 
 def mine_frequent_terms(descs, known, top=10):
-    """从 JD 语料里挖出高频、但不在技能词表/简历里的候选技能短语（启发式）。"""
+    """Mine frequent candidate skill phrases from the JD corpus that aren't in the skill vocabulary/resume (heuristic)."""
     from collections import Counter
     cnt = Counter()
     for d in descs:
         for m in _FREEFORM_CUE_RE.finditer((d or "").lower()):
             words = [w for w in re.split(r"[ /]+", m.group(1).strip())
                      if w and w not in _FREEFORM_STOP]
-            for n in (2, 1):  # 优先取二元短语，退化到一元
+            for n in (2, 1):  # prefer bigrams, fall back to unigrams
                 if len(words) >= n:
                     term = " ".join(words[:n])
                     if len(term) > 2 and term not in known:
@@ -2011,7 +2011,7 @@ def mine_frequent_terms(descs, known, top=10):
 
 
 def resume_gap_report(top=15):
-    """把简历和全平台匹配分聚合成一份缺口报告：最该补的技能 + 影响面。"""
+    """Aggregate the resume and platform-wide match scores into a gap report: skills most worth adding + their impact."""
     resume = state.get("resume")
     if not resume:
         return {"ready": False}
@@ -2025,7 +2025,7 @@ def resume_gap_report(top=15):
         if not ms.get("n"):
             continue
         n_scored += 1
-        band = 35 <= (ms.get("score") or 0) < 70   # 中等匹配：补技能最能拉动
+        band = 35 <= (ms.get("score") or 0) < 70   # mid-range match: adding skills moves these the most
         for k in ms.get("must_miss", []):
             weight[k] += 2; jobs[k] += 1
             if band:
@@ -2054,13 +2054,13 @@ def _openai_key():
 
 
 def _llm_provider():
-    """决定用哪家大模型生成建议：显式 llm_provider 优先，否则谁配了 key 用谁。"""
+    """Decide which LLM generates advice: explicit llm_provider wins, otherwise whichever has a key configured."""
     pref = (api_keys.get("llm_provider") or "").strip().lower()
     if pref in ("openai", "chatgpt", "gpt"):
         return "openai" if _openai_key() else ("anthropic" if _anthropic_key() else None)
     if pref in ("anthropic", "claude"):
         return "anthropic" if _anthropic_key() else ("openai" if _openai_key() else None)
-    if _openai_key():        # 未指定时：手头有 ChatGPT key 就用它，否则用 Claude
+    if _openai_key():        # when unspecified: use the ChatGPT key if present, otherwise Claude
         return "openai"
     if _anthropic_key():
         return "anthropic"
@@ -2107,7 +2107,7 @@ def _openai_complete(prompt, max_tokens, lang="en"):
                         {"role": "user", "content": prompt}])
     try:
         resp = client.chat.completions.create(max_tokens=max_tokens, **kw)
-    except Exception:  # 新一代/推理模型改用 max_completion_tokens
+    except Exception:  # newer/reasoning models use max_completion_tokens instead
         resp = client.chat.completions.create(max_completion_tokens=max_tokens, **kw)
     return resp.choices[0].message.content or ""
 
@@ -2125,8 +2125,8 @@ def _anthropic_complete(prompt, max_tokens, lang="en"):
 
 
 def _llm_complete(prompt, max_tokens=6000, lang="en"):
-    """按所配 provider 调用大模型生成建议，返回纯文本。
-    多租户下先扣当前用户的每日 LLM 配额，超限抛 UsageLimitError。"""
+    """Call the LLM for the configured provider to generate advice; returns plain text.
+    In multi-tenant mode, first charges the current user's daily LLM quota; raises UsageLimitError when over."""
     _charge("llm", LLM_DAILY_CAP)
     return (_openai_complete if _llm_provider() == "openai"
             else _anthropic_complete)(prompt, max_tokens, lang)
@@ -2220,7 +2220,7 @@ def api_resume_suggestions_generate():
 
 
 def _find_job(url):
-    """按 URL 在扫描结果 / 聚合岗位里回捞岗位元信息（标题、公司、地点）。"""
+    """Look up job metadata (title, company, location) by URL in scan results / aggregator jobs."""
     with _lock:
         for n, r in state["results"].items():
             for j in r.get("matched", []):
@@ -2344,8 +2344,8 @@ def _cache_key(url, lang):
     return url if lang == "en" else f"{url}#lang={lang}"
 
 
-# ---------------------------------------------------------------- 隐藏岗位
-# 挖排除词建议时跳过的通用词：这些词出现在几乎所有标题里，排除它们没有意义
+# ---------------------------------------------------------------- Hidden jobs
+# Generic words skipped when mining exclude-word suggestions: they appear in almost every title, so excluding them is pointless
 _TITLE_STOP = {
     "engineer", "engineering", "developer", "scientist", "researcher", "analyst",
     "senior", "junior", "lead", "staff", "graduate", "intern", "internship",
@@ -2355,8 +2355,8 @@ _TITLE_STOP = {
 
 
 def exclude_suggestions():
-    """从被隐藏岗位的标题里挖高频词（出现≥3次、不在关键词/排除词里），
-    作为「一键加入排除词」候选——隐藏得越多，学得越准。"""
+    """Mine frequent words from hidden jobs' titles (appearing ≥3 times, not already keywords/exclude words)
+    as "one-click add to exclude words" candidates — the more you hide, the better it learns."""
     kws = set(state["keywords"]) | set(state["exclude_keywords"])
     cnt = Counter()
     for h in state["hidden"].values():
@@ -2383,7 +2383,7 @@ def api_hide():
     return jsonify({"ok": True, "hidden": n, "excl_suggest": exclude_suggestions()})
 
 
-# ---------------------------------------------------------------- 投递清单
+# ---------------------------------------------------------------- Application tracker
 TRACK_STATUSES = ("saved", "applied", "interview", "offer", "rejected")
 
 
@@ -2400,7 +2400,7 @@ def api_track():
         elif status in TRACK_STATUSES:
             ent = state["tracker"].get(url) or {"ts": date.today().isoformat()}
             ent["status"] = status
-            # 存岗位快照：岗位下架后清单里仍能显示
+            # store a job snapshot so it still shows in the tracker after the listing is taken down
             for k in ("title", "company", "location"):
                 if data.get(k):
                     ent[k] = data[k]
@@ -2486,7 +2486,7 @@ def api_outreach():
     return jsonify({"draft": draft})
 
 
-# ---------------------------------------------------------------- 导入
+# ---------------------------------------------------------------- Import
 COMPANY_HEADER_HINTS = ["company", "organisation", "organization", "employer",
                         "sponsor", "name", "公司", "雇主", "企业"]
 
@@ -2530,11 +2530,11 @@ def add_companies(names, tag, towns=None):
     return added
 
 
-REGISTER_ROUTE = "Skilled Worker"   # 官方名单里只要这条签证路线
+REGISTER_ROUTE = "Skilled Worker"   # only this visa route is wanted from the official register
 
 
 def _read_table(f):
-    """上传的 xlsx/csv 统一读成 (表头, 数据行)，两种格式后面走同一套识别。"""
+    """Read an uploaded xlsx/csv uniformly as (header, data rows), so both formats share the same detection."""
     fname = (f.filename or "").lower()
     if fname.endswith((".xlsx", ".xlsm")):
         import openpyxl
@@ -2554,14 +2554,14 @@ def _read_table(f):
 
 
 def _extract_companies(header, rows):
-    """(names, towns, tag)。自动分辨「官方赞助商名单」和「普通公司清单」。
+    """(names, towns, tag). Auto-distinguishes the "official sponsor register" from a "plain company list".
 
-    官方名单（gov.uk 那份 CSV）有 Organisation Name + Route 两列：只取 Skilled Worker
-    这条路线，并带上 Town/City，打 register 标签。其它文件按普通清单处理，打 curated。
+    The official register (the gov.uk CSV) has Organisation Name + Route columns: only take the Skilled Worker
+    route, include Town/City, and tag register. Other files are treated as plain lists and tagged curated.
     """
     idx = {str(h).strip().lower(): i for i, h in enumerate(header) if str(h).strip()}
     ni, ri = idx.get("organisation name"), idx.get("route")
-    if ni is not None and ri is not None:          # 官方赞助商名单
+    if ni is not None and ri is not None:          # official sponsor register
         ti = idx.get("town/city")
         names, towns, seen = [], [], set()
         for r in rows:
@@ -2574,10 +2574,10 @@ def _extract_companies(header, rows):
             names.append(n)
             towns.append(str(r[ti]).strip() if ti is not None and len(r) > ti else "")
         return names, towns, "register"
-    col = _pick_company_col(header)                 # 普通清单
+    col = _pick_company_col(header)                 # plain list
     if col is not None:
         names = [str(r[col]).strip() for r in rows if len(r) > col and str(r[col]).strip()]
-    else:                                            # 没表头：整列都当公司名
+    else:                                            # no header: treat the whole column as company names
         names = [str(r[0]).strip() for r in [header] + rows if r and str(r[0]).strip()]
     return [n for n in names if not n.startswith("=")], None, "curated"
 
@@ -2615,7 +2615,7 @@ def api_companies():
     return jsonify({"added": added, "total": len(state["companies"])})
 
 
-# ---------------------------------------------------------------- 路由
+# ---------------------------------------------------------------- Routes
 @app.route("/healthz")
 def healthz():
     return "ok", 200
@@ -2640,7 +2640,7 @@ def api_state():
             rr["links"] = build_links(n)
             rr["curated"] = n in curated
             res_out[n] = rr
-        # 精选公司即使没探测到招聘页也要显示
+        # curated companies are shown even if no job board was detected
         for n in curated:
             if n not in res_out:
                 st = "no_board" if ats_cache.get(n) in _NO_ATS else "pending"
@@ -2650,8 +2650,8 @@ def api_state():
         excl = state.get("exclude_keywords") or []
         excl_re = (re.compile(r"\b(" + "|".join(re.escape(k) for k in excl) + r")\b")
                    if excl else None)
-        # 目标/可接受岗位：内置 AI 默认值曾被前端回填后又存了回来——凡是与
-        # 默认完全相同的，一律当"没设"，否则会把工具永久锁死在 AI 画像。
+        # Target/acceptable titles: the built-in AI defaults used to be back-filled by the front end and saved back — anything
+        # identical to the defaults counts as "not set", otherwise the tool would be locked into the AI profile forever.
         user_tgt = state.get("target_titles") or None
         if user_tgt == DEFAULT_TARGET_TITLES:
             user_tgt = None
@@ -2659,11 +2659,11 @@ def api_state():
         if user_acc == DEFAULT_ACCEPTABLE_TITLES:
             user_acc = None
         kws = [k.lower() for k in (state.get("keywords") or [])]
-        # 只要用户填了目标岗位、或把关键词从内置 AI 默认改成别的行业（含清空
-        # 关键词 = 看全部），就切到 custom 画像：方向跟随用户的词，不套 AI 黑名单。
+        # As soon as the user sets target titles, or changes keywords from the built-in AI defaults to another industry (incl. clearing
+        # keywords = see everything), switch to the custom profile: direction follows the user's words, no AI blocklist.
         default_kws = [k.lower() for k in DEFAULT_KEYWORDS]
         custom_prof = bool(user_tgt) or bool(user_acc) or (kws != default_kws)
-        show_hidden = request.args.get("hidden") == "1"  # 已隐藏视图：只看被隐藏的
+        show_hidden = request.args.get("hidden") == "1"  # hidden view: show only hidden jobs
 
         feed = []
         for n, r in results.items():
@@ -2673,7 +2673,7 @@ def api_state():
                     continue
                 if excl_re and excl_re.search((j.get("title") or "").lower()):
                     continue
-                # 旧数据可能缺 region/level，即时补算
+                # old data may lack region/level; compute on the fly
                 if "region" not in j:
                     j["region"], j["country"] = classify_region(j.get("location"))
                 if "level" not in j:
@@ -2708,7 +2708,7 @@ def api_state():
                     "nice_miss": ms.get("nice_miss", []) if ms else [],
                     "flags": ms.get("flags", []) if ms else [],
                 })
-        # 并入聚合平台(Adzuna/Reed)岗位
+        # merge in aggregator (Adzuna/Reed) jobs
         for u, j in state["agg_jobs"].items():
             if (u in state["hidden"]) != show_hidden:
                 continue
@@ -2748,9 +2748,9 @@ def api_state():
                 "nice_miss": ms.get("nice_miss", []) if ms else [],
                 "flags": ms.get("flags", []) if ms else [],
             })
-        # 按前端请求的排序方式排好再截断，避免"高分老岗位"被时间序截断挡在 400 名外
+        # sort as the front end requested before truncating, so "high-score older jobs" aren't cut beyond the top 400 by time order
         sort = request.args.get("sort")
-        if sort == "rank":   # 推荐优先：先按 tier 分桶优先级，桶内按综合分降序
+        if sort == "rank":   # recommended first: bucket by tier priority, then combined score descending within each bucket
             feed.sort(key=lambda x: (TIER_ORDER.get(x["tier"], 9), -(x.get("rank") or 0),
                                      x["first_seen"] or ""))
         elif sort == "score":
@@ -2788,8 +2788,8 @@ def api_state():
         if scan["running"] and scan["done"]:
             rate = scan["done"] / max(time.time() - scan["started_ts"], 1)
             scan["eta_min"] = round((scan["total"] - scan["done"]) / max(rate, 0.01) / 60)
-            scan["rate"] = round(rate, 1)   # 家/秒——调 WORKABLE_CONC 时看它有没有变快
-            scan["rl"] = _recent_rl()       # 最近 2 分钟被限流(429/503)次数——调参的刹车灯
+            scan["rate"] = round(rate, 1)   # companies/sec — watch it when tuning WORKABLE_CONC to see if it got faster
+            scan["rl"] = _recent_rl()       # rate-limit (429/503) count over the last 2 minutes — the brake light for tuning
         try:
             limit = max(50, min(int(request.args.get("limit", 400)), 5000))
         except ValueError:
@@ -2819,7 +2819,7 @@ def api_state():
 
 
 def _auth_info():
-    """给前端：当前登录名、是否多用户、以及当日剩余配额（用于显示退出/额度）。"""
+    """For the front end: current login name, whether multi-user, and today's remaining quota (for logout/quota display)."""
     uid = _uid()
     info = {"multiuser": MULTIUSER, "user": (uid if MULTIUSER else None)}
     if MULTIUSER and not (OWNER and uid == OWNER):
@@ -2834,13 +2834,13 @@ def _auth_info():
 def api_settings():
     data = request.get_json(force=True)
     with _lock:
-        if "keywords" in data:  # 传空列表 = 看全部（不做行业过滤）
+        if "keywords" in data:  # empty list = see everything (no industry filter)
             state["keywords"] = [
                 k.strip().lower() for k in data["keywords"] if k.strip()]
-        if "exclude_keywords" in data:  # 传空列表 = 清空排除词
+        if "exclude_keywords" in data:  # empty list = clear exclude words
             state["exclude_keywords"] = [
                 k.strip().lower() for k in data["exclude_keywords"] if k.strip()]
-        if "target_titles" in data:      # 传空列表 = 恢复默认目标标题
+        if "target_titles" in data:      # empty list = restore default target titles
             state["target_titles"] = [
                 k.strip().lower() for k in data["target_titles"] if k.strip()]
         if "acceptable_titles" in data:
@@ -2885,9 +2885,9 @@ def api_scan_stop():
 
 @app.route("/api/slug_override", methods=["POST"])
 def api_slug_override():
-    """手动修正某公司的 ATS 定位（slug 猜错、或 Workday 这类必须手配的）。
-    body: {name, ats, slug}  或  {name, ats:"Workday", host, site}。
-    slug/host 都传空 → 删除该 override。
+    """Manually fix a company's ATS location (slug guessed wrong, or ones like Workday that must be configured by hand).
+    body: {name, ats, slug}  or  {name, ats:"Workday", host, site}.
+    slug/host both empty → delete that override.
     Owner-only in multi-user mode: overrides and the probe cache are shared."""
     denied = _admin_only()
     if denied:
@@ -2903,7 +2903,7 @@ def api_slug_override():
     site = (data.get("site") or "").strip()
     if not slug and not (host and site):
         slug_overrides.pop(key, None)
-        _ats_pop(name)                     # 清掉旧缓存，下次重新探测
+        _ats_pop(name)                     # clear the old cache so it's re-probed next time
     else:
         if ats not in OVERRIDE_ATS:
             return jsonify({"error": f"ats must be one of {sorted(OVERRIDE_ATS)}"}), 400
@@ -2915,7 +2915,7 @@ def api_slug_override():
             if not slug:
                 return jsonify({"error": f"{ats} needs a slug"}), 400
             slug_overrides[key] = {"ats": ats, "slug": slug}
-        _ats_pop(name)                     # 让下次扫描按 override 走
+        _ats_pop(name)                     # make the next scan use the override
     save_slug_overrides()
     save_ats_cache()
     return jsonify({"ok": True, "overrides": len(slug_overrides)})
@@ -2923,7 +2923,7 @@ def api_slug_override():
 
 @app.route("/api/aggregators", methods=["POST"])
 def api_aggregators():
-    """触发 Adzuna/Reed 聚合搜索，按用户关键词横扫全英国岗位。"""
+    """Trigger Adzuna/Reed aggregator search, sweeping UK-wide jobs by the user's keywords."""
     if not _has_agg_keys():
         return jsonify({"error": "No job-board API keys configured (Adzuna / Reed / Jooble / JSearch; see data/api_keys.json)"}), 400
     if state["agg"]["running"]:
@@ -2935,7 +2935,7 @@ def api_aggregators():
 
 @app.route("/api/social", methods=["POST"])
 def api_social():
-    """抓 Hacker News 'Who is hiring' 招聘帖，按关键词过滤后并入岗位流。无需 API key。"""
+    """Fetch Hacker News 'Who is hiring' posts, filter by keywords and merge into the job stream. No API key needed."""
     if state["social"]["running"]:
         return jsonify({"error": "Hacker News fetch is already running"}), 409
     _spawn(run_social)
@@ -2944,7 +2944,7 @@ def api_social():
 
 @app.route("/api/company_size", methods=["POST"])
 def api_company_size():
-    """用大模型给有岗位的公司批量估员工规模，结果缓存。"""
+    """Use an LLM to batch-estimate employee size for companies with jobs; results are cached."""
     if not _llm_ready():
         return jsonify({"error": LLM_MISSING_MSG}), 400
     if state["size"]["running"]:
@@ -2958,8 +2958,8 @@ def api_company_size():
 
 @app.route("/api/clear", methods=["POST"])
 def api_clear():
-    # 多租户：只清「我」的扫描数据；公司总目录是共享的，不在这里动
-    # （否则一个人清空会抹掉所有人共享的 12 万公司目录）。
+    # Multi-tenant: only clear "my" scan data; the company master directory is shared, not touched here
+    # (otherwise one person clearing would wipe the 120k-company directory everyone shares).
     with _lock:
         state["results"] = {}
         state["jobs_seen"] = {}
@@ -3061,23 +3061,23 @@ def api_export():
 
 
 if __name__ == "__main__":
-    load_users()  # 载入多账号表（data/users.json + 兼容老环境变量）
+    load_users()  # load the multi-account table (data/users.json + legacy env var compat)
     load_all()
-    seed_builtin_companies()  # 预置大厂/AI 雇主（curated），首次启动即可扫到
+    seed_builtin_companies()  # preset big-name/AI employers (curated), scannable right from first launch
     if state["companies"] and not os.path.exists(COMPANIES_FILE):
-        save_companies()  # 从旧格式迁移时立即落盘，防止丢名单
+        save_companies()  # save immediately when migrating from the old format, so the list isn't lost
     threading.Thread(target=auto_loop, daemon=True).start()
     port = int(os.environ.get("PORT", "5050"))
-    # 默认只绑本机（安全）；容器/服务器里设 HOST=0.0.0.0 才能对外访问。
+    # Bind to localhost only by default (safe); set HOST=0.0.0.0 in a container/server for external access.
     host = os.environ.get("HOST", "127.0.0.1")
     print(f"\n  AI Job Scout running:  http://127.0.0.1:{port}")
     print("  This window is the website's server — keep it open while you use the tool (you can minimize it).\n")
-    if FROZEN:  # exe 双击启动时自动打开浏览器
+    if FROZEN:  # auto-open the browser when the exe is double-clicked
         threading.Timer(1.5, lambda: webbrowser.open(f"http://127.0.0.1:{port}")).start()
     try:
         app.run(host=host, port=port, debug=False, threaded=True)
     except OSError:
-        # 端口被占用：多半是工具已经开着了，直接打开页面即可
+        # port already in use: most likely the tool is already running, so just open the page
         print(f"  Port {port} is already in use - the tool is probably already "
               "running in another window. Opening it in your browser.")
         webbrowser.open(f"http://127.0.0.1:{port}")

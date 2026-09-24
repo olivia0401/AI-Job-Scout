@@ -31,7 +31,7 @@
   .wrap { max-width: 900px; margin: 0 auto; padding: 44px 24px 90px; }
   .num { font-variant-numeric: tabular-nums; }
 
-  /* ---------- 头部 ---------- */
+  /* ---------- Header ---------- */
   .top { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 10px; }
   h1 { font-size: 26px; margin: 0; font-weight: 700; letter-spacing: -.45px; }
   .top .actions { margin-left: auto; display: flex; gap: 10px; align-items: center; }
@@ -53,7 +53,7 @@
   button.mini { padding: 5px 14px; font-size: 12.5px; border-radius: 9px; }
   button:disabled { opacity: .45; cursor: not-allowed; transform: none !important; }
 
-  /* ---------- 扫描/匹配进度 ---------- */
+  /* ---------- Scan / match progress ---------- */
   .scanbar { background: var(--accent-soft); border: 1px solid #e0e4fd; border-radius: 14px;
              padding: 14px 18px; margin-bottom: 18px; display: none;
              position: sticky; top: 10px; z-index: 50; box-shadow: 0 6px 20px rgba(60,70,160,.14); }
@@ -63,7 +63,7 @@
   .scanbar .line button { padding: 4px 14px; font-size: 12.5px; background: #fff; color: var(--accent);
                           border: 1px solid #e0e4fd; box-shadow: none; }
 
-  /* ---------- 简历卡片 ---------- */
+  /* ---------- Resume card ---------- */
   .resume { background: var(--card); border: 1px solid var(--border); border-radius: 14px;
             padding: 14px 20px; margin-bottom: 14px; box-shadow: var(--shadow);
             display: flex; gap: 12px; align-items: center; flex-wrap: wrap; font-size: 13.5px; }
@@ -74,7 +74,7 @@
   .resume.need { background: var(--accent-soft); border-color: var(--accent-line); }
   #resumeFile { display: none; }
 
-  /* ---------- 筛选区 ---------- */
+  /* ---------- Filters ---------- */
   .filterbox { background: var(--card); border: 1px solid var(--border); border-radius: 14px;
                padding: 16px 20px; margin-bottom: 20px; box-shadow: var(--shadow); }
   .frow { display: flex; gap: 7px; flex-wrap: wrap; align-items: center; margin: 7px 0; }
@@ -97,7 +97,7 @@
   .vtabs .chip { border-radius: 9px; background: transparent; padding: 4px 16px; }
   .vtabs .chip.on { background: #fff; color: var(--accent); border-color: transparent; box-shadow: var(--shadow); }
 
-  /* ---------- 使用引导（页面底部，默认收起） ---------- */
+  /* ---------- Usage guide (page bottom, collapsed by default) ---------- */
   details.howto { margin-top: 28px; }
   details.howto summary { cursor: pointer; list-style: none; color: var(--faint); font-size: 13px;
                           text-align: center; transition: color .15s; }
@@ -109,7 +109,7 @@
                    background: var(--accent); color: #fff; border-radius: 50%; font-size: 12px; margin-right: 8px; }
   .hbody .ok { color: var(--green); font-weight: 600; margin-left: 6px; }
 
-  /* ---------- 大标签页（页面主导航） ---------- */
+  /* ---------- Main tabs (primary navigation) ---------- */
   .bigtabs { display: flex; gap: 4px; background: var(--card); border: 1px solid var(--border);
              border-radius: 14px; padding: 5px; margin-bottom: 14px; box-shadow: var(--shadow); }
   .btab { flex: 1; text-align: center; padding: 10px 8px; border-radius: 10px; cursor: pointer;
@@ -121,7 +121,7 @@
   .btab:not(.on) b { background: var(--soft); }
   .btab b:empty { display: none; }
 
-  /* ---------- ⋯ 菜单 ---------- */
+  /* ---------- ⋯ menu ---------- */
   details.menu { position: relative; }
   details.menu summary { cursor: pointer; list-style: none; background: var(--card);
                          border: 1px solid var(--border); border-radius: 11px; padding: 10px 16px;
@@ -139,13 +139,13 @@
   .mitems .msep { border-top: 1px solid var(--soft); margin: 5px 8px; }
   .mitems small { color: var(--muted); display: block; font-size: 11.5px; margin-top: 1px; }
 
-  /* ---------- 筛选行的下拉框 ---------- */
+  /* ---------- Filter-row dropdowns ---------- */
   .fsel { background: var(--soft); border: 1px solid transparent; color: var(--text2); cursor: pointer;
           border-radius: 18px; padding: 6px 12px; font-size: 13px; outline: none; font-family: inherit; }
   .fsel:hover { background: #e9ecf3; }
   .fsel:focus { background: #fff; border-color: var(--accent-line); }
 
-  /* ---------- 空状态 ---------- */
+  /* ---------- Empty state ---------- */
   .empty { background: var(--card); border: 1px dashed var(--border); border-radius: 16px;
            padding: 48px 24px; text-align: center; }
   .empty .big { font-size: 40px; margin-bottom: 10px; }
@@ -155,7 +155,7 @@
   .emptyfilters .ftag { background: var(--soft); border: 1px solid var(--border);
                         border-radius: 999px; padding: 3px 12px; color: var(--text); }
 
-  /* ---------- 岗位卡片 ---------- */
+  /* ---------- Job card ---------- */
   .jobrow { background: var(--card); border: 1px solid var(--border); border-radius: 14px;
             padding: 14px 18px; margin-bottom: 10px; box-shadow: var(--shadow);
             transition: all .15s; cursor: pointer; display: flex; gap: 14px; align-items: flex-start; }
@@ -166,7 +166,7 @@
               font-weight: 550; }
   .jobrow:hover .expander { text-decoration: underline; }
 
-  /* 匹配度色块：一眼可见 */
+  /* Match-score swatch: visible at a glance */
   .scorebox { width: 60px; flex-shrink: 0; text-align: center; border-radius: 11px;
               padding: 9px 0 7px; font-weight: 800; font-size: 20px; line-height: 1.05;
               letter-spacing: -.5px; font-variant-numeric: tabular-nums; align-self: center; }
@@ -177,7 +177,7 @@
   .scorebox.lo { background: var(--soft); color: var(--muted); }
   .scorebox.none { background: var(--soft); color: var(--faint); font-size: 16px; font-weight: 600; }
 
-  /* 投递清单 */
+  /* Application tracker */
   .starbtn { background: none; border: none; box-shadow: none; padding: 2px 6px; cursor: pointer;
              font-size: 13px; color: var(--muted); border-radius: 8px; }
   .starbtn:hover { background: var(--gold-soft); color: var(--gold); transform: none; filter: none; }
@@ -217,7 +217,7 @@
   .badge.src { background: var(--soft); color: var(--text2); cursor: help; }
   .badge.hn { background: #fff0e6; color: #d2691e; border: 1px solid #ffd9bf; cursor: help; }
 
-  /* 简历提升建议 */
+  /* Resume improvement tips */
   .suggest { background: #fafbfd; border: 1px solid var(--soft); border-radius: 12px;
              padding: 14px 16px; margin: 10px 0 4px; font-size: 12.5px; line-height: 1.9; }
   .suggest .stitle { font-weight: 700; font-size: 13.5px; margin-bottom: 6px; }
@@ -230,7 +230,7 @@
   .advice p { margin: 6px 0; }
   .advice code { background: var(--soft); padding: 1px 5px; border-radius: 5px; font-size: 12px; }
 
-  /* 匹配详情 */
+  /* Match details */
   .matchbox { background: #fafbfd; border: 1px solid var(--soft); border-radius: 11px;
               padding: 12px 14px; margin-top: 10px; font-size: 12.5px; line-height: 2; }
   .matchbox .mlabel { color: var(--muted); margin-right: 6px; }
@@ -241,7 +241,7 @@
   .matchbox .mrow { margin: 2px 0; }
   .matchbox button { margin-top: 6px; }
 
-  /* ---------- 公司卡片 ---------- */
+  /* ---------- Company card ---------- */
   .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px;
           padding: 18px 20px; margin-bottom: 12px; box-shadow: var(--shadow); }
   .card.has_ai { border-left: 3px solid #35c489; }
@@ -267,7 +267,7 @@
 
   .hint { font-size: 13px; color: var(--muted); margin-top: 16px; line-height: 1.9; text-align: center; }
 
-  /* ---------- 中国大厂目录 ---------- */
+  /* ---------- China big-tech directory ---------- */
   .cnbox { background: var(--card); border: 1px solid var(--border); border-radius: 14px;
            padding: 18px 20px; margin-bottom: 12px; box-shadow: var(--shadow); }
   .cnbox h3 { margin: 0 0 4px; font-size: 15px; font-weight: 650; }
@@ -277,7 +277,7 @@
               border: 1px solid var(--border); color: var(--text2); background: #fff; transition: all .13s; }
   .cngrid a:hover { color: var(--red); border-color: #f2c9cf; background: var(--red-soft); }
 
-  /* ---------- 设置抽屉 ---------- */
+  /* ---------- Settings drawer ---------- */
   details.adv { margin-top: 28px; }
   details.adv summary { cursor: pointer; color: var(--faint); font-size: 13px; list-style: none;
                         text-align: center; transition: color .15s; }
@@ -292,7 +292,7 @@
   }
   .advbody input:focus, .advbody textarea:focus { background: #fff; border-color: var(--accent-line); }
   .advbody .note { font-size: 12.5px; color: var(--muted); line-height: 1.7; }
-  /* 表格视图 */
+  /* Table view */
   .tblwrap { overflow-x: auto; background: var(--card); border: 1px solid var(--border);
              border-radius: 14px; box-shadow: var(--shadow); }
   .jobtable { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -305,7 +305,7 @@
   .jobtable td a { color: var(--text); text-decoration: none; font-weight: 600; }
   .jobtable td a:hover { text-decoration: underline; }
   .jobtable .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
-  /* 首次使用向导 */
+  /* First-run wizard */
   .wizmask { position: fixed; inset: 0; background: rgba(15,18,28,.45); z-index: 90;
              display: flex; align-items: center; justify-content: center; padding: 20px; }
   .wizard { background: var(--card); border: 1px solid var(--border); border-radius: 18px;
@@ -319,7 +319,7 @@
     background: var(--soft); border: 1px solid var(--border); color: var(--text);
     border-radius: 9px; padding: 8px 13px; font-size: 13px; outline: none; flex: 1; }
   .wizard .wbtns { display: flex; gap: 10px; margin-top: 18px; justify-content: flex-end; }
-  /* 推荐优先：分层分区标题 */
+  /* Recommended-first: tier section headers */
   .tierhead { display: flex; align-items: baseline; gap: 8px; margin: 18px 4px 8px; flex-wrap: wrap; }
   .tierhead:first-child { margin-top: 4px; }
   .tierhead b { font-size: 14px; color: var(--text); }
@@ -334,7 +334,7 @@
   .th-weak { background: #9aa0ad; }
   .th-risk { background: #e5484d; }
   .mlabel { font-size: 11px; color: var(--faint); padding: 6px 10px 2px; }
-  /* 决策工作台：左导航 + 主区 */
+  /* Decision workspace: left nav + main area */
   .workbench { display: flex; gap: 18px; align-items: flex-start; }
   .sidenav { flex: 0 0 176px; position: sticky; top: 14px; display: flex; flex-direction: column; gap: 2px; }
   .sidenav .navitem { text-align: left; padding: 9px 12px; border-radius: 10px; cursor: pointer;
@@ -363,7 +363,7 @@
     .sidenav { flex-basis: auto; position: static; flex-direction: row; flex-wrap: wrap; }
     .sidenav .navitem { flex: 1 1 auto; }
   }
-  /* 右侧详情抽屉 */
+  /* Right-side detail drawer */
   .drawer-mask { position: fixed; inset: 0; background: rgba(15,18,28,.35); z-index: 80;
     opacity: 0; pointer-events: none; transition: opacity .18s; }
   .drawer-mask.open { opacity: 1; pointer-events: auto; }
@@ -382,7 +382,7 @@
   .drawer-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
   .drawer-body .matchbox { border: none; padding: 0; margin: 0; background: none; }
   @media (max-width: 520px) { .drawer { width: 100vw; } }
-  /* 投递看板 */
+  /* Application board */
   .kanban { display: flex; gap: 12px; align-items: flex-start; overflow-x: auto; padding-bottom: 6px; }
   .kcol { flex: 1 1 0; min-width: 200px; background: var(--soft); border: 1px solid var(--border);
     border-radius: 12px; padding: 8px; }
@@ -398,7 +398,7 @@
   .kc-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 7px; }
   .kc-foot select { width: 100%; }
   .kempty { color: var(--faint); font-size: 12px; text-align: center; padding: 10px 0; }
-  /* 工具箱 / 设置面板 */
+  /* Toolbox / settings panel */
   .toolsec { margin-bottom: 20px; }
   .toolsec h3 { font-size: 13px; margin: 0 0 8px 2px; color: var(--muted); font-weight: 600;
                 letter-spacing: .3px; text-transform: none; }
@@ -528,7 +528,7 @@
     </div>
   </details>
 
-  <!-- ========== 求职目标设置（左侧导航「求职目标设置」） ========== -->
+  <!-- ========== Job-search goals (left nav "Job-search goals") ========== -->
   <div id="goalPanel" class="viewpanel" style="display:none">
     <div class="today-summary">
       <h2 data-i18n="goal_title">求职目标设置</h2>
@@ -580,7 +580,7 @@
     </div>
   </div><!-- /goalPanel -->
 
-  <!-- ========== 工具箱（左侧导航「工具箱」） ========== -->
+  <!-- ========== Toolbox (left nav "Toolbox") ========== -->
   <div id="toolsPanel" class="viewpanel" style="display:none">
     <div class="today-summary">
       <h2 data-i18n="tools_title">工具箱</h2>
@@ -684,14 +684,14 @@
 </div>
 
 <script>
-// ============ 国际化 i18n（中/英，用户可见文案；代码注释保留中文） ============
-// 词条字典：zh 值 = 原中文；en 值 = 英文。t(key,vars) 取当前语言，缺失回落中文再回落 key。
+// ============ i18n (zh/en, user-facing copy) ============
+// Dictionary: zh = original Chinese; en = English. t(key,vars) uses current language, falls back to zh, then key.
 const I18N = {
   page_title:        { zh: 'AI Job Scout — 工签雇主 AI 岗位', en: 'AI Job Scout — Visa-sponsor AI jobs' },
   tagline:           { zh: '英国工签雇主 · 岗位雷达', en: 'UK visa-sponsor employers · job radar' },
   btn_scan_new:      { zh: '扫描新岗位', en: 'Scan new jobs' },
   btn_stop:          { zh: '停止', en: 'Stop' },
-  // 筛选 / 排序
+  // Filter / sort
   sort_rank:         { zh: '推荐优先', en: 'Recommended' },
   sort_rank_tip:     { zh: '综合推荐：方向对口 + 匹配分 + 签证确定性 + 置信度 + 新鲜度，按分层分区显示', en: 'Overall pick: role fit + match score + visa certainty + confidence + freshness, grouped by tier' },
   sort_date:         { zh: '最新', en: 'Newest' },
@@ -753,13 +753,13 @@ const I18N = {
   chip_ontarget:     { zh: '只看对口', en: 'On-target only' },
   chip_ontarget_tip: { zh: '只看岗位方向对口的（目标/可接受），隐藏方向不对的（IT Support / Sales / QA 等——它们可能技能重合高，但不是你要的岗位）', en: 'Only on-target roles (target/acceptable); hide off-target ones (IT Support / Sales / QA — high skill overlap but not the role you want)' },
   search_ph:         { zh: '搜索岗位 / 公司…', en: 'Search jobs / companies…' },
-  // 使用说明
+  // Usage guide
   howto_summary:     { zh: '使用说明', en: 'How to use' },
   howto_1:           { zh: '<b>扫描岗位</b>：点右上「扫描新岗位」抓取最新岗位', en: '<b>Scan jobs</b>: click "Scan new jobs" (top-right) to fetch the latest' },
   howto_1_note:      { zh: '（第一次用，先去左侧「工具箱」点「首次建立岗位库」跑一遍，约几小时；之后日常只需扫描）', en: '(First time: open "Toolbox" on the left and run "Build the job library" once, ~a few hours; after that just scan)' },
   howto_2:           { zh: '<b>上传简历</b>：自动给每个岗位算技能匹配分，并按「方向对口 + 签证 + 匹配」综合排序', en: '<b>Upload your resume</b>: auto-scores every job and ranks by role fit + visa + match' },
   howto_3:           { zh: '<b>看今日推荐</b>：点岗位在右侧详情里看推荐理由、缺哪些技能，生成简历建议 / networking 草稿；想投的点收藏，去「投递清单」看板跟踪', en: "<b>Check Today's picks</b>: click a job to see why it's recommended and missing skills, generate resume tips / networking drafts; save ones you like and track them on the Applications board" },
-  // 求职目标设置
+  // Job-search goals
   goal_title:        { zh: '求职目标设置', en: 'Job-search settings' },
   goal_sub:          { zh: '告诉工具你要找什么、你的背景——它据此给岗位打分、排序、排雷。改完点「保存设置」即时生效。', en: 'Tell the tool what you want and your background — it scores, ranks and flags jobs accordingly. Click "Save settings" to apply.' },
   goal_kw:           { zh: '岗位关键词：', en: 'Job keywords:' },
@@ -783,7 +783,7 @@ const I18N = {
   goal_paste_ph:     { zh: '也可以直接把简历全文粘贴到这里（PDF 上传识别不了时用）', en: 'Or paste your full resume text here (useful when PDF upload fails to parse)' },
   goal_paste_save:   { zh: '保存简历文本', en: 'Save resume text' },
   goal_foot:         { zh: '改完记得点「保存设置」。想扫描岗位、导出等操作，去左侧「工具箱」。', en: 'Remember to click "Save settings". For scanning, export, etc., use "Toolbox" on the left.' },
-  // 工具箱
+  // Toolbox
   tools_title:       { zh: '工具箱', en: 'Toolbox' },
   tools_sub:         { zh: '扫描岗位、补充来源、导出，都在这。日常只需第一张卡片「扫描新岗位」。', en: 'Scan, add sources and export — all here. Day-to-day you only need the first card, "Scan new jobs".' },
   tools_lib_loading: { zh: '岗位库状态加载中…', en: 'Loading job-library status…' },
@@ -820,7 +820,7 @@ const I18N = {
   tool_export_t:     { zh: '导出 Excel', en: 'Export to Excel' },
   tool_export_d:     { zh: '把当前岗位库导出成 Excel 表格，方便离线整理或分享。', en: 'Export the current job library to an Excel spreadsheet for offline review or sharing.' },
   tool_download:     { zh: '下载', en: 'Download' },
-  // 抽屉 / 向导
+  // Drawer / wizard
   drawer_title:      { zh: '岗位详情', en: 'Job details' },
   drawer_close:      { zh: '关闭', en: 'Close' },
   wiz_title:         { zh: '第一次用？三步就能开始', en: 'First time? Three steps to start' },
@@ -834,7 +834,7 @@ const I18N = {
   wiz_note2:         { zh: '下一步：点「开始全量清查」逐家扫描工签雇主（第一次要跑几个小时，可最小化窗口；之后日常只需点顶部）。扫描时记得<b>上传简历</b>，岗位会自动算 0–100 匹配分。', en: 'Next: click "Save and build the library" to probe every sponsor employer (first run takes a few hours — you can minimise the window; after that just click at the top). Remember to <b>upload your resume</b> so jobs get a 0–100 match score.' },
   wiz_skip:          { zh: '先随便看看', en: 'Just look around' },
   wiz_start:         { zh: '保存并开始全量清查', en: 'Save and build the library' },
-  // 左侧导航
+  // Left nav
   nav_today:         { zh: '今日推荐', en: "Today's picks" },
   nav_feed:          { zh: '全部岗位', en: 'All jobs' },
   nav_company:       { zh: '公司', en: 'Companies' },
@@ -842,7 +842,7 @@ const I18N = {
   nav_gaps:          { zh: '简历缺口', en: 'Resume gaps' },
   nav_goal:          { zh: '求职目标设置', en: 'Settings' },
   nav_tools:         { zh: '工具箱', en: 'Toolbox' },
-  // 简历卡片
+  // Resume card
   resume_need_b:     { zh: '第一步：上传你的简历', en: 'Step 1: upload your resume' },
   resume_need_rest:  { zh: '——每个岗位自动算出匹配度，并解锁定制简历建议', en: ' — every job gets a match score, and tailored resume tips unlock' },
   resume_need_small: { zh: '支持 PDF / Word / TXT · 只保存在你自己电脑上', en: 'PDF / Word / TXT · stored only on your own computer' },
@@ -852,7 +852,7 @@ const I18N = {
   resume_reupload:   { zh: '重新上传', en: 'Re-upload' },
   resume_all_advice: { zh: '全平台简历建议', en: 'Resume tips (all jobs)' },
   resume_calc:       { zh: '计算匹配度', en: 'Compute matches' },
-  // 全平台简历建议
+  // Cross-platform resume tips
   sugg_loading:      { zh: '正在汇总全平台缺口…', en: 'Summarising gaps across all jobs…' },
   sugg_nodata:       { zh: '还没有匹配数据。先点「计算匹配度」，算完再来。', en: 'No match data yet. Click "Compute matches" first, then come back.' },
   sugg_gap_tip:      { zh: '缺失于 {jobs} 个岗位', en: 'missing in {jobs} jobs' },
@@ -865,7 +865,7 @@ const I18N = {
   sugg_gaps_label:   { zh: '最该补的技能（按影响排序，=中等匹配岗位数，补上最能提分）：', en: 'Skills to add first (by impact, = medium-match jobs, biggest score gain):' },
   sugg_free_label:   { zh: 'JD 高频、可能词表外（启发式，供参考）：', en: 'Frequent in JDs, possibly off-list (heuristic, for reference):' },
   sugg_generating:   { zh: 'AI 正在生成建议（约需十几秒）…', en: 'AI is generating tips (about 10–20 s)…' },
-  // 扫描状态
+  // Scan status
   scan_mode_known:   { zh: '刷新最新岗位', en: 'Refresh latest jobs' },
   scan_mode_pending: { zh: '全量清查', en: 'Full sweep' },
   scan_mode_curated: { zh: '精选扫描', en: 'Curated scan' },
@@ -879,7 +879,7 @@ const I18N = {
   scan_txt_paused:   { zh: '{mode} · 触发对方限流，冷却中，约 {min} 分钟后自动继续（已扫 {done}/{total}，进度已缓存）', en: '{mode} · Hit rate limit, cooling down, auto-resumes in ~{min} min (scanned {done}/{total}, progress cached)' },
   scan_txt_running:  { zh: '{mode}中 {done}/{total} · 新发现岗位 {new} · {eta}（进度实时缓存，停止不丢）', en: '{mode} {done}/{total} · {new} new jobs · {eta} (progress cached live, safe to stop)' },
   scan_txt_starting: { zh: '正在启动{mode}…（在后台扫描英国工签雇主，新岗位会陆续出现，可继续浏览）', en: 'Starting {mode}… (scanning UK sponsor employers in the background; new jobs appear gradually, keep browsing)' },
-  // 缩小范围筛选标签
+  // Narrowing-filter labels
   tl_llm:            { zh: 'LLM 相关', en: 'LLM-related' },
   tl_new:            { zh: '新上架', en: 'New' },
   tl_long:           { zh: '上架较久', en: 'Long-listed' },
@@ -896,7 +896,7 @@ const I18N = {
   fl_csize:          { zh: '规模：{v}', en: 'Size: {v}' },
   fl_years:          { zh: '经验年限筛选', en: 'Years filter' },
   fl_search:         { zh: '搜索：{q}', en: 'Search: {q}' },
-  // 岗位卡片 / 徽章
+  // Job card / badges
   score_pending:     { zh: '待算', en: 'Pending' },
   score_lbl_sim:     { zh: '技能相似', en: 'Skill sim.' },
   score_lbl_match:   { zh: '技能匹配', en: 'Skill match' },
@@ -940,7 +940,7 @@ const I18N = {
   conf_mid_tip:      { zh: 'JD 较短，分数仅供参考', en: 'Short JD; score is indicative only' },
   conf_low:          { zh: '低置信', en: 'Low conf.' },
   conf_low_tip:      { zh: '没抓到 JD，仅按标题估分', en: 'No JD fetched; scored from title only' },
-  // 推荐分层
+  // Recommendation tiers
   tier_strong_l:     { zh: '推荐投', en: 'Apply' },
   tier_strong_t:     { zh: '方向对口 · 匹配高 · 无签证/许可风险', en: 'On-target · high match · no visa/clearance risk' },
   tier_maybe_l:      { zh: '谨慎投', en: 'Maybe' },
@@ -951,7 +951,7 @@ const I18N = {
   tier_weak_t:       { zh: '技能重合低，或岗位方向不对口', en: 'Low skill overlap, or off-target role' },
   tier_risk_l:       { zh: '有风险', en: 'Risky' },
   tier_risk_t:       { zh: 'JD 明确不担保，或要求安全许可/英国国籍', en: 'JD refuses sponsorship, or requires clearance/UK nationality' },
-  // 为什么推荐
+  // Why recommended
   why_title_hit:     { zh: '标题命中 <b>{kw}</b>', en: 'Title matches <b>{kw}</b>' },
   why_via_jd:        { zh: '标题没写关键词，是 <b>JD 正文</b>多次提及才召回的', en: 'No keyword in title; recalled from repeated mentions in the <b>JD body</b>' },
   why_via_agg:       { zh: '来自聚合平台关键词搜索', en: 'From an aggregator keyword search' },
@@ -959,7 +959,7 @@ const I18N = {
   why_etc:           { zh: ' 等', en: ' etc.' },
   why_risk:          { zh: '风险：{risks}', en: 'Risk: {risks}' },
   why_label:         { zh: '为什么推荐：', en: 'Why recommended:' },
-  // 匹配详情
+  // Match details
   match_no_resume:   { zh: '还没上传简历。上传后展开岗位就能看到：你和这个岗位的<b>匹配细节</b>、缺哪些技能，并能一键生成<b>专属这个岗位</b>的简历修改建议。', en: "No resume yet. Upload one and expand a job to see your <b>match details</b>, missing skills, and generate <b>job-specific</b> resume tips in one click." },
   match_upload:      { zh: '上传简历', en: 'Upload resume' },
   match_not_scored:  { zh: '这个岗位还没算匹配度（新抓到的岗位需要重算一次）。', en: 'This job is not scored yet (newly fetched jobs need one recompute).' },
@@ -980,7 +980,7 @@ const I18N = {
   outreach_copy_all: { zh: '复制全部', en: 'Copy all' },
   net_li_people:     { zh: 'LinkedIn 找招聘官', en: 'Find recruiters on LinkedIn' },
   net_hunter:        { zh: '查邮箱', en: 'Find emails' },
-  // 找人脉 / 公司卡片
+  // Networking / company card
   co_li_jobs:        { zh: 'LinkedIn 搜岗位', en: 'Search jobs on LinkedIn' },
   co_careers:        { zh: '官方 Careers', en: 'Official careers' },
   co_board:          { zh: '招聘页', en: 'Careers page' },
@@ -991,12 +991,12 @@ const I18N = {
   co_shown:          { zh: '已显示前 150 家 / 共 {n} 家', en: 'Showing first 150 / {n} companies' },
   co_none:           { zh: '没有符合筛选的公司。', en: 'No companies match the filters.' },
   co_badge_curated:  { zh: '精选', en: 'Curated' },
-  // 详情抽屉
+  // Detail drawer
   drawer_gone:       { zh: '岗位信息已不在当前列表。', en: 'This job is no longer in the current list.' },
   dir_target:        { zh: '目标岗位', en: 'Target role' },
   dir_acceptable:    { zh: '可接受岗位', en: 'Acceptable role' },
   dir_off:           { zh: '方向存疑', en: 'Off-target?' },
-  // 投递清单
+  // Application tracker
   st_saved:          { zh: '待投', en: 'To apply' },
   st_applied:        { zh: '已投', en: 'Applied' },
   st_interview:      { zh: '面试中', en: 'Interviewing' },
@@ -1060,10 +1060,10 @@ My resume:
   prompt_flags:      { zh: '【注意事项】{flags}', en: '[Notes] {flags}' },
   prompt_copied:     { zh: '优化 Prompt 已复制！粘贴给 AI 助手（ChatGPT / Claude 等）即可。', en: 'Prompt copied! Paste it into an AI assistant (ChatGPT / Claude, etc.).' },
   prompt_copied2:    { zh: '优化 Prompt 已复制！', en: 'Prompt copied!' },
-  // 中国大厂目录
+  // China big-tech directory
   cn_title:          { zh: '中国大厂 AI 岗位直达', en: 'China big-tech AI jobs (direct)' },
   cn_note:           { zh: '国内大厂都用自研招聘系统，没有公开接口可自动抓取——以下是各家 AI/大模型岗位搜索页直达链接。它们的英国实体（TikTok 伦敦、华为英研所等）已在上方自动扫描范围内。', en: 'Chinese big-tech firms use in-house ATS with no public API to scrape — below are direct links to each one\'s AI/LLM job search page. Their UK entities (TikTok London, Huawei UK R&D, etc.) are already covered by the scan above.' },
-  // 新手引导 / 今日推荐
+  // Onboarding / today's picks
   onboard_title:     { zh: '开始使用 · 三步', en: 'Get started · 3 steps' },
   onboard_sub:       { zh: '帮你在英国找工签雇主里方向对口的岗位：去哪找、哪些先看、简历差在哪。', en: 'Helps you find on-target roles at UK sponsor employers: where to look, what to see first, and where your resume falls short.' },
   onboard_1:         { zh: '<b>建立岗位库</b>：首次点下面「首次建立岗位库」跑一遍（约 1–2 小时，摸出有招聘系统的工签雇主）；之后日常只需「扫描岗位」。', en: '<b>Build the library</b>: click "Build the job library" below once (~1–2 h, finds sponsor employers with an ATS); after that just "Scan jobs".' },
@@ -1078,7 +1078,7 @@ My resume:
   today_adjust:      { zh: '调整求职目标', en: 'Adjust job goals' },
   today_view_all:    { zh: '查看全部岗位', en: 'View all jobs' },
   today_view_tier:   { zh: '查看全部 {n} 个{label}', en: 'View all {n} {label}' },
-  // 空态 / 提示
+  // Empty states / hints
   empty_filtered_p:  { zh: '库里有 <b>{n}</b> 个岗位，但都被你当前的筛选挡住了。', en: 'The library has <b>{n}</b> jobs, but all are hidden by your current filters.' },
   empty_filtered_p2: { zh: '库里有 <b>{n}</b> 个岗位，但没有一个同时满足你当前的筛选条件。', en: 'The library has <b>{n}</b> jobs, but none match all your current filters.' },
   empty_cur_filters: { zh: '当前筛选：', en: 'Current filters:' },
@@ -1093,7 +1093,7 @@ My resume:
   feed_none_hint:    { zh: '没有符合当前筛选的岗位——试试放宽筛选，或点顶部 刷新最新岗位。', en: 'No jobs match the current filters — loosen them, or click at the top to refresh.' },
   feed_clear_n:      { zh: '清除筛选（{n}）· 共 {total} 个岗位', en: 'Clear filters ({n}) · {total} jobs total' },
   feed_load_more:    { zh: '加载更多（已取 {got} / 共 {total} 条）', en: 'Load more (loaded {got} / {total})' },
-  // 表格视图表头
+  // Table view headers
   th_match:          { zh: '匹配', en: 'Match' },
   th_job:            { zh: '岗位', en: 'Job' },
   th_company:        { zh: '公司', en: 'Company' },
@@ -1107,13 +1107,13 @@ My resume:
   tbl_lowconf:       { zh: '仅按标题估分', en: 'Scored from title only' },
   tbl_restore:       { zh: '恢复', en: 'Restore' },
   tbl_hide_tip:      { zh: '隐藏这个岗位', en: 'Hide this job' },
-  // 岗位行操作
+  // Job row actions
   row_restore:       { zh: '恢复', en: 'Restore' },
   row_restore_tip:   { zh: '从已隐藏中恢复', en: 'Restore from hidden' },
   row_hide:          { zh: '隐藏', en: 'Hide' },
   row_hide_tip:      { zh: '隐藏这个岗位（可在分层筛选「已隐藏」里找回）', en: 'Hide this job (find it again via the "Hidden" tier)' },
   row_detail:        { zh: '详情', en: 'Details' },
-  // alert / 交互
+  // alert / interactions
   alert_resume_parsed:{ zh: '简历已解析：识别到 {n} 个技能关键词，正在自动计算所有岗位的匹配度…', en: 'Resume parsed: {n} skill keywords found; auto-scoring all jobs…' },
   alert_text_short:  { zh: '内容太短', en: 'Text too short' },
   alert_resume_saved:{ zh: '简历已保存：识别到 {n} 个技能关键词，正在计算匹配度…', en: 'Resume saved: {n} skill keywords found; scoring matches…' },
@@ -1124,20 +1124,20 @@ My resume:
   alert_hn_fail:     { zh: '抓取 Hacker News 招聘帖失败：{e}\n（可稍后重试，通常是临时网络问题）', en: 'Failed to fetch Hacker News posts: {e}\n(try again later; usually a transient network issue)' },
   alert_hn_done:     { zh: '已从 Hacker News「Who is hiring」招聘帖抓取 {total} 条，按你的关键词并入 {found} 个岗位（带 HN 招聘帖 徽章）。\n去「全部岗位」在搜索框输入 HackerNews 即可只看这些。', en: 'Pulled {total} entries from the Hacker News "Who is hiring" thread and merged {found} into the feed (HN post badge).\nIn "All jobs", type HackerNews in the search box to see just these.' },
   social_fetching:   { zh: '抓取中…', en: 'Fetching…' },
-  // 按钮动态
+  // Dynamic button labels
   btn_searching:     { zh: '搜索中…', en: 'Searching…' },
   btn_agg_need_key:  { zh: '需先在 data/api_keys.json 配置 Adzuna/Reed 的免费 API key', en: 'Set the free Adzuna/Reed API keys in data/api_keys.json first' },
   btn_size_running:  { zh: '识别中… {done}/{total}', en: 'Estimating… {done}/{total}' },
   btn_size_need_key: { zh: '需先配置大模型 API key（data/api_keys.json 的 openai_api_key / anthropic_api_key）', en: 'Set an LLM API key first (openai_api_key / anthropic_api_key in data/api_keys.json)' },
   ok_done:           { zh: '已完成', en: 'Done' },
-  // 岗位库状态行
+  // Job DB status line
   lib_probed:        { zh: '已探测 {probed} 家，还剩 {pending} 家未探测', en: 'Probed {probed}, {pending} left to probe' },
   lib_no_ats:        { zh: ' · 探测无 ATS {n} 家', en: ' · {n} with no ATS' },
   lib_overrides:     { zh: ' · 手动修正 {n} 家', en: ' · {n} manual fixes' },
   lib_jd_rate:       { zh: ' · JD 抓取成功率 {rate}（{ok}/{total}）', en: ' · JD fetch rate {rate} ({ok}/{total})' },
   lib_agg:           { zh: ' · 聚合平台 {n} 个（其中担保名单 {sponsor} 个）', en: ' · {n} from aggregators ({sponsor} on register)' },
   ex_suggest_label:  { zh: '根据你隐藏的岗位，建议排除：', en: 'Based on jobs you hid, suggest excluding:' },
-  // 运行时渲染文案（工具箱状态 / 今日推荐 / 看板 / 列表 / 公司 / 提示）
+  // Runtime-rendered copy (toolbox status / today's picks / board / list / companies / hints)
   lib_done:          { zh: '已完成', en: 'Done' },
   lib_probed:        { zh: '已探测 {probed} 家，还剩 {pending} 家未探测', en: 'Probed {probed}, {pending} left' },
   lib_no_ats:        { zh: ' · 探测无 ATS {n} 家', en: ' · no ATS {n}' },
@@ -1230,7 +1230,7 @@ My resume:
   al_hn_fail:        { zh: '抓取 Hacker News 招聘帖失败：', en: 'Failed to fetch Hacker News hiring posts: ' },
   al_hn_retry:       { zh: '\n（可稍后重试，通常是临时网络问题）', en: '\n(try again later — usually a temporary network issue)' },
   al_hn_done:        { zh: '已从 Hacker News「Who is hiring」招聘帖抓取 {total} 条，按你的关键词并入 {found} 个岗位（带 HN 招聘帖 徽章）。\n去「全部岗位」在搜索框输入 HackerNews 即可只看这些。', en: 'Fetched {total} entries from the Hacker News "Who is hiring" thread and merged {found} matching your keywords (HN post badge).\nGo to "All jobs" and type HackerNews in the search box to see just these.' },
-  // 后端旗标 / 级别（后端保留中文供其筛选逻辑，前端仅展示时翻译）
+  // Backend flags / levels (backend keeps Chinese for its filter logic; translated only for display)
   flag_years:        { zh: '要求 {yrs}+ 年经验', en: 'Requires {yrs}+ yrs exp' },
   flag_clearance:    { zh: '需安全许可/国籍要求', en: 'Clearance / nationality required' },
   flag_no_sponsor:   { zh: 'JD 声明不担保签证', en: 'JD: no visa sponsorship' },
@@ -1250,7 +1250,7 @@ function t(key, vars) {
   if (vars) for (const k in vars) s = s.split('{' + k + '}').join(vars[k]);
   return s;
 }
-// 后端旗标文案：后端保留中文（其筛选逻辑靠中文子串匹配），前端仅在展示时翻译成当前语言
+// Backend flag text: backend keeps Chinese (its filters match Chinese substrings); frontend translates only for display
 function flagT(txt) {
   if (LANG === 'zh' || !txt) return txt;
   const m = txt.match(/^要求 (\d+)\+ 年经验$/);
@@ -1262,13 +1262,13 @@ function flagT(txt) {
     '未抓到 JD，仅按标题估分': t('flag_no_jd'),
   })[txt] || txt;
 }
-// 级别短标签：按级别代码取当前语言（后端 level_labels 为中文，仅作兜底）
+// Short level labels by level code in current language (backend level_labels are Chinese, fallback only)
 function levelLabel(code) {
   const key = { grad: 'lvl_grad', junior: 'lvl_junior', mid: 'lvl_mid',
                 senior: 'lvl_senior', staff: 'lvl_staff', mgmt: 'lvl_mgmt' }[code];
   return key ? t(key) : ((S.consts && S.consts.level_labels && S.consts.level_labels[code]) || code || '');
 }
-// 静态 HTML 文案：按 data-i18n / -html / -ph / -title 属性回填当前语言
+// Static HTML copy: refill current language via data-i18n / -html / -ph / -title attributes
 function applyStaticI18n() {
   document.documentElement.lang = LANG;
   document.querySelectorAll('[data-i18n]').forEach(el => el.textContent = t(el.dataset.i18n));
@@ -1286,7 +1286,7 @@ function toggleLang() {
   renderNav();
   refresh();
 }
-// 依赖语言的映射表：切换语言时重建（变量名不变，减少改动面）
+// Language-dependent maps: rebuilt on language switch (same variable names to minimise changes)
 let ST_LABELS, T_LABELS, TIER_META, VISA_META, CONF_LABELS, NAV;
 function rebuildI18nMaps() {
   ST_LABELS = { saved: t('st_saved'), applied: t('st_applied'), interview: t('st_interview'),
@@ -1316,19 +1316,19 @@ let F = { view: 'today', region: 'all', level: 'all', csize: 'all', years: 'all'
           minscore: 0, tier: 'all', visa: 'all', layout: 'cards', sort: 'rank' };
 let T = { llm: false, new: false, long: false, curated: false,
           titleonly: false, derisk: false, unseen: false, ontarget: false };
-// 一次把全部岗位取到前端，筛选(地区/签证/分数)才能在完整数据上做——
-// 只取 400 会导致"选英国却看不到大多数英国岗位"。本机访问 4MB 秒开。
-let FEED_LIMIT = 5000;   // 后端上限即 5000，等于"全都要"
+// Fetch all jobs to the frontend at once so filters (region/visa/score) run on the full dataset --
+// fetching only 400 hid most UK jobs when filtering by UK. ~4MB, loads instantly locally.
+let FEED_LIMIT = 5000;   // backend cap is 5000, i.e. "everything"
 let expanded = new Set();
 let pollTimer = null;
-// 看过的岗位（展开过/点开过链接）——存本地，供「未看过」筛选
+// Seen jobs (expanded / link opened), stored locally for the "unseen" filter
 const seenSet = new Set(JSON.parse(localStorage.getItem('seenJobs') || '[]'));
 function markSeen(u) {
   if (!u || seenSet.has(u)) return;
   seenSet.add(u);
   localStorage.setItem('seenJobs', JSON.stringify([...seenSet].slice(-8000)));
 }
-// 筛选条件记忆：改一次记一次，下次打开自动恢复
+// Persist filters on every change; restore on next open
 function saveF() {
   localStorage.setItem('filters', JSON.stringify({ F: { ...F, view: 'today' }, T }));
 }
@@ -1339,7 +1339,7 @@ function restoreF() {
     Object.assign(F, s.F || {}, { view: 'today' });
     Object.assign(T, s.T || {});
   } catch (e) {}
-  if (F.tier === 'hidden') F.tier = 'all';  // 已隐藏视图不跨会话保留
+  if (F.tier === 'hidden') F.tier = 'all';  // hidden view is not persisted across sessions
   const ids = { fRegion: F.region, fTier: F.tier, fVisa: F.visa, fLevel: F.level,
                 fCsize: F.csize, fYears: F.years, fScore: String(F.minscore) };
   for (const [id, v] of Object.entries(ids)) {
@@ -1350,7 +1350,7 @@ function restoreF() {
     el.classList.toggle('on', !!T[el.dataset.t]));
   document.querySelectorAll('.chip[data-g="sort"]').forEach(el =>
     el.classList.toggle('on', el.dataset.v === F.sort));
-  if (F.sort === 'score') window._sortInit = true;  // 用户存过偏好就不再自动改
+  if (F.sort === 'score') window._sortInit = true;  // don't auto-change once the user saved a preference
   const lc = document.getElementById('layoutChip');
   if (lc) lc.classList.toggle('on', F.layout === 'table');
 }
@@ -1358,7 +1358,7 @@ function setTier(v) {
   const wasHidden = F.tier === 'hidden';
   F.tier = v;
   saveF();
-  if (v === 'hidden' || wasHidden) refresh();  // 已隐藏视图要向后端换一批数据
+  if (v === 'hidden' || wasHidden) refresh();  // hidden view needs a different dataset from the backend
   else render();
 }
 function toggleLayout() {
@@ -1366,9 +1366,9 @@ function toggleLayout() {
   document.getElementById('layoutChip').classList.toggle('on', F.layout === 'table');
   saveF(); render();
 }
-const jobAdvice = {};        // url -> 岗位专属简历建议(Markdown)
-const jobAdviceBusy = new Set();  // 正在为哪些 url 生成建议
-const jobOutreach = {};      // url -> networking 搭话草稿(Markdown)
+const jobAdvice = {};        // url -> job-specific resume tips (Markdown)
+const jobAdviceBusy = new Set();  // urls currently generating tips
+const jobOutreach = {};      // url -> networking outreach draft (Markdown)
 const outreachBusy = new Set();
 const CN_BIGTECH = [
   ['字节跳动', 'https://jobs.bytedance.com/experienced/position?keywords=%E5%A4%A7%E6%A8%A1%E5%9E%8B'],
@@ -1427,7 +1427,7 @@ async function refresh() {
     const el = document.getElementById(id);
     if (el && document.activeElement !== el) el.value = (S[key] || []).join(', ');
   }
-  // 排除词学习建议：从你隐藏的岗位标题里挖出来的高频词
+  // Learned exclude-word suggestions: frequent words mined from hidden job titles
   const sug = document.getElementById('exSuggest');
   if (sug) {
     const ws = S.excl_suggest || [];
@@ -1443,7 +1443,7 @@ async function refresh() {
   document.getElementById('cntFeed').textContent = c.ai_jobs ? c.ai_jobs.toLocaleString() : '';
   document.getElementById('cntCo').textContent = c.has_ai ? c.has_ai.toLocaleString() : '';
   if (!window._wizChecked) { window._wizChecked = true; maybeWizard(); }
-  // 默认按「推荐优先」分层展示——只在页面刚打开时设置一次（用户手动改过就不再覆盖）
+  // Default to "recommended first" tiers -- set once on page load (never overrides a manual change)
   if (!window._sortInit) {
     window._sortInit = true;
     document.querySelectorAll('.chip[data-g="sort"]').forEach(x =>
@@ -1459,7 +1459,7 @@ async function refresh() {
     + (c.overrides ? t('lib_fixes', { n: c.overrides }) : '')
     + t('lib_jd_rate', { rate: jdRate, ok: (c.jd_ok ?? 0).toLocaleString(), total: ((c.jd_ok ?? 0) + (c.jd_fail ?? 0)).toLocaleString() })
     + (c.agg_jobs ? t('lib_agg', { n: c.agg_jobs, s: c.agg_sponsor ?? 0 }) : '');
-  // 公司来源分布：每家公司是被哪个扫描按钮首次发现的（found_via 汇总）
+  // Company source breakdown: which scan first found each company (found_via summary)
   const bd = c.by_discovery || {};
   const dparts = [];
   if (bd.build)  dparts.push(t('disc_build',  { n: bd.build.toLocaleString() }));
@@ -1548,7 +1548,7 @@ async function genAdvice() {
   out.innerHTML = `<div class="advice">${mdToHtml(d.advice || '')}</div>`;
 }
 
-// 极简 Markdown HTML（标题/加粗/列表/换行），够渲染建议
+// Minimal Markdown -> HTML (headings/bold/lists/line breaks), enough for tips
 function mdToHtml(md) {
   const lines = esc(md).split('\n'); let html = '', inList = false;
   for (let ln of lines) {
@@ -1562,8 +1562,8 @@ function mdToHtml(md) {
   return html;
 }
 
-// 左侧导航：每一项都是主区里的真实页面（NAV 由 rebuildI18nMaps() 按语言构建）
-const NAV_SEP = { gaps: true, goal: true };  // 分组分隔线
+// Left nav: each item is a real page in the main area (NAV built per language by rebuildI18nMaps())
+const NAV_SEP = { gaps: true, goal: true };  // group separators
 function renderNav() {
   const c = S.counts || {};
   const badge = { feed: c.ai_jobs ? c.ai_jobs.toLocaleString() : '',
@@ -1576,7 +1576,7 @@ function renderNav() {
     return sep + `<button class="navitem ${F.view === v ? 'on' : ''}" onclick="setView('${v}')">${label}${b}</button>`;
   }).join('');
 }
-// 每个视图显示主区里的哪些面板——唯一的可见性开关
+// Which main-area panels each view shows -- the single visibility switch
 function applyView() {
   const v = F.view;
   const show = (id, on) => { const e = document.getElementById(id); if (e) e.style.display = on ? '' : 'none'; };
@@ -1599,7 +1599,7 @@ function renderScan() {
   const sc = S.scan || {};
   const bar = document.getElementById('scanbar');
   const running = !!sc.running;
-  if (!running) window._stopping = false;   // 扫描真的停了，复位"停止中"状态
+  if (!running) window._stopping = false;   // scan actually stopped; reset "stopping" state
   const stopping = running && window._stopping;
   document.getElementById('btnRefresh').disabled = running;
   ['btnPending', 'btnDeep'].forEach(id => {
@@ -1618,12 +1618,12 @@ function renderScan() {
       : pausedLeft > 0
       ? t('scan_txt_paused', { mode: modeTxt, min: pausedLeft, done: sc.done.toLocaleString(), total: sc.total.toLocaleString() })
       : t('scan_txt_running', { mode: modeTxt, done: sc.done.toLocaleString(), total: sc.total.toLocaleString(), new: sc.new_jobs, eta });
-    // 调参仪表盘：家/秒 + 最近 2 分钟被限流次数。429 一直涨 = WORKABLE_CONC 调太高了，往回调。
+    // Tuning gauge: companies/sec + 429s in the last 2 min. Rising 429s = WORKABLE_CONC too high, lower it.
     if (!stopping && sc.rate != null) {
       document.getElementById('scanTxt').textContent +=
         `  ·  ${sc.rate}/s` + (sc.rl ? `  ·  429×${sc.rl}` : '');
     }
-    // 停止中加快轮询，让进度条尽快消失；否则用常规间隔
+    // Poll faster while stopping so the progress bar clears quickly; otherwise normal interval
     const interval = stopping ? 800 : 2500;
     if (pollTimer && window._pollInterval !== interval) { clearInterval(pollTimer); pollTimer = null; }
     if (!pollTimer) { pollTimer = setInterval(refresh, interval); window._pollInterval = interval; }
@@ -1636,7 +1636,7 @@ function setF(el) {
     x.classList.toggle('on', x === el));
   saveF();
   render();
-  // 排序方式变了要向后端重取：后端按该排序截断
+  // Sort change requires refetch: backend truncates by that sort
   if (el.dataset.g === 'sort') refresh();
 }
 function toggleT(el) {
@@ -1646,7 +1646,7 @@ function toggleT(el) {
   render();
 }
 
-// 当前生效的"缩小范围"筛选，给空结果时提示用（不含排序/布局这类展示项；T_LABELS 见 rebuildI18nMaps）
+// Active narrowing filters, used for empty-result hints (excludes sort/layout; T_LABELS in rebuildI18nMaps)
 function activeFilterLabels() {
   const L = [];
   const rg = { uk: t('region_uk'), europe: t('region_europe'), china: t('region_china'),
@@ -1663,7 +1663,7 @@ function activeFilterLabels() {
   if (q) L.push(t('fl_search', { q }));
   return L;
 }
-// 一键清除所有缩小范围的筛选（排序/布局保留），把卡在空列表的状态解开
+// One-click clear of all narrowing filters (keeps sort/layout) to escape an empty list
 function resetFilters() {
   Object.assign(F, { region: 'all', level: 'all', csize: 'all', years: 'all',
                      minscore: 0, tier: 'all', visa: 'all' });
@@ -1686,17 +1686,17 @@ function jobDays(j) {
 }
 function passJob(j, q) {
   const d = jobDays(j);
-  if (F.region === 'uk' && j.region !== 'uk') return false;  // 未知地点不再混进英国
+  if (F.region === 'uk' && j.region !== 'uk') return false;  // unknown locations no longer count as UK
   if (F.region === 'europe' && j.region !== 'europe') return false;
   if (F.region === 'china' && j.region !== 'china') return false;
   if (F.region === 'remote' && j.region !== 'remote') return false;
   if (F.region === 'unknown' && j.region !== 'unknown') return false;
   if (F.level !== 'all' && j.level !== F.level) return false;
-  if (F.csize !== 'all' && j.csize !== F.csize) return false;  // 聚合器岗位 csize='' 选规模时不显示
+  if (F.csize !== 'all' && j.csize !== F.csize) return false;  // aggregator jobs (csize='') hidden when a size is selected
   if (F.years !== 'all') {
-    const ry = j.req_years || 0;                    // 0 = JD 未注明/未算匹配
+    const ry = j.req_years || 0;                    // 0 = not stated in JD / not matched
     const mine = S.exp_years ?? 99;
-    if (F.years === 'fit'  && !(ry <= mine)) return false;      // 够格：未注明(0)也算够格
+    if (F.years === 'fit'  && !(ry <= mine)) return false;      // fit: unstated (0) also counts as fit
     if (F.years === 'none' && ry !== 0) return false;
     if (F.years === 'y12'  && !(ry >= 1 && ry <= 2)) return false;
     if (F.years === 'y35'  && !(ry >= 3 && ry <= 5)) return false;
@@ -1714,7 +1714,7 @@ function passJob(j, q) {
       (f.t || '').includes('不担保') || (f.t || '').includes('安全许可'))) return false;
   if (T.unseen && seenSet.has(j.url)) return false;
   if (T.ontarget && j.title_match === 'off_target') return false;
-  // 搜索：标题 / 公司 / 地点 / 国家 / 来源 / 命中技能
+  // Search: title / company / location / country / source / matched skills
   if (q) {
     const hay = [j.title, j.company, j.location, j.country, j.source,
                  (j.hit || []).join(' ')].join(' ').toLowerCase();
@@ -1722,11 +1722,11 @@ function passJob(j, q) {
   }
   return true;
 }
-// 推荐分层分区（推荐优先视图用；TIER_META 见 rebuildI18nMaps）
+// Recommendation tier sections (recommended-first view; TIER_META in rebuildI18nMaps)
 const TIER_SEQ = ['strong', 'maybe', 'lowconf', 'weak', 'risk'];
 const TIER_CLASS = { strong: 'th-strong', maybe: 'th-maybe', lowconf: 'th-lowconf',
                      weak: 'th-weak', risk: 'th-risk' };
-// 单个岗位卡片（分区视图与平铺视图共用）
+// Single job card (shared by sectioned and flat views)
 function jobCard(j, inHidden) {
   return `
       <div class="jobrow ${drawerUrl === j.url ? 'open' : ''}" onclick="rowClick(event, '${esc(j.url)}')">
@@ -1750,7 +1750,7 @@ function jobCard(j, inHidden) {
         </div>
       </div>`;
 }
-// 匹配度色块：岗位行左侧，一眼可见
+// Match-score swatch on the left of the job row, visible at a glance
 function scoreBlock(j) {
   if (j.score == null) return `<div class="scorebox none">–<small>${t('score_pending')}</small></div>`;
   const cls = j.score >= 60 ? 'hi' : j.score >= 35 ? 'md' : 'lo';
@@ -1762,11 +1762,11 @@ function scoreMini(j) {
   const cls = j.score >= 60 ? 'hi' : j.score >= 35 ? 'md' : 'lo';
   return `<span class="badge score ${cls}">${t('score_mini', { n: j.score })}</span>`;
 }
-// 行内只放最关键的徽章（级别 / 地区 / NEW / LLM /警告），次要信息移到展开详情里
+// Only key badges inline (level / region / NEW / LLM / warnings); secondary info goes in expanded details
 function jobBadges(j) {
   const d = jobDays(j);
   let h = '';
-  // 只留决策关键：方向 · 签证 · 风险 · 地区 · NEW（级别/规模/LLM 移到详情抽屉）
+  // Decision-critical only: track · visa · risk · region · NEW (level/size/LLM moved to detail drawer)
   if (j.title_match === 'off_target') h += `<span class="badge fwarn" title="${t('badge_dir_off_tip')}">${t('badge_dir_off')}</span>`;
   else if (j.title_match === 'acceptable') h += `<span class="badge lvl" title="${t('badge_dir_accept_tip')}">${t('badge_dir_accept')}</span>`;
   h += visaBadge(j);
@@ -1785,12 +1785,12 @@ function jobBadges(j) {
   });
   return h;
 }
-// 签证徽章：公司在名单 ≠ 这个岗位一定担保（VISA_META 见 rebuildI18nMaps）
+// Visa badge: company on the list ≠ this job definitely sponsors (VISA_META in rebuildI18nMaps)
 function visaBadge(j) {
   const m = VISA_META[j.visa];
   return m ? `<span class="badge ${m[1]}" title="${t('visa_b_tip')}">${m[0]}</span>` : '';
 }
-// 次要徽章：展开详情时才显示
+// Secondary badges: shown only in expanded details
 function extraBadges(j) {
   const d = jobDays(j);
   let h = '';
@@ -1818,14 +1818,14 @@ function toggleMatch(url) {
   markSeen(url);
   render();
 }
-// 匹配分置信度：分数一样时先信"高"（CONF_LABELS 见 rebuildI18nMaps）
+// Match-score confidence: on equal scores prefer "high" (CONF_LABELS in rebuildI18nMaps)
 function confBadge(j) {
   if (!j.conf || j.score == null) return '';
   const [l, tip] = CONF_LABELS[j.conf] || ['', ''];
   const cls = j.conf === 'high' ? 'fgood' : (j.conf === 'low' ? 'fwarn' : 'lvl');
   return `<span class="badge ${cls}" title="${tip}">${l}</span>`;
 }
-// 为什么推荐这个岗位：标题命中了哪些关键词 + 简历重合 + 风险，一眼看懂
+// Why this job is recommended: title keyword hits + resume overlap + risks, at a glance
 function whyBlock(j) {
   const tl = (j.title || '').toLowerCase();
   const thits = (S.keywords || []).filter(k =>
@@ -1885,7 +1885,7 @@ function matchBody(j) {
           ${mdToHtml(jobOutreach[j.url])}</div>` : '')}
   </div>`;
 }
-// 找人脉的快捷链接（公司在 results 里才有）
+// Networking quick links (only when the company is in results)
 function netLinks(j) {
   const r = (S.results || {})[j.company];
   const L = r && r.links;
@@ -1893,13 +1893,13 @@ function netLinks(j) {
   return `<a class="btn ghost mini" style="padding:5px 14px;font-size:12.5px;border-radius:9px" href="${esc(L.li_people)}" target="_blank">${t('net_li_people')}</a>
     <a class="btn ghost mini" style="padding:5px 14px;font-size:12.5px;border-radius:9px" href="${esc(L.hunter)}" target="_blank">${t('net_hunter')}</a>`;
 }
-// 点击岗位行任意空白处 右侧详情抽屉；点链接、按钮、下拉框不触发
+// Click blank area of a job row -> open right detail drawer; links, buttons, dropdowns don't trigger
 function rowClick(ev, url) {
   if (ev.target.closest('a, button, select, .matchbox')) return;
   openDrawer(url);
 }
 
-// ---------------- 右侧详情抽屉 ----------------
+// ---------------- Right detail drawer ----------------
 let drawerUrl = null;
 function jobByUrl(url) {
   return (S.feed || []).find(x => x.url === url)
@@ -1913,7 +1913,7 @@ function openDrawer(url) {
   renderDrawer();
   document.getElementById('drawer').classList.add('open');
   document.getElementById('drawerMask').classList.add('open');
-  render();  // 刷新列表高亮
+  render();  // refresh list highlight
 }
 function closeDrawer() {
   drawerUrl = null;
@@ -1942,7 +1942,7 @@ function renderDrawer() {
     ${matchBody(j)}`;
 }
 
-// ---------------- 隐藏岗位 ----------------
+// ---------------- Hide job ----------------
 async function hideJob(url, on) {
   const j = (S.feed || []).find(x => x.url === url) || {};
   const r = await fetch('/api/hide', { method: 'POST',
@@ -1956,7 +1956,7 @@ function loadMore() {
   FEED_LIMIT = Math.min(FEED_LIMIT + 600, 5000);
   refresh();
 }
-// 一键把学到的排除词加入设置
+// One-click add learned exclude words to settings
 function addExcl(w) {
   const el = document.getElementById('exkw');
   const cur = el.value.split(',').map(s => s.trim()).filter(Boolean);
@@ -1965,7 +1965,7 @@ function addExcl(w) {
   saveSettings();
 }
 
-// ---------------- 投递清单 ----------------
+// ---------------- Application tracker ----------------
 async function trackJob(url, status) {
   const j = (S.feed || []).find(x => x.url === url) || {};
   const r = await fetch('/api/track', { method: 'POST',
@@ -1996,7 +1996,7 @@ function statusSel(j) {
     ${opts}<option value="remove">${t('track_remove')}</option></select>`;
 }
 
-// ---------------- networking 搭话草稿 ----------------
+// ---------------- Networking outreach drafts ----------------
 async function genOutreach(url) {
   outreachBusy.add(url); render();
   try {
@@ -2066,7 +2066,7 @@ function cnDirectory() {
   </div>`;
 }
 
-// 新手 3 步开始卡（今日推荐没数据时显示）
+// 3-step getting-started card (shown when today's picks has no data)
 function onboardCard() {
   return `<div class="today-summary">
     <h2>${t('onboard_title')}</h2>
@@ -2090,21 +2090,21 @@ function resumeNudge() {
 }
 
 function render() {
-  if (drawerUrl) renderDrawer();   // 抽屉里的建议/草稿随生成实时更新
-  applyView();                     // 按当前视图显隐主区各面板
-  // 设置 / 工具箱 / 简历缺口是独立面板，不走下面的岗位列表渲染
+  if (drawerUrl) renderDrawer();   // drawer tips/drafts update live as they generate
+  applyView();                     // show/hide main panels for the current view
+  // Settings / toolbox / resume gaps are standalone panels, skipping the job list render below
   if (['goal', 'tools', 'gaps'].includes(F.view)) return;
   const q = document.getElementById('search').value.toLowerCase();
   const list = document.getElementById('list');
   const hint = document.getElementById('emptyHint');
   const cnBox = F.region === 'china' ? cnDirectory() : '';
 
-  // 今日推荐：打开即知今天该看什么——摘要 + 分层各取前几条
+  // Today's picks: what to look at today -- summary + top few per tier
   if (F.view === 'today') {
     hint.innerHTML = '';
     const feed = (S.feed || []).filter(j => passJob(j, ''));
     if (!feed.length) {
-      // 有岗位却被筛选滤空 别显示"开始使用"的空态（会让人以为没数据），给清除筛选入口
+      // Jobs exist but filters hid them: don't show the "get started" empty state (looks like no data); offer clear-filters
       const labels = activeFilterLabels();
       if ((S.feed || []).length && labels.length) {
         list.innerHTML = `<div class="empty"><p>${t('filt_blocked_p', { n: ((S.counts || {}).ai_jobs || 0).toLocaleString() })}</p>
@@ -2119,7 +2119,7 @@ function render() {
     const cnt = { strong: 0, maybe: 0, lowconf: 0, weak: 0, risk: 0 };
     feed.forEach(j => { if (cnt[j.tier] != null) cnt[j.tier]++; });
     const tiles = ['strong', 'maybe', 'lowconf', 'risk']
-      .filter(t => cnt[t] > 0)   // 零值卡片不渲染：有风险/需人工确认为 0 时隐藏，真出现时才跳出来，避免"0 0"稀释信号
+      .filter(t => cnt[t] > 0)   // skip zero cards: hide risk/needs-review when 0, show only when present, so "0 0" doesn't dilute the signal
       .map(t => `<div class="tile"><div class="n"><span class="tdot ${TIER_CLASS[t]}"></span>${cnt[t]}</div><div class="l">${TIER_META[t][0]}</div></div>`).join('');
     let html = (S.resume ? '' : resumeNudge()) + `<div class="today-summary">
       <h2>${t('today_h2')}</h2>
@@ -2145,7 +2145,7 @@ function render() {
     return;
   }
 
-  // 投递清单视图（看板：待投 已投 面试中 结束）
+  // Application tracker view (board: to apply / applied / interviewing / closed)
   if (F.view === 'tracker') {
     const feedMap = {};
     (S.feed || []).forEach(j => { feedMap[j.url] = j; });
@@ -2202,7 +2202,7 @@ function render() {
     else items = [...items].sort((a, b) => (b.first_seen || '').localeCompare(a.first_seen || ''));
     const inHidden = F.tier === 'hidden';
 
-    // 明明有岗位、却被筛选滤空 —— 直接告诉用户是哪些筛选在挡，一键清除
+    // Jobs exist but filters hid them -- tell the user which filters block them, with one-click clear
     if (!items.length && !inHidden && F.region !== 'china') {
       const labels = activeFilterLabels();
       if (labels.length) {
@@ -2215,7 +2215,7 @@ function render() {
     }
 
     if (F.layout === 'table') {
-      // 表格视图：一行一个岗位，方便批量比较
+      // Table view: one job per row for easy comparison
       const VISA_ICON = { yes: '', register: '', uncertain: '', no: '' };
       list.innerHTML = cnBox + `<div class="tblwrap"><table class="jobtable">
         <tr><th>${t('th_match')}</th><th>${t('th_job')}</th><th>${t('th_company')}</th><th>${t('th_loc')}</th><th>${t('th_level')}</th><th>${t('th_visa')}</th><th>${t('th_years')}</th><th>${t('th_posted')}</th><th></th></tr>
@@ -2235,7 +2235,7 @@ function render() {
         </tr>`).join('')}
       </table></div>`;
     } else if (F.sort === 'rank' && !inHidden && F.tier === 'all') {
-      // 推荐优先：按分层分区显示，区内按综合推荐分排序——打开就知道先看哪些
+      // Recommended first: tiered sections, sorted by overall score within each -- shows what to look at first
       let html = '';
       for (const t of TIER_SEQ) {
         const grp = items.filter(j => j.tier === t).sort(byRank);
@@ -2256,13 +2256,13 @@ function render() {
       : (inHidden ? t('feed_hidden_empty')
          : F.region === 'china' ? t('feed_china_hint')
          : t('feed_none_hint')))
-      // 只要有筛选生效，就常驻一个一键清除入口——避免"筛太窄看不到岗位又不知怎么复原"
+      // Whenever a filter is active, keep a one-click clear visible -- avoids getting stuck with over-narrow filters
       + (nFilters ? `<button class="mini ghost" onclick="resetFilters()">${t('feed_clear_n', { n: nFilters, total: total.toLocaleString() })}</button>` : '')
       + (canMore ? `<button class="mini ghost" onclick="loadMore()">${t('feed_load_more', { got: (S.feed || []).length, total })}</button>` : '');
     return;
   }
 
-  // 公司视图
+  // Company view
   const order = { has_ai: 0, board_no_ai: 1 };
   const scoreMap = {};
   (S.feed || []).forEach(j => { if (j.score != null) scoreMap[j.url] = j; });
@@ -2339,7 +2339,7 @@ async function runMatch() {
   refresh();
 }
 
-// 导入公司名单：官方赞助商 CSV 或自己的 Excel/CSV，后端自动识别格式
+// Import company list: official sponsor CSV or your own Excel/CSV; backend auto-detects format
 async function importCompanies(input) {
   const f = input.files && input.files[0];
   if (!f) return;
@@ -2365,12 +2365,12 @@ async function importCompanies(input) {
   } finally {
     btn.disabled = false;
     btn.textContent = label;
-    input.value = '';   // 清空，才能重复选同一个文件
+    input.value = '';   // reset so the same file can be picked again
   }
 }
 
 async function scan(mode) {
-  // 立刻给反馈：即使扫描要几十秒，用户点下去也能马上看到"已开始"，不会以为没反应
+  // Immediate feedback: even if the scan takes tens of seconds, show "started" right away
   const bar = document.getElementById('scanbar');
   const modeTxt = { known: t('scan_mode_known'), pending: t('scan_mode_pending'), curated: t('scan_mode_curated'), all: t('scan_mode_all'), deep: t('scan_mode_deep') }[mode] || t('scan_mode_def');
   bar.style.display = 'block';
@@ -2390,14 +2390,14 @@ async function scan(mode) {
     alert(t('scan_start_fail') + (e && e.message || e));
     return;
   }
-  refresh();   // 拉最新状态，进度条与轮询由 renderScan 接管
+  refresh();   // fetch latest state; renderScan takes over progress bar and polling
 }
 async function stopScan() {
   window._stopping = true;
-  renderScan();                       // 立刻把按钮变「停止中…」、进度文案变「正在停止」
+  renderScan();                       // immediately switch button to "Stopping…" and progress text to "stopping"
   try { await fetch('/api/scan/stop', { method: 'POST' }); }
   catch (e) {}
-  refresh();                          // 尽快拉一次最新状态，别等下一个轮询周期
+  refresh();                          // fetch latest state now instead of waiting for the next poll
 }
 
 async function runAgg() {
@@ -2423,7 +2423,7 @@ async function runSocial() {
     const d = await r.json();
     if (d.error) { alert(d.error); reset(); return; }
   } catch (e) { alert(t('al_start_fail') + (e && e.message || e)); reset(); return; }
-  // HN 抓取一般几秒完成；轮询到结束，期间刷新让新岗位陆续并入
+  // HN fetch usually takes seconds; poll until done, refreshing so new jobs merge in
   const t0 = Date.now();
   const poll = setInterval(async () => {
     await refresh();
@@ -2444,13 +2444,13 @@ async function saveSettings(silent) {
                  exclude_keywords: splitList('exkw'),
                  target_titles: splitList('targetTitles'),
                  acceptable_titles: splitList('acceptTitles') };
-  body.keywords = kws;  // 空数组 = 看全部（不做行业过滤）
+  body.keywords = kws;  // empty array = show all (no industry filter)
   await fetch('/api/settings', { method: 'POST', headers: {'Content-Type':'application/json'},
     body: JSON.stringify(body) });
   if (!silent) refresh();
 }
 
-// ---------------- 首次使用向导 ----------------
+// ---------------- First-run wizard ----------------
 function maybeWizard() {
   if (localStorage.getItem('wizardDone')) return;
   const c = S.counts || {};

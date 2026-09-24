@@ -10,7 +10,7 @@ import re
 
 TITLE_ONLY_KEYWORDS = {"recommendation", "recommendations", "personalization"}
 
-# 命中即标 LLM 的关键词（用户重点关注）
+# Keywords that tag a job as LLM on any hit (the user's main focus)
 LLM_KEYWORDS = [
     "llm", "large language model", "genai", "gen ai", "generative ai",
     "foundation model", "prompt engineer", "agentic", "ai agent", "rag",
@@ -22,7 +22,7 @@ UK_RE = re.compile(r"\b(united kingdom|uk|london|manchester|birmingham|cambridge
                    r"newcastle|sheffield|liverpool|nottingham|southampton|brighton|"
                    r"england|scotland|wales)\b")
 
-# 欧洲：按对 AI 人才需求排序靠前的国家优先匹配
+# Europe: countries with the highest AI talent demand are matched first
 EU_PLACES = [
     ("Germany", r"germany|berlin|munich|münchen|frankfurt|hamburg|cologne|stuttgart"),
     ("Netherlands", r"netherlands|amsterdam|rotterdam|eindhoven|utrecht|the hague"),
@@ -66,10 +66,10 @@ OTHER_RE = re.compile(
 
 
 def classify_region(location):
-    """返回 (region, label)：uk / europe / china / remote / other / unknown"""
+    """Return (region, label): uk / europe / china / remote / other / unknown"""
     loc = (location or "").lower()
     if not loc:
-        return ("unknown", "")  # 没写地点 ≠ 英国：单列，前端可选择性显示
+        return ("unknown", "")  # no location ≠ UK: kept separate so the frontend can choose to show it
     if UK_RE.search(loc):
         return ("uk", "UK")
     for label, rx in EU_RES:
@@ -105,8 +105,8 @@ def classify_level(title):
     return "mid"
 
 
-LONG_RUNNING_DAYS = 30   # 岗位在线 ≥30 天算“长期在招”
-NEW_DAYS = 3             # 首次发现 ≤3 天算“新岗位”
+LONG_RUNNING_DAYS = 30   # listed ≥30 days counts as "long-running"
+NEW_DAYS = 3             # first seen ≤3 days ago counts as "new"
 
 
 def kw_match(text, kws):
@@ -114,16 +114,16 @@ def kw_match(text, kws):
 
 
 def kw_hit_count(text, kws):
-    """关键词命中总次数（同一个词出现多次都计入）。"""
+    """Total keyword hits (repeat occurrences of a word all count)."""
     return sum(len(re.findall(r"\b" + re.escape(k) + r"\b", text)) for k in kws)
 
 
-# 广撒网标题：工程/数据/研究类岗位，标题没写 AI 也值得读 JD 正文二次确认
+# Wide-net titles: engineering/data/research roles are worth a second check of the JD body even without AI in the title
 BROAD_TITLE_RE = re.compile(
     r"\b(engineer|developer|scientist|programmer|architect|researcher)\b")
 
-# 标题黑名单：明显不是 AI 研发方向的角色，不给走 JD 正文宽通道——
-# 这些岗位挂在"AI 公司"名下时，JD 里的公司简介总会提到 AI，全是误命中
+# Title blacklist: roles clearly outside AI R&D don't get the wide JD-body path —
+# when listed under an "AI company", the JD's company blurb always mentions AI, so every hit is false
 EXCLUDE_TITLE_RE = re.compile(
     r"\b(sales|pre-?sales|account (?:manager|executive)|business development|"
     r"marketing|recruit(?:er|ing|ment)|talent acquisition|customer success|"
@@ -136,14 +136,14 @@ EXCLUDE_TITLE_RE = re.compile(
 
 
 def match_job(title, desc, keywords):
-    """判断一个岗位是否算 AI 岗，返回命中来源：
-      'title' —— 标题直接命中 AI 关键词；
-      'jd'    —— 标题是工程/数据/研究类（且不在黑名单里）、JD 正文命中
-                 AI 关键词 ≥2 次（拓宽召回；要求 ≥2 次是为了滤掉
-                 公司简介里"we are an AI-powered..."这种一嘴带过的套话）；
-      None    —— 都没命中。
-    JD 正文抓不到时（desc 为空）只走标题，天然保守。
-    keywords 为空 = 用户要"看全部"（不做行业过滤），收录每个岗位（返回 'all'）。"""
+    """Decide whether a job counts as an AI role; return the match source:
+      'title' —— the title directly hits an AI keyword;
+      'jd'    —— the title is engineering/data/research (and not blacklisted) and the JD body hits
+                 AI keywords ≥2 times (widens recall; requiring ≥2 filters out
+                 passing boilerplate like "we are an AI-powered..." in company blurbs);
+      None    —— neither matched.
+    When the JD body can't be fetched (desc empty) only the title is used, so it stays conservative.
+    Empty keywords = the user wants "show all" (no industry filter): keep every job (return 'all')."""
     if not keywords:
         return "all"
     t = (title or "").lower()
@@ -156,8 +156,8 @@ def match_job(title, desc, keywords):
     return None
 
 
-# 目标岗位画像：区分"这个岗位方向是否对口"，与"简历技能是否重合"解耦。
-# 关键：技能重合高 ≠ 岗位对口——IT Support 的 JD 也会写 python/docker/aws。
+# Target-role profile: judges "is this role the right direction", decoupled from "do resume skills overlap".
+# Key point: high skill overlap ≠ right role — IT Support JDs also list python/docker/aws.
 DEFAULT_TARGET_TITLES = [
     "machine learning engineer", "ml engineer", "mle",
     "ai engineer", "artificial intelligence engineer",
@@ -177,10 +177,10 @@ def _title_hit(title_l, phrases):
     return any(re.search(r"\b" + re.escape(p) + r"\b", title_l) for p in phrases)
 
 
-# 词元启发式：AI/ML 方向词 + 角色词。用于兜住写法千变万化的真实岗位标题
-# （如 "Software Engineer, Machine Learning" / "ML Platform Engineer" /
-#  "NLP Research Engineer" / "Research Scientist, Foundation Models"），
-# 避免"精确短语命中"把真实相关岗位误判成 off_target。
+# Token heuristic: AI/ML domain word + role word. Catches real job titles phrased in endless ways
+# (e.g. "Software Engineer, Machine Learning" / "ML Platform Engineer" /
+#  "NLP Research Engineer" / "Research Scientist, Foundation Models"),
+# so "exact-phrase matching" doesn't misjudge genuinely relevant roles as off_target.
 _AI_TOKEN_RE = re.compile(
     r"\b(machine learning|ml|deep learning|artificial intelligence|ai|"
     r"llm|large language model|nlp|natural language|computer vision|"
@@ -192,16 +192,16 @@ _SCI_ROLE_RE = re.compile(r"\b(scientist|researcher|research)\b")
 
 
 def title_match(title, targets=None, acceptables=None, custom=False, keywords=None):
-    """岗位方向：target=正好想要 / acceptable=能接受 / off_target=方向不对。
-    off_target 的岗位无论技能分多高都不该被强推（例如 IT Support、Sales）。
+    """Role direction: target=exactly wanted / acceptable=would accept / off_target=wrong direction.
+    off_target roles should never be pushed, however high the skill score (e.g. IT Support, Sales).
 
-    两种画像：
-    · custom=True —— 用户已经把工具切到别的行业（改了关键词或填了目标岗位）。
-      方向**完全**由用户自己的目标/可接受/搜索词决定，绝不套用 AI 专用的
-      标题黑名单和 AI 词元启发式——否则金融/建筑/机械/市场等岗位会被永久
-      判成 off_target 沉底，工具就退化成"只出得来 AI 岗"。
-    · custom=False（内置 AI 画像）—— 保持原逻辑：① 黑名单角色直接 off_target；
-      ② 目标/可接受短语；③ AI 方向词+角色词的词元启发式兜底。"""
+    Two profiles:
+    · custom=True —— the user switched the tool to another industry (changed keywords or set target roles).
+      Direction is decided **entirely** by the user's own target/acceptable/search terms, never by the AI-only
+      title blacklist or AI token heuristic — otherwise finance/construction/mechanical/marketing roles would be
+      permanently sunk as off_target, and the tool would degrade to "AI jobs only".
+    · custom=False (built-in AI profile) —— original logic: ① blacklisted roles go straight to off_target;
+      ② target/acceptable phrases; ③ AI-domain + role-word token heuristic as a fallback."""
     t = (title or "").lower()
     if custom:
         if targets and _title_hit(t, targets):
@@ -209,20 +209,20 @@ def title_match(title, targets=None, acceptables=None, custom=False, keywords=No
         if acceptables and _title_hit(t, acceptables):
             return "acceptable"
         if keywords and _title_hit(t, keywords):
-            # 标题命中用户的搜索词 = 至少对口；没单独列 target 时就当 target
+            # title hits the user's search terms = at least relevant; counts as target if no targets are listed
             return "acceptable" if targets else "target"
         if not (targets or acceptables or keywords):
-            return "target"     # 关键词/目标全空 = 看全部，任何岗位都不沉底
+            return "target"     # no keywords/targets = show all, nothing sinks
         return "off_target"
     tg = targets if targets is not None else DEFAULT_TARGET_TITLES
     ac = acceptables if acceptables is not None else DEFAULT_ACCEPTABLE_TITLES
-    if EXCLUDE_TITLE_RE.search(t):          # ① 黑名单：即便带 engineer/AI 也算方向不对
+    if EXCLUDE_TITLE_RE.search(t):          # ① blacklist: wrong direction even with engineer/AI
         return "off_target"
-    if _title_hit(t, tg):                   # ② 用户/默认目标短语
+    if _title_hit(t, tg):                   # ② user/default target phrases
         return "target"
     if _title_hit(t, ac):
         return "acceptable"
-    has_ai = bool(_AI_TOKEN_RE.search(t))   # ③ 词元启发式
+    has_ai = bool(_AI_TOKEN_RE.search(t))   # ③ token heuristic
     if has_ai and _ENG_ROLE_RE.search(t):
         return "target"
     if has_ai and _SCI_ROLE_RE.search(t):
@@ -231,10 +231,10 @@ def title_match(title, targets=None, acceptables=None, custom=False, keywords=No
 
 
 SKILL_VOCAB = [
-    # 语言
+    # Languages
     "python", "java", "c++", "c#", "golang", "rust", "scala", "sql", "r",
     "javascript", "typescript", "matlab", "bash",
-    # 机器学习
+    # Machine learning
     "machine learning", "deep learning", "pytorch", "tensorflow", "keras",
     "scikit-learn", "sklearn", "xgboost", "lightgbm", "computer vision",
     "nlp", "natural language processing", "reinforcement learning",
@@ -258,12 +258,12 @@ SKILL_VOCAB = [
     "reranking", "peft", "quantization", "distillation", "vllm", "triton",
     "langgraph", "autogen", "dspy", "semantic kernel", "context window",
     "production ml", "retrieval systems",
-    # 数据
+    # Data
     "pandas", "numpy", "spark", "pyspark", "hadoop", "kafka", "airflow",
     "dbt", "snowflake", "databricks", "etl", "data pipeline",
     "data warehouse", "bigquery", "redshift", "tableau", "power bi",
     "data analysis", "data visualization",
-    # 工程 / 基础设施
+    # Engineering / infrastructure
     "aws", "gcp", "google cloud", "azure", "docker", "kubernetes", "k8s",
     "terraform", "ci/cd", "mlops", "mlflow", "kubeflow", "sagemaker",
     "vertex ai", "model deployment", "model serving", "inference",
@@ -273,7 +273,7 @@ SKILL_VOCAB = [
     "microservices", "fastapi", "flask", "django", "react", "node.js",
     "postgresql", "mysql", "mongodb", "redis", "elasticsearch",
     "system design", "scalability", "testing", "unit test",
-    # 领域 / 软技能
+    # Domains / soft skills
     "agile", "scrum", "stakeholder", "cross-functional", "mentoring",
     "leadership", "research", "publication", "phd", "kaggle",
     "open source", "fintech", "healthcare", "fraud detection", "risk",
@@ -282,7 +282,7 @@ SKILL_VOCAB = [
 _VOCAB_RES = [(kw, re.compile(r"(?<![\w+#])" + re.escape(kw) + r"(?![\w+#])"))
               for kw in SKILL_VOCAB]
 
-# 同义词归并：命中任一形式只记规范名
+# Synonym merging: any matched form is recorded under its canonical name
 _CANON = {"sklearn": "scikit-learn", "huggingface": "hugging face",
           "finetuning": "fine-tuning", "k8s": "kubernetes",
           "natural language processing": "nlp", "google cloud": "gcp",
@@ -332,10 +332,10 @@ YES_SPONSOR_RE = re.compile(
     r"|(?:we|company)\s+(?:can|do|will)\s+sponsor|able to sponsor|sponsorship for this role")
 
 
-# 岗位级别 → 典型经验年限中点（用于职级匹配打分）
+# Job level → midpoint of typical years of experience (for level-fit scoring)
 LEVEL_YEARS = {"grad": 0.0, "junior": 1.5, "mid": 3.5,
                "senior": 6.5, "staff": 9.0, "mgmt": 10.0}
-# 领域标记：命中即代表方向对口，单独占一档权重
+# Domain markers: a hit means the domain fits; gets its own weight bucket
 DOMAIN_SKILLS = {
     "nlp", "computer vision", "llm", "rag", "recommendation", "recommender",
     "fraud detection", "fintech", "healthcare", "search ranking", "ads",
@@ -344,16 +344,16 @@ DOMAIN_SKILLS = {
     "genai", "retrieval",
 }
 
-# ATS 式综合评分权重（可测的分项才计权重，最后按实际权重和归一化）：
-#   必备技能 55% · 加分技能 20% · 职级 10% · 领域 10% · JD抓取置信度 5%
+# ATS-style score weights (only measurable components count; normalised by the weights actually used):
+#   required skills 55% · preferred skills 20% · level 10% · domain 10% · JD fetch confidence 5%
 W_REQUIRED, W_PREFERRED, W_LEVEL, W_DOMAIN, W_CONF = 0.55, 0.20, 0.10, 0.10, 0.05
 
 
 def analyze_job(title, desc, resume_kws, my_years, level=None):
-    """ATS 式综合评分：技能覆盖(必备/加分) + 职级 + 领域 + JD置信度，再叠加淘汰项。
+    """ATS-style score: skill coverage (required/preferred) + level + domain + JD confidence, plus knockout factors.
 
-    每个分项都归一化到 0..1，只有"可测"的分项才计入权重，最后按参与权重之和
-    归一化——这样缺 nice-to-have 段落或抓不到 JD 时不会被凭空扣分。"""
+    Each component is normalised to 0..1; only "measurable" components carry weight, and the total is
+    normalised by the weights used — so a missing nice-to-have section or JD costs no points."""
     dl = (desc or "").lower()
     full = (title or "").lower() + ". " + dl
     m = NICE_SPLIT_RE.search(dl)
@@ -375,7 +375,7 @@ def analyze_job(title, desc, resume_kws, my_years, level=None):
     job_domains = (core | nice) & DOMAIN_SKILLS
     if job_domains:
         comps.append((W_DOMAIN, len(job_domains & resume_kws) / len(job_domains)))
-    # JD 抓取置信度：抓到完整正文 1.0，正文很短 0.6，只有标题 0.3
+    # JD fetch confidence: full body 1.0, short body 0.6, title only 0.3
     conf = 1.0 if len(dl) >= 400 else (0.6 if dl else 0.3)
     comps.append((W_CONF, conf))
 
@@ -396,30 +396,30 @@ def analyze_job(title, desc, resume_kws, my_years, level=None):
         flags.append({"t": "需安全许可/国籍要求", "lv": "warn"})
     if NO_SPONSOR_RE.search(full):
         flags.append({"t": "JD 声明不担保签证", "lv": "warn"})
-        score = max(score - 40, 0)  # 真实世界里这基本等于淘汰
+        score = max(score - 40, 0)  # in practice this is effectively a rejection
     elif YES_SPONSOR_RE.search(full):
         flags.append({"t": "明确提供签证担保", "lv": "good"})
     if not dl:
-        # 没抓到 JD 正文：只凭标题算的分虚高（"Junior ML Engineer" 光标题就能拿 90+），
-        # 封顶并明示低置信度，防止挤掉那些用完整 JD 验证过的真高分岗位
+        # No JD body: title-only scores are inflated ("Junior ML Engineer" alone can score 90+),
+        # so cap and flag low confidence to avoid crowding out genuine high scorers verified by a full JD
         score = min(score, 65)
         flags.append({"t": "未抓到 JD，仅按标题估分", "lv": "warn"})
     return {
         "score": score, "hit": sorted(hit_c | hit_n),
         "must_miss": sorted(miss_c)[:12], "nice_miss": sorted(miss_n)[:10],
         "flags": flags, "n": len(core) + len(nice),
-        "req_years": yrs,   # JD 抽到的最低要求年限（0=未注明），供前端“经验要求”筛选
-        # 分数可信度：high=完整JD / mid=JD较短 / low=只有标题——分数一样时先信 high
+        "req_years": yrs,   # minimum years required from the JD (0=unstated), for the frontend "experience" filter
+        # score confidence: high=full JD / mid=short JD / low=title only — on ties, trust high first
         "conf": ("high" if len(dl) >= 400 else "mid" if dl else "low"),
     }
 
 
 def visa_certainty(ms, on_register):
-    """签证确定性分层（前端一级筛选）：
-      yes       —— JD 明确写提供担保
-      no        —— JD 明确写不担保
-      register  —— 公司在官方 sponsor 名单里，但 JD 未说明（大多数岗位在这层）
-      uncertain —— 聚合平台岗位且公司名没匹配上名单，担保与否完全未知"""
+    """Visa certainty tiers (top-level frontend filter):
+      yes       —— JD explicitly offers sponsorship
+      no        —— JD explicitly says no sponsorship
+      register  —— company is on the official sponsor register but the JD is silent (most jobs land here)
+      uncertain —— aggregator job whose company didn't match the register; sponsorship entirely unknown"""
     txts = [f.get("t", "") for f in ((ms or {}).get("flags") or [])]
     if any("不担保" in t for t in txts):
         return "no"
@@ -429,17 +429,17 @@ def visa_certainty(ms, on_register):
 
 
 def job_tier(score, ms, visa, tmatch="target"):
-    """推荐分层：strong 强推荐 / maybe 可以看看 / weak 匹配弱 /
-    lowconf 低置信（没抓到JD或没算分） / risk 签证或安全许可风险。
+    """Recommendation tiers: strong = strongly recommended / maybe = worth a look / weak = poor match /
+    lowconf = low confidence (no JD or no score) / risk = visa or security-clearance risk.
 
-    进 strong 必须三者同时成立：岗位方向对口(target/acceptable) + 分数≥60 +
-    无签证/许可风险。tmatch=off_target 的岗位（IT Support、Sales 等）即使技能分
-    很高也只归 weak——避免"技能重合"被误当成"岗位对口"。"""
+    strong requires all three: right role direction (target/acceptable) + score ≥60 +
+    no visa/clearance risk. tmatch=off_target roles (IT Support, Sales, etc.) only get weak
+    even with high skill scores — so "skill overlap" isn't mistaken for "right role"."""
     txts = [f.get("t", "") for f in ((ms or {}).get("flags") or [])]
     if visa == "no" or any("安全许可" in t for t in txts):
         return "risk"
     if tmatch == "off_target":
-        return "weak"     # 方向不对：直接沉底，绝不进今日推荐（在 lowconf 判断之前）
+        return "weak"     # wrong direction: sink straight away, never in today's picks (checked before lowconf)
     if score is None or any("仅按标题估分" in t for t in txts):
         return "lowconf"
     if score >= 60:
@@ -449,7 +449,7 @@ def job_tier(score, ms, visa, tmatch="target"):
     return "weak"
 
 
-# 综合推荐分权重（方向对口是精准度命门，权重高于 roadmap 原案的 0.10）
+# Overall ranking weights (role direction is key to precision, so it outweighs the roadmap's original 0.10)
 _CONF_W = {"high": 1.0, "mid": 0.6, "low": 0.3}
 _VISA_W = {"yes": 1.0, "register": 0.6, "uncertain": 0.3, "no": 0.0}
 _TMATCH_W = {"target": 1.0, "acceptable": 0.7, "off_target": 0.0}
@@ -457,8 +457,8 @@ TIER_ORDER = {"strong": 0, "maybe": 1, "lowconf": 2, "weak": 3, "risk": 4}
 
 
 def rank_score(score, conf, visa, tmatch, days):
-    """综合推荐分 0..100：技能分×0.40 + 方向×0.20 + 签证×0.20 + 置信×0.12 + 新鲜×0.08。
-    tier 是粗分桶（strong/maybe/…），rank_score 用于桶内细排和"今日推荐 Top"。"""
+    """Overall ranking score 0..100: skill×0.40 + direction×0.20 + visa×0.20 + confidence×0.12 + freshness×0.08.
+    tier is the coarse bucket (strong/maybe/…); rank_score orders within a bucket and drives "today's top picks"."""
     s = max(0, min(score or 0, 100)) / 100.0
     if days is None:
         fresh = 0.3
