@@ -32,7 +32,8 @@ jobs:
           pip install flask requests openpyxl pypdf pytest
 
       - name: Run unit tests
-        run: pytest tests/ -q
+        # `python -m` puts the repo root on sys.path so tests can `import app`.
+        run: python -m pytest tests/ -q
 
       - name: Evaluation smoke test (ranking metrics on the seed set)
         run: python eval/run_eval.py
