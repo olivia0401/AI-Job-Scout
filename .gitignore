@@ -12,6 +12,7 @@ venv/
 
 # Cloud credentials / sensitive files — never upload (AWS access keys, etc.)
 *.csv
+.env
 
 # Installers / large binaries that don't belong in the repo
 *.exe

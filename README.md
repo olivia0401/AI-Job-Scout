@@ -89,7 +89,7 @@ Manual (macOS, or if the .bat won't run):
 |---|---|
 | `python is not recognized` / `command not found` | You didn't tick **Add to PATH**. Reinstall Python with the box ticked, or restart your computer. On macOS use `python3`. |
 | `pip is not recognized` | Same fix. Or use `python -m pip install -r requirements.txt` (macOS: `python3 -m pip …`). |
-| `Address already in use` | It's already running in another window. Use that one, or close the extras. |
+| `Port 5050 is already in use` | It's already running in another window — the tool opens your browser on that copy. Use it, or close the extra windows. |
 | Browser says "can't reach / connection refused" | The black window must still be open and say "running". The address must be exactly `http://127.0.0.1:5050`. |
 | Uploading a PDF resume fails | Your PDF is probably a **scan (an image)**. Export a text PDF from Word, or paste the text instead (Settings → Paste resume). |
 | Anything else | **Copy the whole error**, paste it into ChatGPT / Claude / Gemini, ask how to fix it. Genuinely the fastest route. |
@@ -99,7 +99,7 @@ Manual (macOS, or if the .bat won't run):
 # How to use it (in this order)
 
 ### 1. Import the company list
-- Download the official sponsor list: search gov.uk for **"register of licensed sponsors workers"** and grab the CSV (updated weekly, ~120k companies).
+- Download the official sponsor list: search gov.uk for **"register of licensed sponsors workers"** and download the CSV.
 - In the tool: **Toolbox → Import company list → Choose file**, pick that CSV.
   It automatically keeps only the **Skilled Worker** rows and records each company's town.
 - Got your own target list instead? The same button takes an **Excel or CSV** of company names — those get tagged **Curated**.
@@ -114,7 +114,7 @@ Manual (macOS, or if the .bat won't run):
 - **Toolbox → Find missed companies** is an occasional top-up: it re-checks companies where nothing was found the first time. Also stoppable and resumable.
 
 ### 3. Add your resume
-- On the resume card, click **Upload resume** (PDF / Word / TXT). It scores **every job** for fit and lists the skills you're missing.
+- On the resume card, click **Upload resume** (PDF / Word `.docx` / TXT; old `.doc` files aren't supported — save as `.docx` or PDF first). It scores **every job** for fit and lists the skills you're missing.
 - If a PDF won't parse (scans don't), go to **Settings → Paste resume** and paste the text.
 
 ### 4. Review, shortlist, get advice
@@ -132,15 +132,25 @@ Manual (macOS, or if the .bat won't run):
 The same app runs as a small multi-user site, so friends can each sign up and get **their own private workspace**.
 
 - **Each account is fully isolated**: its own resume, its own scans and matched jobs, its own Applications board and hidden list. Nobody sees anyone else's data.
-- **Shared underneath**: the company directory and the "which hiring system does this company use" cache. That's deliberate — it means the slow discovery work is done once for everyone instead of ~120k companies per person.
+- **Shared underneath**: the company directory and the "which hiring system does this company use" cache. That's deliberate — the slow discovery work is done once for everyone instead of once per person. Because it's shared, **only the owner account (`APP_USER`) can change it**: importing company lists and editing hiring-page overrides are owner-only; other accounts get a clear error.
 - **All AI calls run on the host's API key**, so every account has **per-day caps**.
 
 ```bash
+mkdir -p data
 cp api_keys.example.json data/api_keys.json   # fill in your keys
+
+# Owner account: without APP_USER/APP_PASSWORD nobody can log in
+# (multi-user mode is on and sign-up is closed by default)
+cat > .env <<'ENV'
+APP_USER=yourname
+APP_PASSWORD=choose-a-long-random-password
+ENV
+
 docker compose up -d --build
+curl -s localhost:8080/healthz    # prints "ok" when it's up
 ```
 
-Multi-user mode switches on automatically when the app is exposed (`HOST=0.0.0.0`, which the Docker image sets) or when you set `APP_MULTIUSER=1`. Put a reverse proxy with HTTPS in front of it.
+Multi-user mode switches on automatically when the app is exposed (`HOST=0.0.0.0`, which the Docker image sets) or when you set `APP_MULTIUSER=1`. **Put a reverse proxy with HTTPS in front of it** (e.g. Caddy or nginx): the login cookie is HTTPS-only by default in multi-user mode. To try it first over plain `http://<server-ip>:8080`, add `COOKIE_SECURE=0` to `.env` and remove it once HTTPS is in place. Keep `.env` out of git — it holds your password.
 
 ### Configuration (environment variables)
 
@@ -148,17 +158,19 @@ Multi-user mode switches on automatically when the app is exposed (`HOST=0.0.0.0
 |---|---|---|
 | `HOST` / `PORT` | `127.0.0.1` / `5050` | Bind address. Docker uses `0.0.0.0:8080`. |
 | `APP_MULTIUSER` | off | Force multi-user mode (auto-on when `HOST=0.0.0.0`). |
-| `APP_USER` / `APP_PASSWORD` | — | Seeds the owner account. The owner is **exempt from the caps**. |
+| `APP_USER` / `APP_PASSWORD` | — | Seeds the owner account. The owner is **exempt from the caps** and is the only account that can change the shared company list. |
 | `REGISTRATION_OPEN` | **off** | Allow public self-serve signup. Off = only existing accounts can log in. |
 | `LLM_DAILY_CAP` | `100` | Max AI calls per account per day. |
 | `SCAN_DAILY_CAP` | `10` | Max scans per account per day. |
+| `COOKIE_SECURE` | on in multi-user mode | Send the login cookie over HTTPS only. Set `0` only for plain-http testing. |
+| `LOGIN_MAX_FAILS` / `LOGIN_WINDOW_SEC` | `10` / `900` | Failed logins allowed per IP + username within the window before login is paused (HTTP 429). |
 | `WORKABLE_CONC` | `12` | Concurrency for Workable probes — the throughput gate of *Find missed companies*. Raise it if you see no rate-limiting; lower it if you do. |
 | `DEEP_WORKERS` | `48` | Worker threads for *Find missed companies*. |
 | `DEEP_NICHE` | off | Also probe Recruitee/Personio during *Find missed companies*. Far slower for a very small extra yield — off by default. |
 
 > **`REGISTRATION_OPEN=1` on a public URL means anyone who finds it can create an account and spend against your API key** (within the per-day caps, but there's no cap on how many people sign up). Only turn it on if you're comfortable with that, keep the caps low, and don't publish the URL.
 
-Passwords are stored salted and hashed (pbkdf2) in `data/users.json` — never in plain text.
+Passwords are stored salted and hashed (pbkdf2) in `data/users.json` — never in plain text. Usernames must start with a letter or digit (2–32 characters: letters, digits, `_ . -`).
 
 ---
 
@@ -200,10 +212,10 @@ Every company card includes one-click **LinkedIn recruiter search / Hunter email
 
 | Source | Sign-up | What it adds |
 |---|---|---|
-| **Adzuna** | https://developer.adzuna.com/ | UK-wide aggregation (~1000 calls/month) |
+| **Adzuna** | https://developer.adzuna.com/ | UK-wide aggregation (free tier) |
 | **Reed** | https://www.reed.co.uk/developers | One of the largest UK-native job sites |
 | **Jooble** | https://jooble.org/api/about | Aggregates many UK sites; broad top-up |
-| **JSearch (RapidAPI)** | https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch | Pulls **Google for Jobs**, which covers **LinkedIn / Indeed / Glassdoor / ZipRecruiter** — exactly the blind spots above. Free tier ~200 calls/month. |
+| **JSearch (RapidAPI)** | https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch | Pulls **Google for Jobs**, which covers **LinkedIn / Indeed / Glassdoor / ZipRecruiter** — exactly the blind spots above. Has a free tier. |
 
 > To dent the LinkedIn/Indeed blind spot, `rapidapi_key` (JSearch) is the one that matters — it's the only source that reaches those aggregators. No free official API connects directly to the full LinkedIn/Indeed feed; Google for Jobs is the practical approximation.
 > There's also **Toolbox → Social hiring posts (Hacker News)** for "Who is hiring" threads.
@@ -229,8 +241,9 @@ Once your resume is in and scoring has finished, **Resume gaps** aggregates **al
 
 **Want written suggestions generated in the tool?** Add an LLM key to `data/api_keys.json`:
 - **ChatGPT**: `openai_api_key` (default model `gpt-4o`, or the `OPENAI_API_KEY` env var)
-- **Claude**: `anthropic_api_key`
+- **Claude**: `anthropic_api_key` (or the `ANTHROPIC_API_KEY` env var)
 - Filled both? Pick with `llm_provider` (`openai` / `anthropic`). Unset defaults to ChatGPT.
+- Suggestions come back in the interface language (English by default; Chinese if you switch the UI to 中文).
 
 You'll get an actionable checklist: what to add first, where in the resume and how to word it, which experiences to rewrite. **It won't invent experience you don't have.**
 
@@ -240,9 +253,16 @@ You'll get an actionable checklist: what to add first, where in the resume and h
 
 # Privacy
 
-**Running locally (the default):** everything — the company list, your resume, the jobs — stays **on your own computer** in the `data/` folder. Nothing is uploaded anywhere. `data/` is git-ignored and never syncs to GitHub.
+**Running locally (the default):** your company list, resume, jobs and settings are stored **on your own computer** in the `data/` folder. `data/` is git-ignored and never syncs to GitHub.
 
-**Running hosted (multi-user):** each account's data lives on **your server** under `data/users/<account>/`, isolated per account. Still no third party — but as the host, that server is your responsibility.
+What does leave your computer, and only when you use the feature:
+- **AI features** (resume tips, per-job advice, outreach drafts, company-size estimates) send the relevant text — including **your resume text** and the job description — to the LLM provider whose key you configured (OpenAI or Anthropic), under that provider's terms.
+- **Job-board search** sends your job keywords to the sources you gave keys for (Adzuna, Reed, Jooble, JSearch).
+- **Scanning** only reads public job listings; it sends company names/slugs to the hiring systems, never your resume.
+
+No key configured → no AI or job-board calls are made.
+
+**Running hosted (multi-user):** each account's data lives on **your server** under `data/users/<account>/`, isolated per account. The same third-party calls as above apply, using the host's API keys — so the host's LLM provider receives the resume text of any user who uses the AI features. As the host, that server (and telling your users this) is your responsibility.
 
 ---
 
@@ -290,7 +310,7 @@ Auto-detected: **Greenhouse, Lever, Ashby, SmartRecruiters, Workable, Recruitee,
 **Workday** (large enterprises/banks) needs a host/site entry — see `data/slug_overrides.json`.
 Plus the **Adzuna / Reed / Jooble / JSearch** aggregators (free keys; JSearch reaches LinkedIn/Indeed/Glassdoor via Google for Jobs).
 
-*Find missed companies* probes **Workable only** by default — measured against a real 121k-company cache, Workable costs ~16% of the time and finds ~93% of what that pass finds, while Recruitee/Personio burn most of the clock for a fraction of a percent. Set `DEEP_NICHE=1` for the thorough (much slower) version.
+*Find missed companies* probes **Workable only** by default. Recruitee and Personio sit on a separate subdomain per company, so every company that doesn't use them costs a failed DNS lookup + TLS handshake, which makes that pass much slower for few extra hits. Set `DEEP_NICHE=1` to include them (thorough, much slower).
 
 ### Data files (`data/`, git-ignored)
 
@@ -307,7 +327,7 @@ An older single-user `data/state.json` is migrated into `users/<owner>/state.jso
 
 ### For developers
 
-Dependencies in `requirements.txt`. Tests: `pytest tests/`. Evaluation scripts in `eval/`.
+Dependencies in `requirements.txt`. Tests: `pytest tests/`. Ranking evaluation: `python eval/run_eval.py` (offline; see [eval/README.md](eval/README.md)). CI runs both on every push.
 It's a single-process Flask app with in-memory state and background scan threads — **run one instance only** (don't scale to multiple workers/replicas).
 
 </details>
