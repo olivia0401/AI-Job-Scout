@@ -425,7 +425,8 @@ def login_page():
     error = ""
     status = 200
     nxt = request.values.get("next") or "/"
-    if not nxt.startswith("/") or nxt.startswith("//"):
+    if (not nxt.startswith("/") or nxt.startswith("//")
+            or "\\" in nxt or any(ord(ch) < 32 for ch in nxt)):
         nxt = "/"
     if request.method == "POST":
         name = (request.form.get("username") or "").strip()
@@ -3050,6 +3051,11 @@ def api_export():
         c.font = Font(bold=True)
     for row in export_rows():
         ws.append(row)
+        # External titles/company names are text, even if they start with '='.
+        # openpyxl otherwise serializes them as executable Excel formulas.
+        for cell in ws[ws.max_row]:
+            if isinstance(cell.value, str):
+                cell.data_type = "s"
     for col, w in zip("ABCDEFGHIJKLMNO", [28, 8, 45, 14, 6, 12, 25, 12, 11, 12, 60, 16, 40, 60, 40]):
         ws.column_dimensions[col].width = w
     buf = BytesIO()

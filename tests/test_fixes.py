@@ -97,6 +97,27 @@ def test_session_cookie_flags():
     assert app.app.config["SESSION_COOKIE_SAMESITE"] == "Lax"
 
 
+@pytest.mark.parametrize("target", ["/\\evil.example", "/\t/evil.example"])
+def test_login_rejects_browser_normalized_external_redirects(multiuser, target):
+    response = app.app.test_client().post("/login", query_string={"next": target},
+                                        data={"username": "owner", "password": "ownerpass"})
+    assert response.status_code == 302
+    assert response.headers["Location"] == "/"
+
+
+def test_export_keeps_external_strings_as_text(monkeypatch):
+    from io import BytesIO
+    from openpyxl import load_workbook
+
+    payload = '=HYPERLINK("https://example.invalid", "job")'
+    monkeypatch.setattr(app, "export_rows", lambda: [[payload, "", "Engineer"]])
+    response = app.app.test_client().get("/api/export")
+    assert response.status_code == 200
+    cell = load_workbook(BytesIO(response.data)).active["A2"]
+    assert cell.value == payload
+    assert cell.data_type == "s"
+
+
 # ------------------------------------------------------------ owner-only shared writes
 
 def test_shared_company_list_is_owner_only(multiuser):
